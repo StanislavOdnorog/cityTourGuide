@@ -279,7 +279,7 @@
         "Шаг 4: INSERT с невалидным city_id — ошибка FK"
       ],
       "dependencies": ["TASK-011"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-013",

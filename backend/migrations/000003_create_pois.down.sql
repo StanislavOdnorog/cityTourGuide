@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS poi;
+DROP TYPE IF EXISTS poi_status;
+DROP TYPE IF EXISTS poi_type;

@@ -124,3 +124,23 @@
   - `make migrate-down` — таблица cities удалена (pass)
   - `make migrate-up` — таблица cities создана снова (pass)
   - `make lint` — 0 ошибок после изменений (pass)
+
+### TASK-012: Миграция: таблица POI (Point of Interest) с PostGIS geography
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - Миграция `000003_create_pois.up.sql` создана
+  - ENUM типы `poi_type` (building, street, park, monument, church, bridge, square, museum, district, other) и `poi_status` (active, disabled, pending_review) созданы
+  - Таблица `poi` создана: id, city_id FK→cities, name, name_ru, location GEOGRAPHY(POINT,4326), type, tags JSONB, address, interest_score, status, created_at, updated_at
+  - GIST-индекс `idx_poi_location` на location для пространственных запросов
+  - Составной индекс `idx_poi_city_status` на (city_id, status)
+  - FK constraint на city_id с ON DELETE CASCADE
+  - Down-миграция корректно удаляет таблицу и оба ENUM типа
+- **Тесты**:
+  - `make migrate-up` — миграция выполнена успешно (pass)
+  - INSERT 5 POI с координатами Тбилиси — успешно (pass)
+  - ST_DWithin запрос (500m от Rike Park) — возвращает 3 ближайших POI с distance_m (pass)
+  - INSERT с невалидным city_id=999 — FK ошибка (pass)
+  - `make migrate-down` — таблица и ENUM типы удалены (pass)
+  - `make migrate-up` — таблица создана снова (pass)
+  - `make lint` — 0 ошибок (pass)
