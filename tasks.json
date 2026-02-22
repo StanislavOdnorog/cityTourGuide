@@ -834,7 +834,7 @@
         "Шаг 4: Визуально проверить тёмную тему и размер кнопок"
       ],
       "dependencies": ["TASK-036"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-038",

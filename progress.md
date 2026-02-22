@@ -601,3 +601,38 @@
   - `SELECT DISTINCT type FROM poi` — 7 типов: monument(495), church(98), bridge(65), park(52), museum(24), square(13), building(7) (pass)
   - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
   - `make lint` — 0 ошибок (pass)
+
+### TASK-037: Mobile: Home Screen — Start/Stop Walking, статус прослушивания
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Переписан `app/(main)/home.tsx` — полноценный Home Screen с минимальным UI
+  - **Большая круглая кнопка** Start Walking / Stop (200x200, toggle): зелёная для Start, красная для Stop
+  - **Pulse-анимация**: `PulseIndicator` компонент — масштабирующееся кольцо + точка при активном GPS, зелёный цвет (#4ADE80)
+  - **Тёмная тема**: фон #0D0D0D, белый текст, серые второстепенные элементы
+  - **Текущий город**: "TBILISI" отображается вверху (uppercase, letter-spacing)
+  - **Количество прослушанных**: "N stories listened" с правильной единственное/множественное число
+  - **Listening indicator**: показывает "Listening..." при ходьбе, POI name при воспроизведении
+  - **Large tap targets**: кнопка 200x200 (≥ 48dp), minHeight/minWidth 48
+  - **accessibilityRole + accessibilityLabel** для кнопки
+  - Создан `src/hooks/useHomeScreen.ts` — хук для бизнес-логики Home Screen:
+    - Читает `useWalkStore` (isWalking) и `usePlayerStore` (currentStory, isPlaying, progress, listenedStoryIds)
+    - `toggleWalking()` — запускает/останавливает `WalkingPipeline`
+    - Lifecycle cleanup через `useEffect` + `pipelineRef`
+  - Обновлён `src/hooks/index.ts` — re-export useHomeScreen
+  - Создан `src/hooks/__tests__/useHomeScreen.test.ts` — 21 unit-тест:
+    - isWalking state: defaults, start, stop (3)
+    - currentStoryName: null default, set, cleared (3)
+    - isPlaying: default, set, toggle (3)
+    - listenedCount: initial, increment, dedup, reset (4)
+    - progress: default, update (2)
+    - walking + player interaction: clear location, walk+play cycle, stop doesn't affect player (3)
+    - display text: story name when playing, Listening... when idle, plural logic (3)
+- **Тесты**:
+  - `tsc --noEmit` — 0 ошибок типов (pass)
+  - `npx jest --verbose` — 194/194 тестов PASS (21 новых + 173 existing) (pass)
+  - Кнопка Start/Stop toggle через useWalkStore (pass)
+  - Pulse-анимация при isWalking=true (pass — code review: Animated.loop)
+  - Тёмная тема: backgroundColor #0D0D0D, color #FFFFFF (pass — code review)
+  - Large tap targets: 200x200 button (pass — code review)
+  - Город "Tbilisi" и listened count отображаются (pass)
