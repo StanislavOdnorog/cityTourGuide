@@ -323,7 +323,7 @@
         "Шаг 4: make migrate-down (5 раз) — таблицы удалены в обратном порядке"
       ],
       "dependencies": ["TASK-013"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-015",

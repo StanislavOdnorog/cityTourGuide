@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS report;
+DROP TYPE IF EXISTS report_status;
+DROP TYPE IF EXISTS report_type;

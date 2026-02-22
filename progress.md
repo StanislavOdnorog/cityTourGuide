@@ -163,3 +163,24 @@
   - `make migrate-down` — таблица и ENUM типы удалены (pass)
   - `make migrate-up` — таблица создана снова (pass)
   - `make lint` — 0 ошибок (pass)
+
+### TASK-014: Миграции: users, user_listening, reports, purchases, inflation_jobs
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - Миграция `000005_create_users.up.sql`: таблица users (id UUID PK DEFAULT gen_random_uuid(), email UNIQUE, name, auth_provider ENUM, language_pref, is_anonymous, created_at, updated_at), частичный индекс на email
+  - Миграция `000006_create_user_listening.up.sql`: таблица user_listening (id SERIAL, user_id FK→users, story_id FK→story, listened_at, completed, location GEOGRAPHY), индексы (user_id, story_id) и (user_id, listened_at DESC)
+  - Миграция `000007_create_reports.up.sql`: таблица report (id SERIAL, story_id FK→story, user_id FK→users, type ENUM, comment, user_lat, user_lng, status ENUM DEFAULT 'new', resolved_at, created_at), частичный индекс WHERE status='new', индекс на story_id
+  - Миграция `000008_create_purchases.up.sql`: таблица purchase (id SERIAL, user_id FK→users, type ENUM, city_id FK→cities NULLABLE, platform, transaction_id, price DECIMAL, is_ltd, expires_at, created_at), индексы на user_id и уникальный на transaction_id
+  - Миграция `000009_create_inflation_jobs.up.sql`: таблица inflation_job (id SERIAL, poi_id FK→poi, status ENUM, trigger_type ENUM, segments_count, max_segments, started_at, completed_at, error_log, created_at), частичный индекс на status IN ('pending','running'), индекс на poi_id
+  - ENUM типы созданы: auth_provider, report_type, report_status, purchase_type, inflation_job_status, inflation_trigger_type
+  - Все down-миграции корректно удаляют таблицы и ENUM типы
+- **Тесты**:
+  - `make migrate-up` — все 5 миграций выполнены успешно (pass)
+  - `\dt` — все 9 таблиц существуют (cities, poi, story, users, user_listening, report, purchase, inflation_job + schema_migrations) (pass)
+  - INSERT в каждую из 5 новых таблиц с валидными данными — успешно (pass)
+  - FK constraint: INSERT с невалидным user_id — ошибка FK (pass)
+  - `make migrate-down` (5 раз) — таблицы удалены в обратном порядке (9→5) (pass)
+  - `make migrate-up` — все таблицы созданы снова (pass)
+  - 15 индексов на новых таблицах проверены через pg_indexes (pass)
+  - `make lint` — 0 ошибок (pass)
