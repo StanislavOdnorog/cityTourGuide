@@ -812,7 +812,7 @@
         "Шаг 4: Проверить usePlayerStore — currentStory обновляется"
       ],
       "dependencies": ["TASK-032", "TASK-034", "TASK-035"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-037",

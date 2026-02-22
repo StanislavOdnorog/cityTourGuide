@@ -541,3 +541,40 @@
   - RemoteDuck: pause/permanent/resume все обработаны корректно (pass)
   - Lock screen: Play/Pause/Stop capabilities + Android ContinuePlayback (pass)
   - StoryPlayer interface совместимость с StoryEngine (pass)
+
+### TASK-036: Mobile: Интеграция Location → StoryEngine → AudioPlayer (core pipeline)
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Установлен `zustand` для state management
+  - Создан `src/store/useWalkStore.ts` — Zustand store для walking state:
+    - `isWalking` (boolean), `currentLocation` (lat, lng, heading, speed)
+    - Actions: `startWalking()`, `stopWalking()`, `updateLocation()`
+  - Создан `src/store/usePlayerStore.ts` — Zustand store для player state:
+    - `currentStory` (ScoredCandidate | null), `isPlaying` (boolean), `progress` ({position, duration}), `listenedStoryIds` (Set<number>)
+    - Actions: `setCurrentStory()`, `setIsPlaying()`, `setProgress()`, `addListenedStory()`, `reset()`
+  - Создан `src/services/pipeline/WalkingPipeline.ts` — оркестратор core pipeline:
+    - Связывает LocationTracker → StoryEngine → AudioPlayer в единый цикл
+    - **Адаптеры**: StoryPlayer adapter (play → AudioPlayer.play() + обновление store), ListeningTracker adapter (trackListening API + listenedStoryIds в store)
+    - **Location callback**: обновляет useWalkStore + вызывает StoryEngine.onLocationUpdate()
+    - **Story completion**: вызывает trackListening API с координатами, добавляет в listenedStoryIds, очищает player state
+    - **Error handling**: сбрасывает isPlaying при ошибке AudioPlayer
+    - `start()` / `stop()` — полный lifecycle (permissions, location tracking, engine, audio)
+    - `updateConfig()` — обновление language, radius, userId
+    - `destroy()` — полная очистка (stop + destroy AudioPlayer + reset store)
+  - Создан `createWalkingPipeline()` — factory function для production использования
+  - Обновлён `src/store/index.ts` — re-export useWalkStore, usePlayerStore
+  - Обновлён `src/services/pipeline/index.ts` и `src/services/index.ts` — barrel exports
+  - **Тесты**:
+    - 5 тестов useWalkStore: initial state, startWalking, stopWalking, updateLocation, replace location
+    - 8 тестов usePlayerStore: initial state, setCurrentStory, clear, toggle playing, progress, addListened, dedup, reset
+    - 23 теста WalkingPipeline: constructor (2), start (3), stop (4), location flow (4), completion (4), exclusion (1), pacing (1), config (1), destroy (2), error (1)
+- **Тесты**:
+  - `tsc --noEmit` — 0 ошибок типов (pass)
+  - `npx jest --verbose` — 173/173 тестов PASS (36 новых + 137 existing) (pass)
+  - Полный цикл: location update → API fetch → scoring → pacing → AudioPlayer.play() (pass)
+  - trackListening API вызывается с user_id, story_id, completed, lat, lng при завершении (pass)
+  - Listened stories исключаются из будущего выбора через listenedStoryIds в store (pass)
+  - Pacing cooldown 60 сек между историями (pass)
+  - useWalkStore обновляется при каждом location update (pass)
+  - usePlayerStore обновляется при play/complete/error (pass)

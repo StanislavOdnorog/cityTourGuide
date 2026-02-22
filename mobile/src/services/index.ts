@@ -14,3 +14,4 @@ export {
   type OnCompleteCallback,
   type OnErrorCallback,
 } from './audio';
+export { WalkingPipeline, createWalkingPipeline, type WalkingPipelineConfig } from './pipeline';
