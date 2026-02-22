@@ -337,3 +337,38 @@
   - Max 5 candidates: из 8 возвращается только 5 (pass)
   - `make lint` — 0 ошибок (pass)
   - `make build` — оба бинарника скомпилированы (pass)
+
+### TASK-021: Handler: GET /api/v1/nearby-stories — главный API endpoint
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - Создан `internal/handler/nearby_handler.go` — handler для GET /api/v1/nearby-stories
+  - Интерфейс `NearbyStoriesGetter` для dependency injection (тестируемость)
+  - Полная валидация query-параметров: lat [-90,90] (required), lng [-180,180] (required), radius [10,500] (default 150), heading (default -1), speed (default 0), language (default "en"), user_id (optional)
+  - HTTP 400 с описательным `error` полем при невалидных данных
+  - HTTP 200 с `{"data": [...]}` при успешном запросе (пустой массив если нет историй)
+  - HTTP 500 при ошибке сервиса (без утечки деталей)
+  - `cmd/api/main.go` рефакторен: инициализация POIRepo, StoryRepo, ListeningRepo, NearbyService, NearbyHandler
+  - Маршрут зарегистрирован: GET /api/v1/nearby-stories
+  - Удалён неиспользуемый `_ = repository.NewCityRepo(pool)`
+  - Создан `internal/handler/nearby_handler_test.go` — 11 unit-тестов:
+    - Success: 200 с данными, POI name и audio_url в ответе
+    - EmptyResult: 200 с пустым массивом (не null)
+    - MissingLat: 400 "lat is required"
+    - MissingLng: 400 "lng is required"
+    - InvalidLat: 3 sub-теста (too high, too low, not a number)
+    - InvalidLng: 3 sub-теста (too high, too low, not a number)
+    - InvalidRadius: 3 sub-теста (too small, too large, not a number)
+    - DefaultValues: radius=150, heading=-1, speed=0, language="en"
+    - AllParams: все параметры передаются в сервис корректно
+    - ServiceError: 500 с generic error message
+    - ResponseIncludesAudioURL: audio_url, duration_sec, distance_m, score в ответе
+    - BoundaryLatLng: lat=-90/90 и lng=-180/180 — валидные
+- **Тесты**:
+  - `go test -race ./internal/handler/...` — 11/11 тестов PASS (pass)
+  - GET /api/v1/nearby-stories?lat=41.7151&lng=44.8271&language=en — 200 с данными (pass)
+  - GET без lat — 400 "lat is required" (pass)
+  - GET с lat=999 — 400 "lat must be between -90 and 90" (pass)
+  - audio_url присутствует в ответе (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make build` — оба бинарника скомпилированы (pass)

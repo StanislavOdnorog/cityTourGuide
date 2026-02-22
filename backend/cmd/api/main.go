@@ -11,7 +11,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/saas/city-stories-guide/backend/internal/config"
+	"github.com/saas/city-stories-guide/backend/internal/handler"
 	"github.com/saas/city-stories-guide/backend/internal/repository"
+	"github.com/saas/city-stories-guide/backend/internal/service"
 )
 
 func main() {
@@ -41,7 +43,16 @@ func run() error {
 
 	log.Println("Database connection established")
 
-	_ = repository.NewCityRepo(pool)
+	// Initialize repositories
+	poiRepo := repository.NewPOIRepo(pool)
+	storyRepo := repository.NewStoryRepo(pool)
+	listeningRepo := repository.NewListeningRepo(pool)
+
+	// Initialize services
+	nearbyService := service.NewNearbyService(poiRepo, storyRepo, listeningRepo)
+
+	// Initialize handlers
+	nearbyHandler := handler.NewNearbyHandler(nearbyService)
 
 	gin.SetMode(cfg.Server.Mode)
 	r := gin.Default()
@@ -49,6 +60,10 @@ func run() error {
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+
+	// API v1 routes
+	v1 := r.Group("/api/v1")
+	v1.GET("/nearby-stories", nearbyHandler.GetNearbyStories)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Server.Port,

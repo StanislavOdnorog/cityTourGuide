@@ -476,7 +476,7 @@
         "Шаг 4: Проверить что audio_url присутствует в ответе"
       ],
       "dependencies": ["TASK-020"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-022",
