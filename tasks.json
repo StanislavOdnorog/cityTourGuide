@@ -767,7 +767,7 @@
         "Шаг 4: npm test — все unit-тесты проходят"
       ],
       "dependencies": ["TASK-033"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-035",

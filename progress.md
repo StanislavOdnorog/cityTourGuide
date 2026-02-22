@@ -418,3 +418,39 @@
   - JWT token автоматически добавляется через request interceptor (pass — code review)
   - 401 → refresh token → retry, 429 → retry with backoff (pass — code review)
   - `@/api` и `@/types` path aliases работают (pass)
+
+### TASK-034: Mobile: Story Engine — scoring-алгоритм и pacing manager
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - Установлен Jest + ts-jest для unit-тестирования мобильного приложения
+  - Создан `jest.config.js` с поддержкой TypeScript и path alias `@/*`
+  - Добавлен script `npm test` в package.json
+  - Создан `src/services/story-engine/ScoringAlgorithm.ts`:
+    - `bearing(lat1, lng1, lat2, lng2)` — начальный азимут (haversine initial bearing) [0, 360)
+    - `angleDiff(a, b)` — минимальная угловая разница с wraparound [0, 180]
+    - `proximityBonus(distanceM, radiusM)` — линейный бонус от 0 до 30 (ближе = выше)
+    - `directionBonus(baseScore, heading, user, poi)` — +20% если POI в пределах ±45° от heading
+    - `calculateScore(base, distance, radius, heading, user, poi)` — композитный score
+    - `scoreAndRankCandidates(candidates, listenedIds)` — фильтрация прослушанных + сортировка по score
+    - Тип `ScoredCandidate` расширяет `NearbyStoryCandidate` полем `localScore`
+  - Создан `src/services/story-engine/PacingManager.ts`:
+    - `canPlayNext(now)` — проверяет cooldown (60 сек) и отсутствие текущего воспроизведения
+    - `cooldownRemaining(now)` — миллисекунды до следующей истории
+    - `markPlayStarted()` / `markPlayEnded(now)` — управление состоянием воспроизведения
+    - `selectByPace(candidates, speedMs)` — выбор по скорости: >4 км/ч → короткие (≤20 сек), <3 км/ч → длинные (≥30 сек)
+  - Создан `src/services/story-engine/StoryEngine.ts`:
+    - Оркестратор: location update → API fetch → scoring → pacing → playback
+    - Dependency injection через интерфейсы: `StoryFetcher`, `StoryPlayer`, `ListeningTracker`
+    - `onLocationUpdate(location)` — главный метод: получает кандидатов, фильтрует, выбирает, воспроизводит
+    - `onStoryCompleted(completed)` — трекинг прослушивания + сброс pacing
+    - `start()` / `stop()` — управление активностью
+    - `updateConfig()` — обновление radius, language, userId
+  - Создан `src/services/story-engine/index.ts` — barrel export
+  - Обновлён `src/services/index.ts` — re-export story-engine
+- **Тесты**:
+  - 27 тестов ScoringAlgorithm: bearing (4), angleDiff (5), proximityBonus (6), directionBonus (4), calculateScore (2), scoreAndRankCandidates (6) — все PASS
+  - 20 тестов PacingManager: canPlayNext (5), cooldownRemaining (4), getIsPlaying (3), selectByPace (7), reset (1) — все PASS
+  - 14 тестов StoryEngine: inactive/active toggle, play/pacing, tracking, exclusion, config, reset — все PASS
+  - `npx jest --verbose` — 61/61 тестов PASS (pass)
+  - `tsc --noEmit` — 0 ошибок типов (pass)
