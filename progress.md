@@ -144,3 +144,22 @@
   - `make migrate-down` — таблица и ENUM типы удалены (pass)
   - `make migrate-up` — таблица создана снова (pass)
   - `make lint` — 0 ошибок (pass)
+
+### TASK-013: Миграция: таблица stories
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - Миграция `000004_create_stories.up.sql` создана
+  - ENUM типы `story_layer_type` (atmosphere, human_story, hidden_detail, time_shift, general) и `story_status` (active, disabled, reported, pending_review) созданы
+  - Таблица `story` создана: id, poi_id FK→poi, language, text, audio_url, duration_sec, layer_type, order_index, is_inflation, confidence, sources JSONB, status, created_at, updated_at
+  - Составной индекс `idx_story_poi_language_status` на (poi_id, language, status)
+  - FK constraint на poi_id с ON DELETE CASCADE
+  - Down-миграция корректно удаляет таблицу и оба ENUM типа
+- **Тесты**:
+  - `make migrate-up` — миграция выполнена успешно (pass)
+  - INSERT 2 stories (EN + RU) с валидными данными — успешно (pass)
+  - INSERT с невалидным poi_id=999 — FK ошибка (pass)
+  - EXPLAIN SELECT по (poi_id, language, status) — использует idx_story_poi_language_status (pass)
+  - `make migrate-down` — таблица и ENUM типы удалены (pass)
+  - `make migrate-up` — таблица создана снова (pass)
+  - `make lint` — 0 ошибок (pass)

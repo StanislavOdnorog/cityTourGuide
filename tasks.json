@@ -301,7 +301,7 @@
         "Шаг 4: SELECT по индексу (poi_id, language, status) — план использует индекс"
       ],
       "dependencies": ["TASK-012"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-014",
