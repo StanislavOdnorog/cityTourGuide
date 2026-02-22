@@ -248,3 +248,28 @@
   - `go test -tags integration -race ./internal/repository/...` — 9/9 тестов (pass)
   - `make lint` — 0 ошибок (pass)
   - `make build` — оба бинарника скомпилированы (pass)
+
+### TASK-018: Repository: POI CRUD с PostGIS пространственными запросами
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - Создан `internal/repository/poi_repo.go` — полный POI CRUD + FindNearby
+  - Структура `NearbyPOI` расширяет domain.POI с DistanceM
+  - Create: использует `ST_SetSRID(ST_MakePoint(lng, lat), 4326)::geography` для вставки координат
+  - GetByID: извлекает lat/lng через `ST_Y(location::geometry)` / `ST_X(location::geometry)`
+  - GetByCityID: поддержка фильтров по status и type через динамические параметры
+  - Update: обновляет все поля включая location через ST_MakePoint
+  - Delete: с проверкой RowsAffected для ErrNotFound
+  - FindNearby: `ST_DWithin` запрос с INNER JOIN story (status='active', language filter), DISTINCT ON (p.id), обёрнутый подзапросом для ORDER BY interest_score DESC, distance_m ASC, LIMIT 20
+  - Создан `internal/repository/poi_repo_test.go` — 13 интеграционных тестов (build tag `integration`)
+- **Тесты**:
+  - 13/13 интеграционных тестов POI repo проходят с `-race` (pass)
+  - Create POI с ST_MakePoint — координаты сохраняются корректно (pass)
+  - GetByCityID с фильтрами status/type — фильтрация работает (pass)
+  - FindNearby: 500m радиус возвращает ближайшие POI с stories (pass)
+  - FindNearby: 50m радиус возвращает подмножество (pass)
+  - FindNearby: language filter — EN/RU фильтрация работает (pass)
+  - EXPLAIN запроса — использует idx_poi_city_status и idx_story_poi_language_status (pass)
+  - Full CRUD cycle: Create → GetByID → Update → Delete (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make build` — оба бинарника скомпилированы (pass)

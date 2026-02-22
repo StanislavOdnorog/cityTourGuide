@@ -409,7 +409,7 @@
         "Шаг 4: EXPLAIN ANALYZE запроса — использует idx_poi_location"
       ],
       "dependencies": ["TASK-017"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-019",
