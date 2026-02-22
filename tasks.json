@@ -344,7 +344,7 @@
         "Шаг 3: Проверить что API keys не выводятся в логи"
       ],
       "dependencies": ["TASK-002"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-016",

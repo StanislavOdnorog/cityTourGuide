@@ -206,3 +206,24 @@
   - `go build ./internal/domain/...` — компиляция успешна (pass)
   - Все 8 структур имеют json tags на каждом поле (pass)
   - `make lint` — 0 ошибок линтинга (pass)
+
+### TASK-015: Конфигурация бэкенда: загрузка ENV переменных и структура Config
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - Создан `internal/config/config.go` с полной структурой Config
+  - Sub-structs: ServerConfig (Port, Mode), DatabaseConfig (URL), S3Config (Endpoint, AccessKey, SecretKey, Bucket), ClaudeConfig (APIKey), ElevenLabsConfig (APIKey), JWTConfig (Secret, AccessTTL, RefreshTTL)
+  - godotenv v1.5.1 установлен для загрузки `.env` файлов
+  - `Load()` — загружает ENV с defaults (Port=8080, GIN_MODE=debug, S3_BUCKET=city-stories, AccessTTL=15m, RefreshTTL=7d)
+  - `validate()` — проверяет обязательные поля (DATABASE_URL, JWT_SECRET), падает с понятной ошибкой
+  - `LogSafe()` — маскирует sensitive данные: Database URL = ***, API keys показывают только первые/последние 4 символа
+  - `cmd/api/main.go` интегрирован с config.Load(), gin.SetMode()
+  - `backend/.env.example` создан со всеми переменными и комментариями
+  - Удалён дублирующий `doc.go` (package comment перенесён в config.go)
+- **Тесты**:
+  - Запуск без DATABASE_URL — `config: DATABASE_URL is required`, exit 1 (pass)
+  - Запуск без JWT_SECRET — `config: JWT_SECRET is required`, exit 1 (pass)
+  - Запуск с .env — конфиг загружен корректно, сервер стартует (pass)
+  - API keys замаскированы в логах: `sk-a***cdef`, Database URL = `***` (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make build` — оба бинарника скомпилированы (pass)
