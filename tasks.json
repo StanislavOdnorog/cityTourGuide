@@ -39,7 +39,7 @@
         "Шаг 3: cat .editorconfig — проверить настройки для Go и JS"
       ],
       "dependencies": [],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-002",
