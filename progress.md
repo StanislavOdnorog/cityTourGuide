@@ -636,3 +636,46 @@
   - Тёмная тема: backgroundColor #0D0D0D, color #FFFFFF (pass — code review)
   - Large tap targets: 200x200 button (pass — code review)
   - Город "Tbilisi" и listened count отображаются (pass)
+
+### TASK-028: Интеграция Claude API: генерация историй по POI данным
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создан `internal/platform/claude/client.go` — Claude Messages API клиент
+  - Метод `GenerateStory(ctx, *domain.POI, language) → *StoryResult{Text, LayerType, Confidence, TokensIn, TokensOut, Duration}`
+  - HTTP клиент с правильными заголовками: `x-api-key`, `anthropic-version: 2023-06-01`, `Content-Type: application/json`
+  - Модель по умолчанию: `claude-sonnet-4-20250514`, настраиваемая через Config
+  - **Retry с exponential backoff**: 3 попытки, backoff 1s→2s→4s, retry на 429/5xx, не retry на 4xx
+  - **Контекст**: поддержка context cancellation во время retry и HTTP-запросов
+  - Создан `internal/platform/claude/prompts.go` — system и user промпты:
+    - System prompt: storyteller tone, structure (Anchor → Hook → Facts → Meaning), 50-200 слов
+    - Поддержка layer_types: atmosphere, human_story, hidden_detail, time_shift, general
+    - User prompt: POI name, name_ru, type, coordinates, address, tags (wikidata, wikipedia)
+    - Поддержка EN и RU языков
+  - **Парсинг ответа**: поддержка plain JSON, markdown code blocks (```json...```), JSON embedded в тексте
+  - **Валидация**: layer_type fallback на `general`, confidence clamping [0, 100], empty text → error
+  - Метрики: TokensIn, TokensOut, Duration в StoryResult
+  - Создан `internal/platform/claude/client_test.go` — 28 unit-тестов с httptest mock servers:
+    - Success: EN/RU генерация, все поля StoryResult (2)
+    - Parsing: markdown code block, JSON in text, plain JSON (3)
+    - Validation: invalid layer_type → general, confidence clamping (5 subtests), empty text, empty response, invalid JSON (4+)
+    - Retry: 429 → retry → success, 500 → retry → success, 400 → no retry, max retries exhausted (4)
+    - Context: canceled context (1)
+    - Headers: x-api-key, anthropic-version, Content-Type verification (1)
+    - All layer types: atmosphere, human_story, hidden_detail, time_shift, general (5 subtests)
+    - POI variants: full POI, minimal POI without optional fields (2)
+    - Client config: default values, custom values (2)
+    - Prompts: English/Russian system prompts, full/minimal user prompts (4)
+    - APIError: error message, truncation (2)
+- **Тесты**:
+  - `go test -v -race ./internal/platform/claude/...` — 28/28 тестов PASS (pass)
+  - Retry 429: 2 failures → 3rd attempt success (pass)
+  - Retry 500: 1 failure → 2nd attempt success (pass)
+  - No retry on 400: 1 attempt only (pass)
+  - Max retries exhausted: 3 attempts, error returned (pass)
+  - Markdown code block parsing (pass)
+  - Invalid layer_type → fallback to general (pass)
+  - Confidence clamping: -10→0, 150→100, 75→75 (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make build` — оба бинарника скомпилированы (pass)
+  - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)

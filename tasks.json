@@ -632,7 +632,7 @@
         "Шаг 4: Проверить что layer_type определён"
       ],
       "dependencies": ["TASK-015", "TASK-016"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-029",
