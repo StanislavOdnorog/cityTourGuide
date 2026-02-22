@@ -104,7 +104,7 @@
         "Шаг 4: make build — оба бинарника созданы в bin/"
       ],
       "dependencies": ["TASK-002"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-005",

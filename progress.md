@@ -68,3 +68,20 @@
   - `SELECT PostGIS_Version()` — возвращает 3.6 (pass)
   - MinIO Console на localhost:9001 — HTTP 200 (pass)
   - `docker-compose down && docker-compose up -d` — данные сохранились (pass)
+
+### TASK-004: Настройка линтинга и форматирования для Go-бэкенда
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - `.golangci.yml` создан с линтерами: errcheck, govet, staticcheck, bodyclose, sqlclosecheck, nilerr, gofmt, goimports, revive, misspell, unconvert, prealloc, gocritic, gosec
+  - Исключения для тест-файлов настроены (gosec, errcheck, gocritic, prealloc)
+  - `Makefile` создан с целями: lint, fmt, test, build, clean
+  - `make build` компилирует оба бинарника (api, worker) в `bin/`
+  - `make test` запускает тесты с `-race -cover`
+  - `make fmt` форматирует код через gofmt + goimports
+  - golangci-lint v1.64.8 и goimports установлены
+- **Тесты**:
+  - `make lint` — 0 ошибок на чистом проекте (pass)
+  - Unused var → `make lint` — ошибка найдена (pass)
+  - `make fmt` — форматирование работает (pass)
+  - `make build` — оба бинарника созданы в bin/ (pass)
