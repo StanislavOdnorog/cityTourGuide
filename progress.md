@@ -85,3 +85,25 @@
   - Unused var → `make lint` — ошибка найдена (pass)
   - `make fmt` — форматирование работает (pass)
   - `make build` — оба бинарника созданы в bin/ (pass)
+
+### TASK-005: Инициализация React Native (Expo) проекта для мобильного приложения
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - Expo проект создан через `npx create-expo-app mobile --template blank-typescript` (SDK 54)
+  - TypeScript strict mode включён в tsconfig.json
+  - Expo Router v6 установлен и настроен (expo-router, expo-linking, expo-constants, react-native-screens, react-native-safe-area-context, react-native-gesture-handler, expo-system-ui)
+  - app.json обновлён: name "City Stories Guide", slug "city-stories-guide", scheme "city-stories", plugin expo-router
+  - package.json main entry point — `expo-router/entry`
+  - Файловая маршрутизация создана: app/_layout.tsx (Root Stack), app/index.tsx (redirect → onboarding)
+  - Route groups: app/(auth)/ (login), app/(main)/ (home), app/onboarding/ (index)
+  - Каждая группа имеет свой _layout.tsx
+  - src/ структура создана: api, services, store, components, hooks, constants, utils, types — каждая с index.ts
+  - Path alias @/* → src/* настроен в tsconfig.json (baseUrl + paths)
+  - Тестовый импорт `@/constants` работает в app/(main)/home.tsx
+- **Тесты**:
+  - `npx expo config` — конфиг валиден, SDK 54.0.0 (pass)
+  - `npx expo-doctor` — 17/17 checks passed (pass)
+  - `tsc --noEmit` — 0 ошибок типов (pass)
+  - `ls -R app/ src/` — все директории и файлы на месте (pass)
+  - Path alias @/ — TypeScript резолвит импорт из @/constants (pass)
