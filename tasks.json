@@ -521,7 +521,7 @@
         "Шаг 4: Интеграционный тест с реальным MinIO"
       ],
       "dependencies": ["TASK-003", "TASK-015"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-024",

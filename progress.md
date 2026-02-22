@@ -372,3 +372,32 @@
   - audio_url присутствует в ответе (pass)
   - `make lint` — 0 ошибок (pass)
   - `make build` — оба бинарника скомпилированы (pass)
+
+### TASK-023: S3-клиент: загрузка/скачивание аудиофайлов, presigned URLs
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - Установлен `aws-sdk-go-v2` v1.41.1 с модулями s3, config, credentials
+  - Создан `internal/platform/s3/client.go` — S3-compatible storage client
+  - Структура `Config`: Endpoint, AccessKey, SecretKey, Bucket, Region
+  - `NewClient(ctx, *Config)` — инициализирует клиент с `BaseEndpoint` + `UsePathStyle` (совместимость с MinIO)
+  - `ensureBucket()` — проверяет существование bucket через HeadBucket, создаёт если отсутствует
+  - `Upload(ctx, key, reader, contentType) → url` — загружает файл через PutObject, возвращает публичный URL
+  - `GetPresignedURL(ctx, key, expiry) → url` — генерирует presigned URL через s3.PresignClient
+  - `Delete(ctx, key)` — удаляет объект через DeleteObject
+  - `Exists(ctx, key) → bool` — проверяет наличие через HeadObject с обработкой NotFound
+  - `AudioKey(cityID, poiID, storyID)` — helper для формирования ключа `audio/{cityID}/{poiID}/{storyID}.mp3`
+  - `isNotFound()` — проверка ошибок NotFound/NoSuchKey через errors.As + smithy.APIError
+  - Создан `internal/platform/s3/client_test.go` — 8 интеграционных тестов (build tag `integration`)
+- **Тесты**:
+  - NewClient_CreatesBucket — bucket создаётся при инициализации (pass)
+  - Upload_And_Exists — загрузка файла + проверка существования (pass)
+  - Upload_MP3_ContentType — загрузка с content-type audio/mpeg (pass)
+  - GetPresignedURL — presigned URL генерируется, файл скачивается через HTTP GET (pass)
+  - Delete — файл удаляется, Exists возвращает false (pass)
+  - Exists_NotFound — несуществующий ключ возвращает false без ошибки (pass)
+  - FullCycle_Upload_Presign_Delete — полный цикл: Upload → Exists → Presign → Download → Delete → Verify gone (pass)
+  - AudioKey — формат ключа `audio/1/10/100.mp3` (pass)
+  - `go test -tags integration -race ./internal/platform/s3/...` — 8/8 тестов (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make build` — оба бинарника скомпилированы (pass)
