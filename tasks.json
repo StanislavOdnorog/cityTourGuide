@@ -722,7 +722,7 @@
         "Шаг 4: Начать движение — автовозобновление"
       ],
       "dependencies": ["TASK-005"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-033",

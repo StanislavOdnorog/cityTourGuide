@@ -454,3 +454,46 @@
   - 14 тестов StoryEngine: inactive/active toggle, play/pacing, tracking, exclusion, config, reset — все PASS
   - `npx jest --verbose` — 61/61 тестов PASS (pass)
   - `tsc --noEmit` — 0 ошибок типов (pass)
+
+### TASK-032: Mobile: Background Location Tracking (expo-location)
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - Установлены `expo-location` и `expo-task-manager` в мобильный проект
+  - Создан `src/services/location/LocationTracker.ts` — полноценный сервис фонового трекинга местоположения
+  - **Конфигурируемые параметры**: activeIntervalMs (5 сек), sleepThresholdMs (2 мин), movingSpeedThreshold (0.5 м/с), stoppedSpeedThreshold (0.3 м/с), distanceFilterM (10 м)
+  - **Adaptive mode**:
+    - `active` — опрос каждые 5 сек при ходьбе (speed > 0.5 м/с)
+    - `sleeping` — подавление callback при остановке (speed < 0.3 м/с) дольше 2 минут
+    - Автовозобновление при обнаружении движения (speed >= 0.5 м/с)
+  - **Foreground tracking**: `Location.watchPositionAsync` с High accuracy, timeInterval, distanceInterval
+  - **Background tracking**: `TaskManager.defineTask` + `Location.startLocationUpdatesAsync` с foregroundService (Android), ActivityType.Fitness, showsBackgroundLocationIndicator (iOS)
+  - **Permission flow**: `requestPermissions()` → foreground → background, `hasPermissions()` для проверки
+  - **LocationUpdate**: lat, lng, heading, speed, timestamp (расширяет StoryEngine LocationUpdate timestamp'ом)
+  - **Singleton pattern**: модульный `activeTracker` для связи background task → LocationTracker instance
+  - Создан `src/services/location/index.ts` — barrel export
+  - Обновлён `src/services/index.ts` — re-export с разрешением конфликта имён LocationUpdate
+  - Обновлён `app.json`:
+    - iOS: `NSLocationAlwaysAndWhenInUseUsageDescription`, `UIBackgroundModes: ["location", "audio"]`
+    - Android: permissions `ACCESS_FINE_LOCATION`, `ACCESS_BACKGROUND_LOCATION`, `FOREGROUND_SERVICE_LOCATION`
+    - Plugin `expo-location` с `isAndroidBackgroundLocationEnabled` и `isAndroidForegroundServiceEnabled`
+  - Создан `src/services/location/__tests__/LocationTracker.test.ts` — 33 unit-теста:
+    - constructor: default config, custom overrides (2)
+    - requestPermissions: both granted, fg denied, bg denied (3)
+    - hasPermissions: both granted, fg not granted, bg not granted (3)
+    - start: fg+bg tracking, permission error, no-op if tracking, skip bg if registered, config passthrough (5)
+    - stop: full cleanup, no-op if idle, skip bg if not registered, clear last location (4)
+    - processLocationObject: conversion, negative speed clamp, null heading, store last, no callback (5)
+    - adaptive active→sleeping: stays active, enters sleep, no sleep if brief (3)
+    - adaptive sleeping→active: wake-up, stays sleeping, no emit while sleeping (3)
+    - speed thresholds: at moving threshold, at stopped threshold, below stopped (3)
+    - foreground callback: watch integration (1)
+    - setCallback: replaces previous (1)
+    - multiple start/stop cycles (1)
+- **Тесты**:
+  - `tsc --noEmit` — 0 ошибок типов (pass)
+  - `npx jest --verbose` — 95/95 тестов PASS (33 LocationTracker + 62 existing) (pass)
+  - Adaptive mode: active → sleeping при speed < 0.3 м/с > 2 мин (pass)
+  - Adaptive mode: sleeping → active при speed >= 0.5 м/с с callback emit (pass)
+  - Permission flow: foreground + background grant/deny combinations (pass)
+  - Start/stop lifecycle: tracking, cleanup, restart (pass)
