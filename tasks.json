@@ -60,7 +60,7 @@
         "Шаг 3: проверить структуру директорий ls -R internal/"
       ],
       "dependencies": ["TASK-001"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-003",
