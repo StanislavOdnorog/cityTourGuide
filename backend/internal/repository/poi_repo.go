@@ -196,6 +196,58 @@ func (r *POIRepo) Delete(ctx context.Context, id int) error {
 	return nil
 }
 
+// FindNearbyAll returns POIs within a given radius of a point across all cities,
+// joined with active stories for the specified language.
+// Results are sorted by interest_score DESC, distance ASC. LIMIT 20.
+func (r *POIRepo) FindNearbyAll(ctx context.Context, lat, lng, radiusM float64, language string) ([]NearbyPOI, error) {
+	query := `
+		SELECT DISTINCT ON (p.id)
+			p.id, p.city_id, p.name, p.name_ru,
+			ST_Y(p.location::geometry) AS lat, ST_X(p.location::geometry) AS lng,
+			p.type, p.tags, p.address, p.interest_score, p.status,
+			p.created_at, p.updated_at,
+			ST_Distance(p.location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) AS distance_m
+		FROM poi p
+		INNER JOIN story s ON s.poi_id = p.id AND s.status = 'active' AND s.language = $4
+		WHERE p.status = 'active'
+			AND ST_DWithin(p.location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)
+		ORDER BY p.id, p.interest_score DESC, distance_m ASC`
+
+	wrappedQuery := `
+		SELECT id, city_id, name, name_ru, lat, lng, type, tags, address,
+			interest_score, status, created_at, updated_at, distance_m
+		FROM (` + query + `) sub
+		ORDER BY interest_score DESC, distance_m ASC
+		LIMIT 20`
+
+	rows, err := r.pool.Query(ctx, wrappedQuery, lng, lat, radiusM, language)
+	if err != nil {
+		return nil, fmt.Errorf("poi_repo: find nearby all: %w", err)
+	}
+	defer rows.Close()
+
+	var results []NearbyPOI
+	for rows.Next() {
+		var np NearbyPOI
+		if err := rows.Scan(
+			&np.ID, &np.CityID, &np.Name, &np.NameRu,
+			&np.Lat, &np.Lng,
+			&np.Type, &np.Tags, &np.Address, &np.InterestScore, &np.Status,
+			&np.CreatedAt, &np.UpdatedAt,
+			&np.DistanceM,
+		); err != nil {
+			return nil, fmt.Errorf("poi_repo: find nearby all scan: %w", err)
+		}
+		results = append(results, np)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("poi_repo: find nearby all rows: %w", err)
+	}
+
+	return results, nil
+}
+
 // FindNearby returns POIs within a given radius of a point, joined with active stories
 // for the specified language. Results are sorted by interest_score DESC, distance ASC.
 func (r *POIRepo) FindNearby(ctx context.Context, lat, lng, radiusM float64, cityID int, language string) ([]NearbyPOI, error) {

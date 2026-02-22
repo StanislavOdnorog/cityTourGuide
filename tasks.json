@@ -454,7 +454,7 @@
         "Шаг 4: go test — все unit-тесты проходят"
       ],
       "dependencies": ["TASK-018", "TASK-019"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-021",

@@ -304,3 +304,36 @@
   - `go test -tags integration -race` — 38/38 тестов (pass)
   - `make lint` — 0 ошибок (pass)
   - `make build` — оба бинарника скомпилированы (pass)
+
+### TASK-020: Service: NearbyService — ядро выбора историй
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - Создан `internal/service/nearby_service.go` — NearbyService с scoring-алгоритмом из PRD
+  - Метод `GetNearbyStories(ctx, lat, lng, radiusM, heading, speed, userID, language) → []StoryCandidate`
+  - Структура `StoryCandidate`: poi_id, poi_name, story_id, story_text, audio_url, duration_sec, distance_m, score
+  - **Scoring-алгоритм**: `score = base_interest_score + proximity_bonus + direction_bonus`
+    - `ProximityBonus`: линейно растёт от 0 (на границе радиуса) до 30 (на расстоянии 0м)
+    - `DirectionBonus`: +20% от base score если POI в пределах ±45° от heading пользователя
+    - `Bearing`: вычисление начального азимута (формула haversine initial bearing)
+    - `AngleDiff`: минимальная угловая разница с wraparound (0°/360°)
+  - Прослушанные истории исключаются через `GetListenedStoryIDs`
+  - Возвращается не более 5 кандидатов, отсортированных по score DESC
+  - Dependency injection через интерфейсы: POIFinder, StoryGetter, ListeningGetter
+  - Добавлен `FindNearbyAll` метод в POIRepo (FindNearby без cityID фильтра)
+  - Создан `internal/service/nearby_service_test.go` — 29 unit-тестов:
+    - ProximityBonus: 6 тестов (zero distance, half, at radius, beyond, zero radius, linearity)
+    - Bearing: 4 теста (N/S/E/W)
+    - AngleDiff: 4 теста (same, opposite, wraparound, symmetry)
+    - DirectionBonus: 4 теста (ahead, behind, at limit, no heading)
+    - CalculateScore: 2 теста (all components, no bonuses)
+    - GetNearbyStories: 9 тестов (sorted, listened excluded, all listened, direction bonus, max 5, no POIs, empty user, multiple stories per POI, candidate fields)
+- **Тесты**:
+  - `go test -v -race ./internal/service/...` — 29/29 тестов PASS (pass)
+  - Sorted by score: POI с высоким interest_score первым (pass)
+  - Listened excluded: прослушанная история не возвращается (pass)
+  - Direction bonus: POI впереди (heading=90°, POI на восток) имеет выше score чем POI позади (pass)
+  - Proximity bonus: линейно от 0 до 30 (pass)
+  - Max 5 candidates: из 8 возвращается только 5 (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make build` — оба бинарника скомпилированы (pass)
