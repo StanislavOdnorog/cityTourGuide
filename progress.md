@@ -273,3 +273,34 @@
   - Full CRUD cycle: Create → GetByID → Update → Delete (pass)
   - `make lint` — 0 ошибок (pass)
   - `make build` — оба бинарника скомпилированы (pass)
+
+### TASK-019: Repository: Story CRUD и UserListening tracking
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - Создан `internal/repository/story_repo.go` — полный Story CRUD + CountByPOI
+  - Методы: Create, GetByID, GetByPOIID(poiID, language, status), Update, Delete, CountByPOI
+  - GetByPOIID поддерживает фильтрацию по языку (обязательно) и статусу (опционально)
+  - Результаты GetByPOIID сортируются по order_index, created_at
+  - Создан `internal/repository/listening_repo.go` — UserListening tracking
+  - Методы: Create(userID, storyID, completed, lat, lng), GetListenedStoryIDs(userID), HasListened(userID, storyID)
+  - Create поддерживает nullable location через ST_MakePoint (два SQL-варианта: с координатами и без)
+  - GetListenedStoryIDs использует DISTINCT для дедупликации
+  - HasListened использует EXISTS subquery для эффективной проверки
+  - Создан `internal/repository/story_repo_test.go` — 10 интеграционных тестов
+  - Создан `internal/repository/listening_repo_test.go` — 6 интеграционных тестов
+  - Helper-функции: createTestStory, createTestUserDirect, deleteTestUser
+- **Тесты**:
+  - Create POI → Create 3 stories (2 EN + 1 RU) — успешно (pass)
+  - GetByPOIID language=en — возвращает только 2 EN истории (pass)
+  - GetByPOIID с status filter — фильтрация работает (pass)
+  - CountByPOI — 0 до вставки, 3 после (pass)
+  - Create listening с координатами — lat/lng сохраняются через ST_MakePoint (pass)
+  - Create listening без координат — lat/lng = nil (pass)
+  - GetListenedStoryIDs — возвращает 2 прослушанных, не содержит непрослушанную (pass)
+  - GetListenedStoryIDs дедупликация — 2 записи → 1 уникальный ID (pass)
+  - HasListened — true для прослушанной, false для новой (pass)
+  - Full CRUD cycle для Story: Create → GetByID → Update → Delete (pass)
+  - `go test -tags integration -race` — 38/38 тестов (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make build` — оба бинарника скомпилированы (pass)

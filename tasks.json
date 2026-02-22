@@ -431,7 +431,7 @@
         "Шаг 4: HasListened — true для прослушанной, false для новой"
       ],
       "dependencies": ["TASK-017"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-020",
