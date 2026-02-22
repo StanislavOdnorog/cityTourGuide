@@ -401,3 +401,20 @@
   - `go test -tags integration -race ./internal/platform/s3/...` — 8/8 тестов (pass)
   - `make lint` — 0 ошибок (pass)
   - `make build` — оба бинарника скомпилированы (pass)
+
+### TASK-033: Mobile: API-клиент и типы данных
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - Установлен `axios` HTTP клиент в mobile проекте
+  - Создан `src/types/index.ts` — 8 доменных интерфейсов (City, POI, Story, User, UserListening, Report, Purchase, NearbyStoryCandidate), 8 union types для ENUM'ов (POIType, POIStatus, StoryLayerType, StoryStatus, AuthProvider, ReportType, ReportStatus, PurchaseType), API request/response типы (NearbyStoriesResponse, TrackListeningRequest, ReportStoryRequest, ApiError)
+  - Создан `src/api/client.ts` — axios instance с baseURL из `@/constants`, JWT interceptor (добавляет Bearer token к запросам), 401 interceptor с refresh token queue (множественные запросы ждут обновления), 429 interceptor с retry (Retry-After header), `setTokens()` и `setRefreshHandler()` для внешнего управления токенами
+  - Создан `src/api/endpoints.ts` — `fetchNearbyStories(params)` → GET /api/v1/nearby-stories, `trackListening(request)` → POST /api/v1/listenings, `reportStory(request)` → POST /api/v1/reports, `fetchCities()` → GET /api/v1/cities, `fetchCityById(id)` → GET /api/v1/cities/:id
+  - Обновлён `src/api/index.ts` — re-export всех функций, типов и клиента
+  - Все TypeScript типы соответствуют backend Go структурам (json tags → interface fields)
+- **Тесты**:
+  - `tsc --noEmit` — 0 ошибок типов (pass)
+  - `--listFiles` — все 3 файла (client.ts, types/index.ts, endpoints.ts) резолвятся TypeScript (pass)
+  - JWT token автоматически добавляется через request interceptor (pass — code review)
+  - 401 → refresh token → retry, 429 → retry with backoff (pass — code review)
+  - `@/api` и `@/types` path aliases работают (pass)
