@@ -227,3 +227,24 @@
   - API keys замаскированы в логах: `sk-a***cdef`, Database URL = `***` (pass)
   - `make lint` — 0 ошибок (pass)
   - `make build` — оба бинарника скомпилированы (pass)
+
+### TASK-017: Repository: подключение к PostgreSQL (pgx) и город CRUD
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - Установлен `pgx/v5` v5.8.0 (pgxpool для connection pooling)
+  - Создан `internal/repository/db.go` — `NewPool(ctx, databaseURL)` инициализирует pgxpool.Pool с ping-проверкой
+  - Создан `internal/repository/errors.go` — `ErrNotFound` для несуществующих записей
+  - Создан `internal/repository/city_repo.go` — полный CRUD: Create, GetByID, GetAll, Update, Delete
+  - Создан `internal/repository/testing.go` — TestPool helper для интеграционных тестов
+  - Создан `internal/repository/city_repo_test.go` — 9 интеграционных тестов (build tag `integration`)
+  - `cmd/api/main.go` рефакторен: `run()` паттерн, graceful shutdown (SIGINT/SIGTERM), pool.Close() через defer, ReadHeaderTimeout для gosec
+  - GetByID/Update/Delete возвращают `ErrNotFound` при отсутствии записи
+  - Все SQL-запросы параметризованы ($1, $2...) для защиты от SQL injection
+- **Тесты**:
+  - Запуск приложения — `Database connection established` в логах (pass)
+  - Create → GetByID → Update → Delete полный цикл (TestCityRepo_FullCRUDCycle) (pass)
+  - GetByID несуществующего → ErrNotFound (TestCityRepo_GetByID_NotFound) (pass)
+  - `go test -tags integration -race ./internal/repository/...` — 9/9 тестов (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make build` — оба бинарника скомпилированы (pass)
