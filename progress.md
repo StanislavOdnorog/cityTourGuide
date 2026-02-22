@@ -107,3 +107,20 @@
   - `tsc --noEmit` — 0 ошибок типов (pass)
   - `ls -R app/ src/` — все директории и файлы на месте (pass)
   - Path alias @/ — TypeScript резолвит импорт из @/constants (pass)
+
+### TASK-011: Настройка golang-migrate и миграция: PostGIS extension + таблица cities
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - golang-migrate v4.18.1 установлен (ARM64 binary)
+  - Миграция 000001_create_extensions: `CREATE EXTENSION IF NOT EXISTS postgis` и `postgis_topology`
+  - Миграция 000002_create_cities: таблица cities (id, name, name_ru, country, center_lat, center_lng, radius_km, is_active, download_size_mb, created_at, updated_at)
+  - Makefile обновлён: цели `migrate-up`, `migrate-down`, `migrate-create`
+  - DATABASE_URL по умолчанию настроен на localhost:5433 (локальный Docker PostgreSQL)
+- **Тесты**:
+  - `make migrate-up` — обе миграции выполнены успешно (pass)
+  - `\dt` — таблица cities существует (pass)
+  - `SELECT PostGIS_Version()` — PostGIS 3.6 активен (pass)
+  - `make migrate-down` — таблица cities удалена (pass)
+  - `make migrate-up` — таблица cities создана снова (pass)
+  - `make lint` — 0 ошибок после изменений (pass)
