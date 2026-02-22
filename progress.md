@@ -48,3 +48,23 @@
   - `go build ./cmd/worker` — успешная компиляция (pass)
   - `curl localhost:8080/healthz` — 200 `{"status":"ok"}` (pass)
   - `ls -R internal/` — все 8 пакетов с doc.go (pass)
+
+### TASK-003: Docker Compose для локальной разработки: PostgreSQL+PostGIS и MinIO
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - Создана директория `infra/` с `docker-compose.yml`
+  - PostgreSQL: собран из `postgres:16` + PostGIS 3 через `infra/postgres/Dockerfile` (ARM64-совместимый)
+  - Init-скрипт `initdb-postgis.sh` создаёт расширения `postgis` и `postgis_topology`
+  - MinIO: `minio/minio:latest` с API на 9000 и Console на 9001
+  - Volumes `pgdata` и `miniodata` для персистенции данных
+  - `.env.example` с переменными окружения для обоих сервисов
+  - Healthcheck настроен для PostgreSQL (`pg_isready`)
+- **Проблемы**:
+  - `postgis/postgis:16-3.4` не поддерживает ARM64 — решено через кастомный Dockerfile (postgres:16 + apt install postgis)
+  - Порт 5432 занят другим контейнером — используется 5433 в `.env`
+- **Тесты**:
+  - `docker-compose up -d` — оба сервиса запускаются (pass)
+  - `SELECT PostGIS_Version()` — возвращает 3.6 (pass)
+  - MinIO Console на localhost:9001 — HTTP 200 (pass)
+  - `docker-compose down && docker-compose up -d` — данные сохранились (pass)

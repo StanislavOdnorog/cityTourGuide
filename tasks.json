@@ -82,7 +82,7 @@
         "Шаг 4: docker compose down && docker compose up -d — данные сохранились"
       ],
       "dependencies": ["TASK-001"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-004",
