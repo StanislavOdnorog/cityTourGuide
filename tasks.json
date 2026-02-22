@@ -609,7 +609,7 @@
         "Шаг 4: SELECT DISTINCT type FROM poi — несколько типов"
       ],
       "dependencies": ["TASK-018"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-028",

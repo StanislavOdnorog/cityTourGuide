@@ -578,3 +578,26 @@
   - Pacing cooldown 60 сек между историями (pass)
   - useWalkStore обновляется при каждом location update (pass)
   - usePlayerStore обновляется при play/complete/error (pass)
+
+### TASK-027: Контент-пайплайн: импорт POI из OpenStreetMap (Overpass API) для Тбилиси
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создан `backend/scripts/import_osm.go` — standalone Go-скрипт для импорта POI из OpenStreetMap
+  - **Overpass API**: bbox-запрос (41.63,44.70,41.82,44.90) для Тбилиси, 17 категорий: tourism=museum, tourism=attraction, tourism=viewpoint, amenity=place_of_worship, historic, leisure=park, man_made=bridge, bridge=yes, place=square
+  - **Авто-создание города**: ensureTbilisiCity проверяет/создаёт запись Tbilisi в cities (center: 41.7151, 44.8271, radius: 15km)
+  - **OSM дедупликация**: по `type/id` ключу для удаления дублей в ответе Overpass
+  - **DB дедупликация**: ST_DWithin(50м) — проверяет существующие POI рядом перед вставкой
+  - **Маппинг типов**: OSM tags → domain POI types (museum, monument, church, bridge, park, square, building)
+  - **Interest score**: по типу (museum=70, monument=65, church=60, bridge=55, park=50, square=50, building=40)
+  - **Имена**: name:en → name, name:ru → name_ru, addr:street+housenumber → address
+  - **OSM теги**: wikidata, wikipedia, website, opening_hours, phone сохраняются в JSONB tags
+  - **run() паттерн**: ошибки возвращаются, defer pool.Close() корректно работает
+  - `make lint` — 0 ошибок (gosec nolint для URL, misspell nolint для OSM тега)
+- **Тесты**:
+  - `go run scripts/import_osm.go` — 752 POI импортированы для Тбилиси (pass)
+  - `SELECT COUNT(*) FROM poi WHERE city_id = 1` — 754 (752 + 2 тестовых) (pass)
+  - Повторный запуск — 0 imported, 1283 skipped (pass)
+  - `SELECT DISTINCT type FROM poi` — 7 типов: monument(495), church(98), bridge(65), park(52), museum(24), square(13), building(7) (pass)
+  - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
+  - `make lint` — 0 ошибок (pass)
