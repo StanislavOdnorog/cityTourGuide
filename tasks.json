@@ -790,7 +790,7 @@
         "Шаг 4: Проверить fade in при начале новой истории"
       ],
       "dependencies": ["TASK-005"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-036",

@@ -7,3 +7,10 @@ export {
   type LocationTrackerConfig,
   type LocationUpdate as TrackerLocationUpdate,
 } from './location';
+export {
+  AudioPlayer,
+  type AudioPlayerConfig,
+  type AudioPlayerEvent,
+  type OnCompleteCallback,
+  type OnErrorCallback,
+} from './audio';

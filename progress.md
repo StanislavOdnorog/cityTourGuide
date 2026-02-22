@@ -497,3 +497,47 @@
   - Adaptive mode: sleeping → active при speed >= 0.5 м/с с callback emit (pass)
   - Permission flow: foreground + background grant/deny combinations (pass)
   - Start/stop lifecycle: tracking, cleanup, restart (pass)
+
+### TASK-035: Mobile: Audio Player (react-native-track-player) с фоновым воспроизведением
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - Установлен `react-native-track-player` v4.1.2
+  - Создан `src/services/audio/AudioPlayer.ts` — полноценный аудиоплеер с фоновым воспроизведением
+  - **Методы**: play(candidate), pause(), resume(), stop(), getIsPlaying(), getProgress(), getCurrentCandidate(), destroy()
+  - **Fade in/out**: setVolume с интервалом 50мс, configurable fadeInDurationMs (700мс default), fadeOutDurationMs (700мс default)
+  - **Lock screen controls**: Play, Pause, Stop capabilities; compact: Play, Pause; notification с названием POI + "City Stories Guide"
+  - **Audio ducking (RemoteDuck)**: paused → pause, permanent → stop, duck ended → restore volume + resume
+  - **Background playback**: iOS SpokenAudio category, Android AppKilledPlaybackBehavior.ContinuePlayback
+  - **Auto-pause на отключение наушников**: через RemoteDuck event (paused=true)
+  - **Callbacks**: setOnComplete(callback), setOnError(callback) — injectable
+  - **Auto-setup**: play() автоматически инициализирует TrackPlayer если ещё не инициализирован
+  - **StoryPlayer interface**: совместим с StoryEngine — принимает ScoredCandidate
+  - Создан `src/services/audio/index.ts` — barrel export
+  - Обновлён `src/services/index.ts` — re-export AudioPlayer
+  - Обновлён `app.json`: добавлен `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permission для Android
+  - Создан `src/services/audio/__tests__/AudioPlayer.test.ts` — 42 unit-теста:
+    - constructor: default config, custom overrides (2)
+    - setup: iOS category, capabilities, event subscriptions, no-op second call (4)
+    - play: track add + playback, auto-init, null url error, volume 0, null duration, reset previous (6)
+    - pause/resume: pause playing, skip if not playing, resume paused, skip if not paused (4)
+    - stop: onComplete(false), reset, no-op when idle, stop from paused (4)
+    - fade in: initial volume 0, zero duration immediate, clear timer on stop (3)
+    - playback events: queue ended → onComplete(true), RemotePlay, RemotePause, RemoteStop (4)
+    - audio ducking: paused flag, permanent stop, resume on duck end (3)
+    - getIsPlaying: playing/paused/idle (3)
+    - getProgress: position + duration (1)
+    - callbacks: replace onComplete, null removes, replace onError (3)
+    - destroy: cleanup, safe when not initialized (2)
+    - StoryPlayer compatibility: accepts ScoredCandidate (1)
+    - lock screen: capabilities, Android continue playback (2)
+- **Тесты**:
+  - `tsc --noEmit` — 0 ошибок типов (pass)
+  - `npx jest --verbose` — 137/137 тестов PASS (42 AudioPlayer + 95 existing) (pass)
+  - play(candidate) — track added с url, title, artist, duration (pass)
+  - onComplete(true) при естественном окончании playback-queue-ended (pass)
+  - onComplete(false) при ручном stop() (pass)
+  - Fade-in: volume starts at 0, increases to 1 (pass)
+  - RemoteDuck: pause/permanent/resume все обработаны корректно (pass)
+  - Lock screen: Play/Pause/Stop capabilities + Android ContinuePlayback (pass)
+  - StoryPlayer interface совместимость с StoryEngine (pass)
