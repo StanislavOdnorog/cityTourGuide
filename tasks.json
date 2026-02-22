@@ -365,7 +365,7 @@
         "Шаг 3: make lint — нет ошибок линтинга"
       ],
       "dependencies": ["TASK-014"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-017",

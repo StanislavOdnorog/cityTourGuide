@@ -184,3 +184,25 @@
   - `make migrate-up` — все таблицы созданы снова (pass)
   - 15 индексов на новых таблицах проверены через pg_indexes (pass)
   - `make lint` — 0 ошибок (pass)
+
+### TASK-016: Domain-модели Go: структуры всех сущностей
+- **Дата**: 2026-02-22
+- **Статус**: done
+- **Что сделано**:
+  - Создано 8 файлов доменных моделей в `internal/domain/`:
+    - `city.go` — City struct (11 полей), соответствует таблице cities
+    - `poi.go` — POI struct (13 полей), ENUMs: POIType (10 значений), POIStatus (3 значения). Lat/Lng как float64 вместо PostGIS GEOGRAPHY для удобства Go-кода
+    - `story.go` — Story struct (14 полей), ENUMs: StoryLayerType (5 значений), StoryStatus (4 значения). JSONB sources как json.RawMessage
+    - `user.go` — User struct (8 полей), ENUM: AuthProvider (3 значения). ID как string (UUID)
+    - `listening.go` — UserListening struct (7 полей). Nullable координаты как *float64
+    - `report.go` — Report struct (10 полей), ENUMs: ReportType (3 значения), ReportStatus (4 значения)
+    - `purchase.go` — Purchase struct (10 полей), ENUM: PurchaseType (3 значения). Price как float64
+    - `inflation.go` — InflationJob struct (10 полей), ENUMs: InflationJobStatus (4 значения), InflationTriggerType (2 значения)
+  - Все ENUM значения определены как Go типы с const block
+  - JSON tags добавлены на все поля (83 поля total)
+  - Nullable поля используют указатели (*string, *int, *float64, *time.Time, *int16)
+  - JSONB поля используют json.RawMessage
+- **Тесты**:
+  - `go build ./internal/domain/...` — компиляция успешна (pass)
+  - Все 8 структур имеют json tags на каждом поле (pass)
+  - `make lint` — 0 ошибок линтинга (pass)
