@@ -1,0 +1,50 @@
+# EditorConfig — https://editorconfig.org
+
+root = true
+
+# Default for all files
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Go — tabs
+[*.go]
+indent_style = tab
+indent_size = 4
+
+# JavaScript / TypeScript — 2 spaces
+[*.{js,jsx,ts,tsx}]
+indent_style = space
+indent_size = 2
+
+# JSON
+[*.json]
+indent_style = space
+indent_size = 2
+
+# YAML
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+
+# SQL — 2 spaces
+[*.sql]
+indent_style = space
+indent_size = 2
+
+# Markdown
+[*.md]
+trim_trailing_whitespace = false
+
+# Makefile — tabs required
+[Makefile]
+indent_style = tab
+
+# Docker
+[Dockerfile*]
+indent_style = space
+indent_size = 2
