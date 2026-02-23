@@ -74,6 +74,26 @@ export async function fetchCityPOIs(
   };
 }
 
+// Device token endpoints
+
+export async function registerDeviceToken(
+  userId: string,
+  token: string,
+  platform: 'ios' | 'android',
+): Promise<void> {
+  await apiClient.post('/api/v1/device-tokens', {
+    user_id: userId,
+    token,
+    platform,
+  });
+}
+
+export async function unregisterDeviceToken(token: string): Promise<void> {
+  await apiClient.delete('/api/v1/device-tokens', {
+    data: { token },
+  });
+}
+
 // Purchase endpoints
 
 export async function verifyPurchase(request: VerifyPurchaseRequest): Promise<Purchase> {

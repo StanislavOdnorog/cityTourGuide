@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { StoryCacheManager } from '@/services/cache';
+import { notificationManager } from '@/services/notifications';
 import { useCacheStore } from '@/store/useCacheStore';
 import { usePurchaseStore } from '@/store/usePurchaseStore';
 import { useSettingsStore, type AppLanguage } from '@/store/useSettingsStore';
@@ -84,6 +85,9 @@ export default function SettingsScreen() {
   const setGeoNotifications = useSettingsStore((s) => s.setGeoNotifications);
   const contentNotifications = useSettingsStore((s) => s.contentNotifications);
   const setContentNotifications = useSettingsStore((s) => s.setContentNotifications);
+  const pushToken = useSettingsStore((s) => s.pushToken);
+  const setPushToken = useSettingsStore((s) => s.setPushToken);
+  const deviceId = useSettingsStore((s) => s.deviceId);
 
   const cacheStats = useCacheStore((s) => s.stats);
   const isClearing = useCacheStore((s) => s.isClearing);
@@ -106,6 +110,42 @@ export default function SettingsScreen() {
       }
     })();
   }, [setCacheStats]);
+
+  const ensurePushRegistered = useCallback(async () => {
+    if (pushToken) return true;
+    const token = await notificationManager.registerForPushNotifications(deviceId);
+    if (token) {
+      setPushToken(token);
+      return true;
+    }
+    Alert.alert(
+      'Notifications Disabled',
+      'Please enable notifications in your device settings to receive alerts.',
+    );
+    return false;
+  }, [pushToken, deviceId, setPushToken]);
+
+  const handleGeoToggle = useCallback(
+    async (enabled: boolean) => {
+      if (enabled) {
+        const ok = await ensurePushRegistered();
+        if (!ok) return;
+      }
+      setGeoNotifications(enabled);
+    },
+    [ensurePushRegistered, setGeoNotifications],
+  );
+
+  const handleContentToggle = useCallback(
+    async (enabled: boolean) => {
+      if (enabled) {
+        const ok = await ensurePushRegistered();
+        if (!ok) return;
+      }
+      setContentNotifications(enabled);
+    },
+    [ensurePushRegistered, setContentNotifications],
+  );
 
   const handleLanguageToggle = useCallback(() => {
     const next: AppLanguage = language === 'en' ? 'ru' : 'en';
@@ -189,16 +229,16 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <ToggleRow
             label="Nearby stories"
-            description="Alert when you're near interesting places"
+            description="Alert when you're near interesting places (max 2/day)"
             value={geoNotifications}
-            onValueChange={setGeoNotifications}
+            onValueChange={handleGeoToggle}
           />
           <View style={styles.divider} />
           <ToggleRow
             label="New content"
-            description="Notify about new stories in your city"
+            description="Notify about new stories in your city (max 1/week)"
             value={contentNotifications}
-            onValueChange={setContentNotifications}
+            onValueChange={handleContentToggle}
           />
         </View>
 

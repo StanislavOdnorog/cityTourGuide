@@ -1674,3 +1674,32 @@
   - `make test` — все тесты проходят (pass)
   - 55 POI с EN+RU историями = 110 stories total ≥ 100 required (pass)
   - Ручная проверка текстов: нет галлюцинаций, корректный тон рассказчика, длина адекватна (pass)
+
+### TASK-048: Backend + Mobile: Push Notifications (FCM + APNs)
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - **Backend — Database**: Создано 2 новых миграции: `000014_create_device_tokens` (таблица device_tokens с user_id FK, token unique, platform) и `000015_create_push_notifications` (таблица push_notifications с rate-limit индексом по user_id+type+created_at)
+  - **Backend — Domain**: Создано 2 новых доменных модели: `DeviceToken` (device_token.go) и `PushNotification` (push_notification.go) с ENUM типами NotificationType (geo/content) и DevicePlatform (ios/android)
+  - **Backend — Repository**: `DeviceTokenRepo` (Upsert, Deactivate, GetByUserID, GetByID, GetAllActive) и `PushNotificationRepo` (Create, CountByUserAndTypeSince для rate limiting)
+  - **Backend — Platform/FCM**: Создан `internal/platform/fcm/client.go` — HTTP-клиент для Firebase Cloud Messaging v1 API с OAuth2 авторизацией через service account JWT. Поддержка Android (high priority, channel_id) и APNs (sound). Конфигурация через ENV `FCM_CREDENTIALS_JSON`
+  - **Backend — Service**: `PushNotificationService` с rate limiting: geo max 2/день, content max 1/неделю. Методы: RegisterDeviceToken, UnregisterDeviceToken, SendGeoNotification, SendContentNotification. Автоматическая запись отправленных уведомлений для audit trail
+  - **Backend — Handler**: `DeviceHandler` с endpoints: POST /api/v1/device-tokens (регистрация), DELETE /api/v1/device-tokens (отмена регистрации)
+  - **Backend — Config**: Добавлен `FCMConfig` с `CredentialsJSON` в основной Config struct
+  - **Backend — Wiring**: FCM client, device_token_repo, push_notification_repo, push_notification_service, device_handler зарегистрированы в cmd/api/main.go
+  - **Mobile — NotificationManager**: `src/services/notifications/NotificationManager.ts` — управление push-токенами через expo-notifications. Запрос разрешений, регистрация Expo Push Token на backend, обработка foreground/background уведомлений. Подавление уведомлений во время активной прогулки (isWalking)
+  - **Mobile — API**: Добавлены endpoints `registerDeviceToken()` и `unregisterDeviceToken()` в `src/api/endpoints.ts`
+  - **Mobile — Store**: Добавлено поле `pushToken` в useSettingsStore с persistance
+  - **Mobile — Settings**: Обновлён Settings screen — при включении geo/content уведомлений автоматически запрашиваются разрешения и регистрируется push token. Добавлены описания rate limits в UI
+  - **Mobile — Root Layout**: Интегрирован NotificationResponseListener для навигации при тапе на уведомление
+  - **Mobile — Android**: Настроен notification channel "city-stories" с HIGH importance
+- **Тесты**:
+  - `npx tsc --noEmit` — 0 ошибок (pass)
+  - `go build ./cmd/api` — успешная компиляция (pass)
+  - `go build ./cmd/worker` — успешная компиляция (pass)
+  - `go vet ./...` — 0 ошибок (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `go test ./...` — все тесты проходят (pass)
+  - Rate limiting в PushNotificationService: geo 2/день, content 1/неделю (verified in code)
+  - Подавление уведомлений во время активной сессии (isWalking check in NotificationManager)
+  - Настройки вкл/выкл по типам в Settings screen (geo/content toggles)

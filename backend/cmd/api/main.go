@@ -15,6 +15,7 @@ import (
 	"github.com/saas/city-stories-guide/backend/internal/handler"
 	"github.com/saas/city-stories-guide/backend/internal/logger"
 	"github.com/saas/city-stories-guide/backend/internal/middleware"
+	"github.com/saas/city-stories-guide/backend/internal/platform/fcm"
 	"github.com/saas/city-stories-guide/backend/internal/platform/oauth"
 	"github.com/saas/city-stories-guide/backend/internal/repository"
 	"github.com/saas/city-stories-guide/backend/internal/service"
@@ -61,6 +62,21 @@ func run() error {
 	inflationRepo := repository.NewInflationRepo(pool)
 	purchaseRepo := repository.NewPurchaseRepo(pool)
 
+	deviceTokenRepo := repository.NewDeviceTokenRepo(pool)
+	pushNotifRepo := repository.NewPushNotificationRepo(pool)
+
+	// Initialize FCM client (optional — nil if not configured)
+	fcmClient, err := fcm.NewClient(ctx, &fcm.Config{
+		CredentialsJSON: cfg.FCM.CredentialsJSON,
+	})
+	if err != nil {
+		slog.Error("failed to initialize FCM client", "error", err)
+		// Non-fatal: push notifications will be disabled
+	}
+	if fcmClient != nil {
+		slog.Info("FCM push notifications enabled")
+	}
+
 	// Initialize services
 	nearbyService := service.NewNearbyService(poiRepo, storyRepo, listeningRepo)
 	authService := service.NewAuthService(userRepo, service.AuthConfig{
@@ -69,6 +85,10 @@ func run() error {
 		RefreshTTL: cfg.JWT.RefreshTTL,
 	})
 	purchaseService := service.NewPurchaseService(purchaseRepo)
+	pushNotifService := service.NewPushNotificationService(
+		deviceTokenRepo, pushNotifRepo, fcmClient,
+		service.PushNotificationConfig{GeoMaxPerDay: 2, ContentMaxPerWeek: 1},
+	)
 
 	// Initialize handlers
 	nearbyHandler := handler.NewNearbyHandler(nearbyService)
@@ -99,6 +119,7 @@ func run() error {
 	listeningHandler := handler.NewListeningHandler(listeningRepo)
 	reportHandler := handler.NewReportHandler(reportRepo)
 	inflationHandler := handler.NewInflationHandler(inflationRepo)
+	deviceHandler := handler.NewDeviceHandler(pushNotifService)
 
 	// Rate limiters
 	authRateLimiter := middleware.NewRateLimiter(5, time.Minute)    // 5 req/min for auth
@@ -133,6 +154,8 @@ func run() error {
 	v1.GET("/stories/:id", storyHandler.GetStory)
 	v1.POST("/listenings", listeningHandler.TrackListening)
 	v1.POST("/reports", reportHandler.CreateReport)
+	v1.POST("/device-tokens", deviceHandler.RegisterDeviceToken)
+	v1.DELETE("/device-tokens", deviceHandler.UnregisterDeviceToken)
 
 	// Purchase routes (protected with JWT)
 	purchases := v1.Group("/purchases")

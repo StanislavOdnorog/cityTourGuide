@@ -20,6 +20,12 @@ type Config struct {
 	ElevenLabs ElevenLabsConfig
 	JWT        JWTConfig
 	OAuth      OAuthConfig
+	FCM        FCMConfig
+}
+
+// FCMConfig holds Firebase Cloud Messaging settings.
+type FCMConfig struct {
+	CredentialsJSON string // Service account JSON (base64-encoded or raw)
 }
 
 // ServerConfig holds HTTP server settings.
@@ -106,6 +112,9 @@ func Load() (*Config, error) {
 			AppleTeamID:     os.Getenv("APPLE_TEAM_ID"),
 			AppleKeyID:      os.Getenv("APPLE_KEY_ID"),
 			ApplePrivateKey: os.Getenv("APPLE_PRIVATE_KEY"),
+		},
+		FCM: FCMConfig{
+			CredentialsJSON: os.Getenv("FCM_CREDENTIALS_JSON"),
 		},
 	}
 
