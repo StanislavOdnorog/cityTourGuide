@@ -1729,3 +1729,22 @@
   - Login blocked → 403 "Account scheduled for deletion" (verified in auth_service + auth_handler)
   - POST /api/v1/users/me/restore → restores account (verified in handler + service)
   - HardDeleteExpired uses CASCADE FKs for full data removal (verified in repo)
+
+### TASK-058: Mobile: Expo Application Services (EAS) — конфигурация сборок
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - `eas.json` создан с 3 профилями: development (dev client + simulator), preview (internal distribution), production (auto-increment)
+  - `submit` секция настроена для iOS (Apple) и Android (Google Play internal track)
+  - `app.json` обновлён: добавлен `bundleIdentifier` для iOS (`com.citystoriesguide.app`) и `package` для Android
+  - `buildNumber` (iOS) и `versionCode` (Android) установлены
+  - iOS: `NSLocationAlwaysAndWhenInUseUsageDescription`, `NSLocationWhenInUseUsageDescription` уже настроены (из TASK-044)
+  - iOS: `UIBackgroundModes` включает `location` и `audio`
+  - Android: permissions включают `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`, `ACCESS_BACKGROUND_LOCATION`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK`
+  - expo-location plugin настроен с `isAndroidBackgroundLocationEnabled` и `isAndroidForegroundServiceEnabled`
+- **Тесты**:
+  - `npx tsc --noEmit` — 0 ошибок типов (pass)
+  - eas.json валидный JSON с 3 профилями (pass)
+  - app.json содержит bundleIdentifier и package (pass)
+  - Background location usage description присутствует в iOS infoPlist (pass)
+  - Android permissions настроены для location и foreground service (pass)

@@ -14,6 +14,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
+      "bundleIdentifier": "com.citystoriesguide.app",
+      "buildNumber": "1",
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationAlwaysAndWhenInUseUsageDescription": "City Stories Guide uses your location to find and play stories about nearby places while you walk.",
@@ -22,6 +24,8 @@
       }
     },
     "android": {
+      "package": "com.citystoriesguide.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"

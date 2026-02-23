@@ -1304,7 +1304,7 @@
         "Шаг 4: Проверить описание location permission на iOS"
       ],
       "dependencies": ["TASK-005", "TASK-006"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-059",
