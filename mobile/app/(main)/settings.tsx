@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { deleteAccount } from '@/api/endpoints';
 import { StoryCacheManager } from '@/services/cache';
 import { notificationManager } from '@/services/notifications';
 import { useCacheStore } from '@/store/useCacheStore';
@@ -174,6 +175,36 @@ export default function SettingsScreen() {
     ]);
   }, [setCacheStats, setIsClearing]);
 
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteAccount = useCallback(() => {
+    Alert.alert(
+      'Delete Account',
+      'Your account will be scheduled for deletion. You have 30 days to restore it. After that, all your data will be permanently removed.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeleting(true);
+            try {
+              await deleteAccount();
+              Alert.alert(
+                'Account Scheduled for Deletion',
+                'Your account will be permanently deleted in 30 days. You can restore it from the settings before then.',
+              );
+            } catch {
+              Alert.alert('Error', 'Failed to delete account. Please try again.');
+            } finally {
+              setIsDeleting(false);
+            }
+          },
+        },
+      ],
+    );
+  }, []);
+
   const purchaseLabel = getPurchaseLabel(purchaseStatus);
 
   return (
@@ -294,6 +325,21 @@ export default function SettingsScreen() {
         <SectionHeader title="Account" />
         <View style={styles.section}>
           <SettingRow label="Account type" value="Anonymous" />
+          <View style={styles.divider} />
+          <Pressable
+            onPress={handleDeleteAccount}
+            disabled={isDeleting}
+            style={({ pressed }) => [
+              styles.settingRow,
+              pressed && styles.settingRowPressed,
+              isDeleting && styles.settingRowDisabled,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Delete account"
+          >
+            <Text style={[styles.settingLabel, styles.destructiveText]}>Delete Account</Text>
+            {isDeleting && <ActivityIndicator size="small" color="#EF4444" />}
+          </Pressable>
         </View>
 
         <View style={styles.bottomPadding} />

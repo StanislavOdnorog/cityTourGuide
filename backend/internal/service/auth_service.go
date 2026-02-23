@@ -51,9 +51,10 @@ type AuthService struct {
 
 // Sentinel errors for auth operations.
 var (
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrEmailAlreadyExists = errors.New("email already registered")
-	ErrInvalidToken       = errors.New("invalid or expired token")
+	ErrInvalidCredentials     = errors.New("invalid credentials")
+	ErrEmailAlreadyExists     = errors.New("email already registered")
+	ErrInvalidToken           = errors.New("invalid or expired token")
+	ErrAccountPendingDeletion = errors.New("account scheduled for deletion")
 )
 
 // NewAuthService creates a new AuthService.
@@ -121,6 +122,10 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*domai
 		return nil, nil, ErrInvalidCredentials
 	}
 
+	if user.IsScheduledForDeletion() {
+		return nil, nil, ErrAccountPendingDeletion
+	}
+
 	tokens, err := s.generateTokenPair(user.ID, user.IsAdmin)
 	if err != nil {
 		return nil, nil, err
@@ -183,6 +188,9 @@ func (s *AuthService) OAuthLogin(ctx context.Context, provider domain.AuthProvid
 	// Try to find existing user by provider + provider_id
 	user, err := s.repo.GetByProviderID(ctx, provider, claims.Sub)
 	if err == nil {
+		if user.IsScheduledForDeletion() {
+			return nil, nil, ErrAccountPendingDeletion
+		}
 		// Existing user found — generate tokens and return
 		tokens, tokenErr := s.generateTokenPair(user.ID, user.IsAdmin)
 		if tokenErr != nil {

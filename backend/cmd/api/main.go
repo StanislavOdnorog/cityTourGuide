@@ -85,6 +85,7 @@ func run() error {
 		RefreshTTL: cfg.JWT.RefreshTTL,
 	})
 	purchaseService := service.NewPurchaseService(purchaseRepo)
+	userService := service.NewUserService(userRepo)
 	pushNotifService := service.NewPushNotificationService(
 		deviceTokenRepo, pushNotifRepo, fcmClient,
 		service.PushNotificationConfig{GeoMaxPerDay: 2, ContentMaxPerWeek: 1},
@@ -116,6 +117,7 @@ func run() error {
 		slog.Info("Apple Sign-In enabled")
 	}
 
+	userHandler := handler.NewUserHandler(userService)
 	listeningHandler := handler.NewListeningHandler(listeningRepo)
 	reportHandler := handler.NewReportHandler(reportRepo)
 	inflationHandler := handler.NewInflationHandler(inflationRepo)
@@ -156,6 +158,13 @@ func run() error {
 	v1.POST("/reports", reportHandler.CreateReport)
 	v1.POST("/device-tokens", deviceHandler.RegisterDeviceToken)
 	v1.DELETE("/device-tokens", deviceHandler.UnregisterDeviceToken)
+
+	// User account routes (protected with JWT)
+	users := v1.Group("/users")
+	users.Use(middleware.JWTAuth(authService))
+	users.GET("/me", userHandler.GetMe)
+	users.DELETE("/me", userHandler.DeleteAccount)
+	users.POST("/me/restore", userHandler.RestoreAccount)
 
 	// Purchase routes (protected with JWT)
 	purchases := v1.Group("/purchases")

@@ -1259,7 +1259,7 @@
         "Шаг 4: Через 30 дней — данные физически удалены"
       ],
       "dependencies": ["TASK-025"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-057",

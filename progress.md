@@ -1703,3 +1703,29 @@
   - Rate limiting в PushNotificationService: geo 2/день, content 1/неделю (verified in code)
   - Подавление уведомлений во время активной сессии (isWalking check in NotificationManager)
   - Настройки вкл/выкл по типам в Settings screen (geo/content toggles)
+
+### TASK-056: GDPR compliance: удаление аккаунта и данных пользователя
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - **Backend — Migration**: `000016_add_soft_delete_to_users` — добавлены `deleted_at`, `deletion_scheduled_at` с индексом
+  - **Backend — Domain**: User struct расширен полями `DeletedAt`, `DeletionScheduledAt` + метод `IsScheduledForDeletion()`
+  - **Backend — Repository**: `SoftDelete()`, `RestoreAccount()`, `HardDeleteExpired()` в `user_repo.go`; рефакторинг в `scanUser()` helper
+  - **Backend — Service**: `user_service.go` — `ScheduleDeletion()`, `RestoreAccount()`, `HardDeleteExpired()`, `GetByID()`
+  - **Backend — Handler**: `user_handler.go` — `DELETE /api/v1/users/me`, `POST /api/v1/users/me/restore`, `GET /api/v1/users/me`
+  - **Backend — Auth**: Login/OAuthLogin блокируют вход для soft-deleted аккаунтов (403 "Account scheduled for deletion")
+  - **Backend — Routes**: Защищённые JWT маршруты `/api/v1/users/*` зарегистрированы в `main.go`
+  - **Mobile**: Кнопка "Delete Account" в Settings с confirmation dialog (Alert), состояние `isDeleting`, API endpoint `deleteAccount()`
+  - **Mobile — API**: Эндпоинты `deleteAccount()` и `restoreAccount()` добавлены в `endpoints.ts`
+  - Cascade FK constraints обеспечивают удаление всех связанных данных (listenings, reports, purchases, device_tokens, push_notifications)
+  - Grace period 30 дней — `HardDeleteExpired()` удаляет физически после истечения
+- **Тесты**:
+  - `go build ./...` — успешная компиляция (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make test` — все тесты проходят (pass)
+  - `npx tsc --noEmit` — 0 ошибок типов (pass)
+  - `npm run lint` (mobile) — 0 ошибок (pass)
+  - DELETE /api/v1/users/me → 200 + "Account scheduled for deletion" (verified in handler)
+  - Login blocked → 403 "Account scheduled for deletion" (verified in auth_service + auth_handler)
+  - POST /api/v1/users/me/restore → restores account (verified in handler + service)
+  - HardDeleteExpired uses CASCADE FKs for full data removal (verified in repo)

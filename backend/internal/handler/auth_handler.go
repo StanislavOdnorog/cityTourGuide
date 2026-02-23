@@ -123,6 +123,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
 			return
 		}
+		if errors.Is(err, service.ErrAccountPendingDeletion) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Account scheduled for deletion"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
@@ -205,6 +209,10 @@ func (h *AuthHandler) GoogleAuth(c *gin.Context) {
 		Name:  result.Name,
 	})
 	if err != nil {
+		if errors.Is(err, service.ErrAccountPendingDeletion) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Account scheduled for deletion"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
@@ -258,6 +266,10 @@ func (h *AuthHandler) AppleAuth(c *gin.Context) {
 		Name:  result.Name,
 	})
 	if err != nil {
+		if errors.Is(err, service.ErrAccountPendingDeletion) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Account scheduled for deletion"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}

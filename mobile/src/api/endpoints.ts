@@ -94,6 +94,16 @@ export async function unregisterDeviceToken(token: string): Promise<void> {
   });
 }
 
+// User account endpoints
+
+export async function deleteAccount(): Promise<void> {
+  await apiClient.delete('/api/v1/users/me');
+}
+
+export async function restoreAccount(): Promise<void> {
+  await apiClient.post('/api/v1/users/me/restore');
+}
+
 // Purchase endpoints
 
 export async function verifyPurchase(request: VerifyPurchaseRequest): Promise<Purchase> {
