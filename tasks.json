@@ -1282,7 +1282,7 @@
         "Шаг 5: Вызвать ошибочный endpoint — error log с деталями"
       ],
       "dependencies": ["TASK-002", "TASK-017"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-058",

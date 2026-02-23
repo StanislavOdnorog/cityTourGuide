@@ -1588,3 +1588,34 @@
   - `curl /healthz` — 200 `{"status":"ok"}` (pass)
   - `curl /api/v1/nearby-stories?lat=41.6941&lng=44.8015&language=en&radius=500` — данные есть (Freedom Square, National Museum) (pass)
   - Повторный seed — 0 POIs created, 10 skipped, 0 stories created, 20 skipped (pass)
+
+### TASK-057: Мониторинг: health checks, structured logging, базовые метрики
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создан `internal/logger/logger.go` — инициализация Go `log/slog` с JSON handler:
+    - Уровень логирования из ENV `LOG_LEVEL` (debug, info, warn, error; default: info)
+    - JSON output на stdout с timestamp, level, message, fields
+    - Source location включается на debug level
+  - Обновлён `internal/middleware/logging.go` — request logging через slog вместо ручного JSON marshal:
+    - slog.Info/Warn/Error в зависимости от HTTP status code (2xx→info, 4xx→warn, 5xx→error)
+    - Поля: method, path, status_code, duration_ms, client_ip, user_agent, user_id (если JWT)
+    - Удалена зависимость на `encoding/json` и структура `requestLog`
+  - Создан `internal/handler/health_handler.go` — health и readiness endpoints:
+    - `GET /healthz` — 200 `{"status":"ok"}` если сервер работает
+    - `GET /readyz` — 200 `{"status":"ok"}` если БД доступна, 503 `{"status":"unavailable","error":"database unreachable"}` если нет
+    - `DBPinger` интерфейс для тестируемости (реализуется `*pgxpool.Pool`)
+    - 2-секундный таймаут на DB ping
+  - Обновлён `cmd/api/main.go`:
+    - `logger.Setup()` вызывается первым — все логи в JSON формате
+    - Все `log.Printf/Println` заменены на `slog.Info/Error`
+    - `log.Fatal` заменён на `slog.Error` + `os.Exit(1)`
+    - `/readyz` маршрут зарегистрирован рядом с `/healthz`
+    - `healthHandler` использует DB pool для readiness check
+  - Нет новых внешних зависимостей — используется stdlib `log/slog` (Go 1.21+)
+- **Тесты**:
+  - 5 тестов logging middleware (ContainsFields, InfoLevel, WarnLevel, ErrorLevel, IncludesUserID) — все PASS с новым slog backend (pass)
+  - 3 теста health handler (Healthz OK, Readyz DB healthy, Readyz DB down 503) — все PASS (pass)
+  - `go test ./...` — все тесты проходят (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `go build ./cmd/api && go build ./cmd/worker` — оба бинарника скомпилированы (pass)

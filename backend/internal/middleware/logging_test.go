@@ -3,7 +3,7 @@ package middleware
 import (
 	"bytes"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,14 +11,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func captureLog(fn func()) string {
+// captureSlog redirects slog output to a buffer for the duration of fn.
+func captureSlog(fn func()) string {
 	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	log.SetFlags(0)
-	defer func() {
-		log.SetOutput(nil)
-		log.SetFlags(log.LstdFlags)
-	}()
+	handler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	old := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(old)
 	fn()
 	return buf.String()
 }
@@ -31,7 +30,7 @@ func TestRequestLogger_ContainsFields(t *testing.T) {
 		c.Status(http.StatusOK)
 	})
 
-	output := captureLog(func() {
+	output := captureSlog(func() {
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest(http.MethodGet, "/test", nil)
 		req.RemoteAddr = "192.168.1.1:12345"
@@ -39,31 +38,28 @@ func TestRequestLogger_ContainsFields(t *testing.T) {
 		r.ServeHTTP(w, req)
 	})
 
-	var entry requestLog
+	var entry map[string]any
 	if err := json.Unmarshal([]byte(output), &entry); err != nil {
 		t.Fatalf("log output is not valid JSON: %v\nOutput: %s", err, output)
 	}
 
-	if entry.Method != "GET" {
-		t.Errorf("expected method GET, got %s", entry.Method)
+	if entry["method"] != "GET" {
+		t.Errorf("expected method GET, got %v", entry["method"])
 	}
-	if entry.Path != "/test" {
-		t.Errorf("expected path /test, got %s", entry.Path)
+	if entry["path"] != "/test" {
+		t.Errorf("expected path /test, got %v", entry["path"])
 	}
-	if entry.StatusCode != 200 {
-		t.Errorf("expected status 200, got %d", entry.StatusCode)
+	if sc, ok := entry["status_code"].(float64); !ok || int(sc) != 200 {
+		t.Errorf("expected status_code 200, got %v", entry["status_code"])
 	}
-	if entry.DurationMs < 0 {
-		t.Errorf("expected non-negative duration, got %d", entry.DurationMs)
-	}
-	if entry.ClientIP == "" {
+	if entry["client_ip"] == nil || entry["client_ip"] == "" {
 		t.Error("expected client_ip to be set")
 	}
-	if entry.UserAgent != "TestAgent/1.0" {
-		t.Errorf("expected user_agent TestAgent/1.0, got %s", entry.UserAgent)
+	if entry["user_agent"] != "TestAgent/1.0" {
+		t.Errorf("expected user_agent TestAgent/1.0, got %v", entry["user_agent"])
 	}
-	if entry.Timestamp == "" {
-		t.Error("expected timestamp to be set")
+	if entry["time"] == nil || entry["time"] == "" {
+		t.Error("expected time to be set")
 	}
 }
 
@@ -75,18 +71,18 @@ func TestRequestLogger_InfoLevel(t *testing.T) {
 		c.Status(http.StatusOK)
 	})
 
-	output := captureLog(func() {
+	output := captureSlog(func() {
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest(http.MethodGet, "/ok", nil)
 		r.ServeHTTP(w, req)
 	})
 
-	var entry requestLog
+	var entry map[string]any
 	if err := json.Unmarshal([]byte(output), &entry); err != nil {
 		t.Fatalf("invalid JSON: %s", output)
 	}
-	if entry.Level != "info" {
-		t.Errorf("expected level info for 200, got %s", entry.Level)
+	if entry["level"] != "INFO" {
+		t.Errorf("expected level INFO for 200, got %v", entry["level"])
 	}
 }
 
@@ -98,18 +94,18 @@ func TestRequestLogger_WarnLevel(t *testing.T) {
 		c.Status(http.StatusBadRequest)
 	})
 
-	output := captureLog(func() {
+	output := captureSlog(func() {
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest(http.MethodGet, "/bad", nil)
 		r.ServeHTTP(w, req)
 	})
 
-	var entry requestLog
+	var entry map[string]any
 	if err := json.Unmarshal([]byte(output), &entry); err != nil {
 		t.Fatalf("invalid JSON: %s", output)
 	}
-	if entry.Level != "warn" {
-		t.Errorf("expected level warn for 400, got %s", entry.Level)
+	if entry["level"] != "WARN" {
+		t.Errorf("expected level WARN for 400, got %v", entry["level"])
 	}
 }
 
@@ -121,18 +117,18 @@ func TestRequestLogger_ErrorLevel(t *testing.T) {
 		c.Status(http.StatusInternalServerError)
 	})
 
-	output := captureLog(func() {
+	output := captureSlog(func() {
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest(http.MethodGet, "/err", nil)
 		r.ServeHTTP(w, req)
 	})
 
-	var entry requestLog
+	var entry map[string]any
 	if err := json.Unmarshal([]byte(output), &entry); err != nil {
 		t.Fatalf("invalid JSON: %s", output)
 	}
-	if entry.Level != "error" {
-		t.Errorf("expected level error for 500, got %s", entry.Level)
+	if entry["level"] != "ERROR" {
+		t.Errorf("expected level ERROR for 500, got %v", entry["level"])
 	}
 }
 
@@ -148,17 +144,17 @@ func TestRequestLogger_IncludesUserID(t *testing.T) {
 		c.Status(http.StatusOK)
 	})
 
-	output := captureLog(func() {
+	output := captureSlog(func() {
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest(http.MethodGet, "/auth", nil)
 		r.ServeHTTP(w, req)
 	})
 
-	var entry requestLog
+	var entry map[string]any
 	if err := json.Unmarshal([]byte(output), &entry); err != nil {
 		t.Fatalf("invalid JSON: %s", output)
 	}
-	if entry.UserID != "user-abc" {
-		t.Errorf("expected user_id user-abc, got %q", entry.UserID)
+	if entry["user_id"] != "user-abc" {
+		t.Errorf("expected user_id user-abc, got %q", entry["user_id"])
 	}
 }

@@ -2,8 +2,9 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/saas/city-stories-guide/backend/internal/config"
 	"github.com/saas/city-stories-guide/backend/internal/handler"
+	"github.com/saas/city-stories-guide/backend/internal/logger"
 	"github.com/saas/city-stories-guide/backend/internal/middleware"
 	"github.com/saas/city-stories-guide/backend/internal/platform/oauth"
 	"github.com/saas/city-stories-guide/backend/internal/repository"
@@ -20,17 +22,21 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		log.Fatal(err)
+		slog.Error("fatal error", "error", err)
+		os.Exit(1)
 	}
 }
 
 func run() error {
+	// Initialize structured JSON logging before anything else.
+	logger.Setup()
+
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
 
-	log.Printf("Config loaded: %s", cfg.LogSafe())
+	slog.Info("config loaded", "config", cfg.LogSafe())
 
 	// Create context that listens for OS shutdown signals
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -43,7 +49,7 @@ func run() error {
 	}
 	defer pool.Close()
 
-	log.Println("Database connection established")
+	slog.Info("database connection established")
 
 	// Initialize repositories
 	cityRepo := repository.NewCityRepo(pool)
@@ -71,12 +77,13 @@ func run() error {
 	storyHandler := handler.NewStoryHandler(storyRepo)
 	authHandler := handler.NewAuthHandler(authService)
 	purchaseHandler := handler.NewPurchaseHandler(purchaseService)
+	healthHandler := handler.NewHealthHandler(pool)
 
 	// Set up OAuth verifiers (only if configured)
 	if cfg.OAuth.GoogleClientID != "" {
 		googleVerifier := oauth.NewGoogleVerifier(cfg.OAuth.GoogleClientID, nil)
 		authHandler.SetGoogleVerifier(oauth.NewGoogleHandlerAdapter(googleVerifier))
-		log.Println("Google Sign-In enabled")
+		slog.Info("Google Sign-In enabled")
 	}
 	if cfg.OAuth.AppleClientID != "" {
 		appleVerifier := oauth.NewAppleVerifier(oauth.AppleConfig{
@@ -86,7 +93,7 @@ func run() error {
 			PrivateKey: cfg.OAuth.ApplePrivateKey,
 		}, nil)
 		authHandler.SetAppleVerifier(oauth.NewAppleHandlerAdapter(appleVerifier))
-		log.Println("Apple Sign-In enabled")
+		slog.Info("Apple Sign-In enabled")
 	}
 
 	listeningHandler := handler.NewListeningHandler(listeningRepo)
@@ -109,9 +116,9 @@ func run() error {
 	}))
 	r.Use(middleware.ValidateGPSParams())
 
-	r.GET("/healthz", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
+	// Health & readiness
+	r.GET("/healthz", healthHandler.Healthz)
+	r.GET("/readyz", healthHandler.Readyz)
 
 	// API v1 routes — public
 	v1 := r.Group("/api/v1")
@@ -170,7 +177,7 @@ func run() error {
 	// Start server in a goroutine
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("Starting server on :%s", cfg.Server.Port)
+		slog.Info("starting server", "port", cfg.Server.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
@@ -180,7 +187,7 @@ func run() error {
 	select {
 	case <-ctx.Done():
 		stop()
-		log.Println("Shutting down server...")
+		slog.Info("shutting down server")
 	case err := <-errCh:
 		return err
 	}
@@ -193,6 +200,6 @@ func run() error {
 		return err
 	}
 
-	log.Println("Server stopped")
+	slog.Info("server stopped")
 	return nil
 }
