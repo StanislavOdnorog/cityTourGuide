@@ -998,3 +998,22 @@
   - `make build` — оба бинарника скомпилированы (pass)
   - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
   - `tsc -b` (admin) — 0 ошибок типов (pass)
+
+### TASK-009: CI/CD: GitHub Actions для бэкенда (lint, test, build)
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создан `.github/workflows/backend.yml` — CI pipeline для Go-бэкенда
+  - Триггеры: push/PR в main при изменении `backend/**`
+  - **Lint job**: `golangci/golangci-lint-action@v6` с фиксированной версией v1.64.8, `actions/setup-go@v5` с Go 1.24, кэш зависимостей через `cache-dependency-path: backend/go.sum`
+  - **Test job**: PostgreSQL+PostGIS service container (`postgis/postgis:16-3.4`), healthcheck через `pg_isready`, golang-migrate v4.18.1 для миграций, `go test -race -cover -tags integration ./...`
+  - **Build job**: компиляция обоих бинарников (api, worker) в `bin/`
+  - `defaults.run.working-directory: backend` для всех jobs
+  - YAML синтаксис валидирован
+- **Тесты**:
+  - YAML syntax valid (python3 yaml.safe_load) (pass)
+  - Workflow triggers on backend/** changes (push + PR to main) (pass)
+  - Lint job uses golangci-lint-action@v6 with version: v1.64.8 (pass)
+  - Test job uses postgis/postgis:16-3.4 service container with healthcheck (pass)
+  - Build job compiles both api and worker binaries (pass)
+  - All acceptance criteria verified through code review (pass)

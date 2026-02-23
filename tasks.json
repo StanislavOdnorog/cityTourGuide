@@ -212,7 +212,7 @@
         "Шаг 3: Внести ошибку линтинга → lint job падает"
       ],
       "dependencies": ["TASK-004"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-010",

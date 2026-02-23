@@ -1,0 +1,90 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: backend/go.sum
+
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.8
+          working-directory: backend
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: citystories
+          POSTGRES_PASSWORD: citystories_secret
+          POSTGRES_DB: citystories
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U citystories"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: backend/go.sum
+
+      - name: Install golang-migrate
+        run: |
+          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz | tar xz
+          sudo mv migrate /usr/local/bin/migrate
+
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgres://citystories:citystories_secret@localhost:5432/citystories?sslmode=disable
+        run: migrate -path migrations -database "$DATABASE_URL" up
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgres://citystories:citystories_secret@localhost:5432/citystories?sslmode=disable
+        run: go test -race -cover -tags integration ./...
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: backend/go.sum
+
+      - name: Build API binary
+        run: go build -o bin/api ./cmd/api
+
+      - name: Build Worker binary
+        run: go build -o bin/worker ./cmd/worker
