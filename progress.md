@@ -1462,3 +1462,32 @@
   - `make build` — оба бинарника (api, worker) скомпилированы (pass)
   - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
   - `tsc --noEmit` (admin) — 0 ошибок типов (pass)
+
+### TASK-054: CI/CD: Deploy workflow — автодеплой на VPS
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создан `.github/workflows/deploy.yml` — автоматический деплой на VPS при push в main
+  - **CI Gate**: `ci-gate` job ждёт завершения всех CI checks (Backend CI, Mobile CI, Admin CI) перед деплоем через GitHub API (`actions/github-script@v7`), фильтрует свои собственные checks, поддерживает `success` и `skipped` conclusions
+  - **Deploy job**: использует `appleboy/ssh-action@v1.2.0` для SSH-подключения к VPS
+  - **Secrets**: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` — не утекают в логи (GitHub secrets masking)
+  - **Deploy steps на VPS**:
+    1. `git fetch origin main && git reset --hard origin/main` — pull latest
+    2. `docker compose build backend worker caddy` — сборка контейнеров
+    3. `docker compose up -d --remove-orphans` — запуск сервисов
+    4. Ожидание PostgreSQL readiness (30 попыток × 2 сек)
+    5. `migrate ... up` — автоматическое применение миграций (golang-migrate в backend container)
+    6. Health check `/healthz` (15 попыток × 2 сек) — верификация деплоя
+  - **Concurrency**: `group: deploy-production`, `cancel-in-progress: false` — только один деплой одновременно
+  - **Environment**: `production` — поддержка GitHub environment protection rules
+  - **Command timeout**: 10 минут для SSH-сессии
+  - **Rollback**: `git revert HEAD && git push origin main` — новый push триггерит workflow с откатом
+  - **Error handling**: `set -e`, health check failure показывает последние 50 строк логов backend
+- **Тесты**:
+  - YAML валидация — файл корректен (pass)
+  - Trigger: `on: push: branches: [main]` — деплой при push в main (pass — code review)
+  - CI gate: ждёт завершения всех checks, блокирует deploy при failures (pass — code review)
+  - Secrets: используются через `${{ secrets.* }}`, не выводятся в логи (pass — code review)
+  - Миграции: `migrate -path /app/migrations -database "$DATABASE_URL" up` (pass — code review)
+  - Health check: `/healthz` verification после деплоя (pass — code review)
+  - Rollback: git revert + push → новый деплой (pass — design review)

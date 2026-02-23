@@ -1215,7 +1215,7 @@
         "Шаг 4: Проверить что миграции применены"
       ],
       "dependencies": ["TASK-009", "TASK-010", "TASK-053"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-055",

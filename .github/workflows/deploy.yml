@@ -1,0 +1,146 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+
+# Only one deployment at a time
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  # Verify all CI workflows pass before deploying
+  ci-gate:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for CI checks to pass
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const maxAttempts = 30;
+            const interval = 10000; // 10 seconds
+
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+              const { data: checkRuns } = await github.rest.checks.listForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: context.sha,
+              });
+
+              const ciChecks = checkRuns.check_runs.filter(
+                cr => cr.name !== 'CI Gate' && cr.name !== 'Deploy'
+              );
+
+              if (ciChecks.length === 0 && attempt < 5) {
+                core.info(`Attempt ${attempt + 1}: No CI checks found yet, waiting...`);
+                await new Promise(r => setTimeout(r, interval));
+                continue;
+              }
+
+              const pending = ciChecks.filter(
+                cr => cr.status !== 'completed'
+              );
+
+              if (pending.length > 0) {
+                core.info(`Attempt ${attempt + 1}: ${pending.length} checks still running: ${pending.map(c => c.name).join(', ')}`);
+                await new Promise(r => setTimeout(r, interval));
+                continue;
+              }
+
+              const failed = ciChecks.filter(
+                cr => cr.conclusion !== 'success' && cr.conclusion !== 'skipped'
+              );
+
+              if (failed.length > 0) {
+                core.setFailed(`CI checks failed: ${failed.map(c => `${c.name} (${c.conclusion})`).join(', ')}`);
+                return;
+              }
+
+              core.info(`All ${ciChecks.length} CI checks passed: ${ciChecks.map(c => c.name).join(', ')}`);
+              return;
+            }
+
+            core.setFailed('Timed out waiting for CI checks to complete');
+
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: ci-gate
+    environment: production
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script_stop: true
+          command_timeout: 10m
+          script: |
+            set -e
+
+            PROJECT_DIR=~/city-stories-guide
+            COMPOSE_FILE=infra/docker-compose.prod.yml
+
+            cd "$PROJECT_DIR"
+
+            # Pull latest changes
+            echo "==> Pulling latest changes..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            # Build and restart services
+            echo "==> Building and starting services..."
+            docker compose -f "$COMPOSE_FILE" build backend worker caddy
+            docker compose -f "$COMPOSE_FILE" up -d --remove-orphans
+
+            # Wait for postgres to be healthy
+            echo "==> Waiting for PostgreSQL to be ready..."
+            for i in $(seq 1 30); do
+              if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U "$POSTGRES_USER" 2>/dev/null; then
+                echo "PostgreSQL is ready."
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "ERROR: PostgreSQL did not become ready in time."
+                exit 1
+              fi
+              sleep 2
+            done
+
+            # Run database migrations
+            echo "==> Running database migrations..."
+            docker compose -f "$COMPOSE_FILE" run --rm -T backend sh -c \
+              'wget -qO- https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz | tar xz -C /tmp && \
+               /tmp/migrate -path /app/migrations -database "$DATABASE_URL" up'
+
+            # Verify backend health
+            echo "==> Verifying deployment..."
+            for i in $(seq 1 15); do
+              if docker compose -f "$COMPOSE_FILE" exec -T backend wget -qO- http://localhost:8080/healthz 2>/dev/null; then
+                echo ""
+                echo "==> Health check passed!"
+                break
+              fi
+              if [ "$i" -eq 15 ]; then
+                echo "ERROR: Health check failed after 30 seconds!"
+                docker compose -f "$COMPOSE_FILE" logs --tail=50 backend
+                exit 1
+              fi
+              sleep 2
+            done
+
+            echo "==> Deployment successful!"
+            docker compose -f "$COMPOSE_FILE" ps
+
+      - name: Report deployment result
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "::notice::Deployment to production completed successfully."
+          else
+            echo "::error::Deployment failed! To rollback: git revert HEAD && git push origin main"
+          fi
