@@ -1129,3 +1129,35 @@
   - `cd admin && npx tsc --noEmit` — 0 ошибок типов (pass)
   - `cd admin && npm run lint` — 0 ошибок ESLint (pass)
   - `cd admin && npm run build` — production билд создаётся без ошибок (pass)
+
+### TASK-039: Mobile: Onboarding Flow (3 экрана)
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Установлены зависимости: `@react-native-async-storage/async-storage`, `expo-notifications`
+  - Создан `src/store/useSettingsStore.ts` — Zustand store с persist middleware (AsyncStorage):
+    - `language: 'en' | 'ru'` — выбор языка, сохраняется между сессиями
+    - `onboardingCompleted: boolean` — флаг завершения onboarding
+    - `_hasHydrated: boolean` — отслеживание загрузки данных из AsyncStorage
+  - Обновлён `src/store/index.ts` — экспорт нового store
+  - Создано 3 экрана onboarding с плавными переходами (slide_from_right):
+    - `app/onboarding/index.tsx` — Welcome: "The city has stories. You just need headphones."
+    - `app/onboarding/language.tsx` — Выбор языка EN/RU с визуальным индикатором
+    - `app/onboarding/permissions.tsx` — Запрос location (обязательно) и notifications (опционально)
+  - Обновлён `app/onboarding/_layout.tsx` — анимация переходов, отключён gestureEnabled
+  - Обновлён `app/index.tsx` — условная маршрутизация:
+    - Ожидание hydration AsyncStorage → loading indicator
+    - Если onboarding завершён → redirect на `/(main)/home`
+    - Иначе → redirect на `/onboarding`
+  - Обновлён `src/hooks/useHomeScreen.ts` — использует язык из settings store вместо hardcoded 'en'
+  - Обновлён `app.json` — добавлен плагин expo-notifications
+  - Написано 6 unit-тестов для useSettingsStore
+  - Единый тёмный дизайн (#0D0D0D, #4ADE80 accent) — согласован с HomeScreen
+  - Dot indicators показывают текущий шаг (1/3, 2/3, 3/3)
+- **Тесты**:
+  - `cd mobile && npx tsc --noEmit` — 0 ошибок типов (pass)
+  - `cd mobile && npx jest` — 200 тестов, 10 test suites, все пройдены (pass)
+  - Onboarding показывается при первом запуске (index.tsx проверяет onboardingCompleted) (pass)
+  - Язык сохраняется через AsyncStorage persist middleware (pass)
+  - Permissions запрашиваются на третьем экране (pass)
+  - После completeOnboarding() — redirect на Home (pass)

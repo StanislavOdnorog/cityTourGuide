@@ -878,7 +878,7 @@
         "Шаг 4: Начать ходьбу — первая история ≤ 30 сек"
       ],
       "dependencies": ["TASK-037"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-040",

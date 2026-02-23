@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { createWalkingPipeline, type WalkingPipeline } from '@/services/pipeline';
 import { usePlayerStore } from '@/store/usePlayerStore';
+import { useSettingsStore } from '@/store/useSettingsStore';
 import { useWalkStore } from '@/store/useWalkStore';
 
 interface HomeScreenState {
@@ -22,6 +23,7 @@ export function useHomeScreen(): HomeScreenState & HomeScreenActions {
   const progress = usePlayerStore((s) => s.progress);
   const listenedStoryIds = usePlayerStore((s) => s.listenedStoryIds);
 
+  const language = useSettingsStore((s) => s.language);
   const pipelineRef = useRef<WalkingPipeline | null>(null);
 
   useEffect(() => {
@@ -40,11 +42,11 @@ export function useHomeScreen(): HomeScreenState & HomeScreenActions {
       }
     } else {
       if (!pipelineRef.current) {
-        pipelineRef.current = createWalkingPipeline({ language: 'en' });
+        pipelineRef.current = createWalkingPipeline({ language });
       }
       await pipelineRef.current.start();
     }
-  }, [isWalking]);
+  }, [isWalking, language]);
 
   return {
     isWalking,
