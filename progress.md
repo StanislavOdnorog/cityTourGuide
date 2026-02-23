@@ -747,3 +747,39 @@
   - `make build` — оба бинарника скомпилированы (pass)
   - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
   - Полный E2E запуск с реальными API требует running infrastructure (PostgreSQL, MinIO, Claude API key, ElevenLabs API key) — будет протестирован в TASK-031
+
+### TASK-022: Handlers: CRUD API для cities, POIs, stories (admin endpoints)
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создан `internal/handler/city_handler.go` — полный CRUD для cities:
+    - GET /api/v1/cities — список с пагинацией (?page=&per_page=)
+    - GET /api/v1/cities/:id — получение по ID, 404 если не найден
+    - POST /api/v1/admin/cities — создание с gin binding валидацией (name, country, center_lat, center_lng, radius_km required)
+    - PUT /api/v1/admin/cities/:id — обновление, 404 если не найден
+    - DELETE /api/v1/admin/cities/:id — удаление, 404 если не найден
+  - Создан `internal/handler/poi_handler.go` — полный CRUD для POIs:
+    - GET /api/v1/pois?city_id=&status=&type= — список с фильтрами и пагинацией (city_id required)
+    - GET /api/v1/pois/:id — получение по ID
+    - POST /api/v1/admin/pois — создание (city_id, name, lat, lng, type required; interest_score default 50, status default active)
+    - PUT /api/v1/admin/pois/:id — обновление
+    - DELETE /api/v1/admin/pois/:id — удаление
+  - Создан `internal/handler/story_handler.go` — полный CRUD для stories:
+    - GET /api/v1/stories?poi_id=&language=&status= — список с фильтрами и пагинацией (poi_id required, language default en)
+    - GET /api/v1/stories/:id — получение по ID
+    - POST /api/v1/admin/stories — создание (poi_id, language, text, layer_type required; confidence default 80, status default active, order_index default 0)
+    - PUT /api/v1/admin/stories/:id — обновление
+    - DELETE /api/v1/admin/stories/:id — удаление
+  - Общие утилиты в `city_handler.go`: `parseIDParam` (валидация :id), `parsePagination` (?page=1&per_page=20), `parseQueryInt`
+  - Все обработчики используют dependency injection через интерфейсы (CityRepository, POIRepository, StoryRepository)
+  - Response формат единообразный: `{data: ..., meta: {total, page, per_page}}` для списков, `{data: ...}` для единичных
+  - `cmd/api/main.go` обновлён: инициализация cityRepo, poiHandler, storyHandler; регистрация всех маршрутов (public + admin)
+  - Admin маршруты в группе /api/v1/admin/ (middleware будет добавлен в TASK-025/TASK-026)
+- **Тесты**:
+  - 14 unit-тестов city_handler: ListCities (success, empty, pagination, error), GetCity (success, 404, invalid id), CreateCity (success, missing required, optional fields), UpdateCity (success, 404), DeleteCity (success, 404) — все PASS
+  - 14 unit-тестов poi_handler: ListPOIs (success, missing city_id, filters, pagination), GetPOI (success, 404), CreatePOI (success, missing required, optional fields), UpdatePOI (success, 404), DeletePOI (success, 404) — все PASS
+  - 14 unit-тестов story_handler: ListStories (success, missing poi_id, default language, filters, pagination), GetStory (success, 404), CreateStory (success, missing required, optional fields), UpdateStory (success, 404), DeleteStory (success, 404) — все PASS
+  - `go test -race ./internal/handler/...` — 53/53 тестов PASS (42 новых + 11 existing nearby) (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make build` — оба бинарника скомпилированы (pass)
+  - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)

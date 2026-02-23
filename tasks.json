@@ -499,7 +499,7 @@
         "Шаг 5: GET /api/v1/cities/999 — 404"
       ],
       "dependencies": ["TASK-017", "TASK-018", "TASK-019"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-023",

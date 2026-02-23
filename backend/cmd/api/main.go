@@ -44,6 +44,7 @@ func run() error {
 	log.Println("Database connection established")
 
 	// Initialize repositories
+	cityRepo := repository.NewCityRepo(pool)
 	poiRepo := repository.NewPOIRepo(pool)
 	storyRepo := repository.NewStoryRepo(pool)
 	listeningRepo := repository.NewListeningRepo(pool)
@@ -53,6 +54,9 @@ func run() error {
 
 	// Initialize handlers
 	nearbyHandler := handler.NewNearbyHandler(nearbyService)
+	cityHandler := handler.NewCityHandler(cityRepo)
+	poiHandler := handler.NewPOIHandler(poiRepo)
+	storyHandler := handler.NewStoryHandler(storyRepo)
 
 	gin.SetMode(cfg.Server.Mode)
 	r := gin.Default()
@@ -61,9 +65,27 @@ func run() error {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	// API v1 routes
+	// API v1 routes — public
 	v1 := r.Group("/api/v1")
 	v1.GET("/nearby-stories", nearbyHandler.GetNearbyStories)
+	v1.GET("/cities", cityHandler.ListCities)
+	v1.GET("/cities/:id", cityHandler.GetCity)
+	v1.GET("/pois", poiHandler.ListPOIs)
+	v1.GET("/pois/:id", poiHandler.GetPOI)
+	v1.GET("/stories", storyHandler.ListStories)
+	v1.GET("/stories/:id", storyHandler.GetStory)
+
+	// API v1 routes — admin (auth middleware will be added in a separate task)
+	admin := v1.Group("/admin")
+	admin.POST("/cities", cityHandler.CreateCity)
+	admin.PUT("/cities/:id", cityHandler.UpdateCity)
+	admin.DELETE("/cities/:id", cityHandler.DeleteCity)
+	admin.POST("/pois", poiHandler.CreatePOI)
+	admin.PUT("/pois/:id", poiHandler.UpdatePOI)
+	admin.DELETE("/pois/:id", poiHandler.DeletePOI)
+	admin.POST("/stories", storyHandler.CreateStory)
+	admin.PUT("/stories/:id", storyHandler.UpdateStory)
+	admin.DELETE("/stories/:id", storyHandler.DeleteStory)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Server.Port,
