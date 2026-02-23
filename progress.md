@@ -1619,3 +1619,34 @@
   - `go test ./...` — все тесты проходят (pass)
   - `make lint` — 0 ошибок (pass)
   - `go build ./cmd/api && go build ./cmd/worker` — оба бинарника скомпилированы (pass)
+
+### TASK-055: Database backup: автоматические ежедневные бэкапы PostgreSQL
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создан `infra/backup/backup.sh` — полноценный скрипт бэкапа:
+    - `pg_dump --format=custom --compress=6` → upload в S3-compatible storage (MinIO / Backblaze B2)
+    - Retention policy: 7 daily + 4 weekly (настраивается через ENV)
+    - Auto-tag Sunday backups как weekly
+    - Alert при сбое через webhook (Slack/Discord) или email
+    - Logging с UTC timestamps
+    - `set -euo pipefail` для надёжности
+  - Создан `infra/backup/restore.sh` — скрипт восстановления:
+    - `--list` — показать доступные бэкапы
+    - `--file <name>` — восстановить конкретный бэкап
+    - `--type daily|weekly` — выбрать тип
+    - `--local <path>` — восстановить из локального файла
+    - Confirmation prompt для интерактивного режима, auto-confirm для CI
+    - `pg_restore --clean --if-exists --single-transaction`
+  - Создан `infra/backup/Dockerfile` — postgres:16-alpine + aws-cli + curl
+  - Создан `infra/backup/backup-cron` — cron schedule: `0 3 * * *` (3:00 UTC daily)
+  - Обновлён `infra/docker-compose.prod.yml` — добавлен backup service (profile: backup)
+  - Обновлены `.env.example` и `.env.production.example` с backup ENV переменными
+- **Тесты**:
+  - Запустить backup.sh вручную — дамп создан (84K custom format) (pass)
+  - Проверить в S3 — файл загружен, `--list` показывает 2 daily бэкапа (pass)
+  - Restore из бэкапа — данные восстановлены, 10 таблиц intact (pass)
+  - Retention policy — `BACKUP_DAILY_RETAIN=1`: kept 1, deleted 2 старых бэкапа (pass)
+  - Cron schedule: `0 3 * * *` в backup-cron файле (pass)
+  - `bash -n backup.sh` и `bash -n restore.sh` — syntax OK (pass)
+  - `docker-compose -f docker-compose.prod.yml config` — YAML valid (pass)

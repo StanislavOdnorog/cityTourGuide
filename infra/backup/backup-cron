@@ -1,0 +1,12 @@
+# City Stories Guide — Database backup schedule
+#
+# Daily backup at 3:00 UTC (backup.sh auto-tags Sunday as weekly)
+# Install: crontab infra/backup/backup-cron
+# Or append: crontab -l | cat - infra/backup/backup-cron | crontab -
+#
+# Logs go to /var/log/csg-backup.log
+#
+# Required: source the env file or set variables inline.
+# Adjust the paths below to match your deployment.
+
+0 3 * * * . /opt/csg/infra/.env && /opt/csg/infra/backup/backup.sh >> /var/log/csg-backup.log 2>&1
