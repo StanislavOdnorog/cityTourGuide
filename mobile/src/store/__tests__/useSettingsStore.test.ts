@@ -52,4 +52,17 @@ describe('useSettingsStore', () => {
     useSettingsStore.getState().setHasHydrated(true);
     expect(useSettingsStore.getState()._hasHydrated).toBe(true);
   });
+
+  it('generates a deviceId on creation', () => {
+    const state = useSettingsStore.getState();
+    expect(state.deviceId).toBeDefined();
+    expect(typeof state.deviceId).toBe('string');
+    expect(state.deviceId.length).toBeGreaterThan(0);
+  });
+
+  it('deviceId persists across state changes', () => {
+    const originalId = useSettingsStore.getState().deviceId;
+    useSettingsStore.getState().setLanguage('ru');
+    expect(useSettingsStore.getState().deviceId).toBe(originalId);
+  });
 });

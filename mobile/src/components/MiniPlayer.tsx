@@ -1,7 +1,8 @@
-import React from 'react';
-import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TrackPlayer, { useProgress, useIsPlaying } from 'react-native-track-player';
+import { ReportSheet } from '@/components/ReportSheet';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import { formatTime } from '@/utils/formatTime';
 
@@ -10,6 +11,7 @@ export function MiniPlayer() {
   const { playing } = useIsPlaying();
   const { position, duration } = useProgress(500);
   const insets = useSafeAreaInsets();
+  const [reportVisible, setReportVisible] = useState(false);
 
   if (!currentStory) return null;
 
@@ -21,19 +23,6 @@ export function MiniPlayer() {
     } else {
       await TrackPlayer.play();
     }
-  };
-
-  const handleReport = () => {
-    Alert.alert('Report Story', 'Report this story as incorrect or inappropriate?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Report',
-        style: 'destructive',
-        onPress: () => {
-          Alert.alert('Report Sent', 'Thank you for your feedback.');
-        },
-      },
-    ]);
   };
 
   return (
@@ -64,7 +53,7 @@ export function MiniPlayer() {
         </View>
 
         <Pressable
-          onPress={handleReport}
+          onPress={() => setReportVisible(true)}
           style={styles.reportButton}
           accessibilityRole="button"
           accessibilityLabel="Report story"
@@ -73,6 +62,12 @@ export function MiniPlayer() {
           <Text style={styles.reportIcon}>{'\u2691'}</Text>
         </Pressable>
       </View>
+
+      <ReportSheet
+        visible={reportVisible}
+        storyId={currentStory.story_id}
+        onClose={() => setReportVisible(false)}
+      />
     </View>
   );
 }

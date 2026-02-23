@@ -989,7 +989,7 @@
         "Шаг 4: PUT /api/v1/admin/reports/:id status=resolved — статус обновлён"
       ],
       "dependencies": ["TASK-038", "TASK-022"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-045",

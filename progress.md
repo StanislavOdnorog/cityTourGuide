@@ -1262,3 +1262,29 @@
   - `useCityScreen.test.ts`: 7 тестов — getMarkerColor: grey/blue/green логика, edge cases (pass)
   - Обновлены существующие тесты: usePlayerStore, useHomeScreen, WalkingPipeline (addListenedStory signature)
   - All 226 tests pass, 13 suites (pass)
+
+### TASK-044: Mobile + Backend: Report System — жалобы на истории
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - **Backend**: Зарегистрированы 3 маршрута в `cmd/api/main.go`:
+    - `POST /api/v1/reports` — публичный (создание репорта)
+    - `GET /api/v1/admin/reports` — admin (список с фильтрацией по статусу и пагинацией)
+    - `PUT /api/v1/admin/reports/:id` — admin (обновление статуса: reviewed/resolved/dismissed)
+  - Хэндлер (`report_handler.go`) и репозиторий (`report_repo.go`) уже были реализованы ранее — добавлена только привязка маршрутов
+  - **Mobile**: Создан `src/components/ReportSheet.tsx` — модальное окно (bottom-sheet стиль):
+    - 3 типа жалоб: Wrong Location, Wrong Fact, Inappropriate — выбор одним тапом
+    - Опциональный текстовый комментарий (max 500 символов)
+    - Submit кнопка с loading indicator
+    - Автоматическая привязка координат пользователя из `useWalkStore`
+  - Обновлён `MiniPlayer.tsx` — кнопка Report теперь открывает ReportSheet вместо Alert.alert
+  - Добавлен `deviceId` в `useSettingsStore` — UUID генерируется при первом запуске, персистится через AsyncStorage
+  - API функция `reportStory()` уже существовала в `src/api/endpoints.ts`
+  - Типы `ReportStoryRequest`, `ReportType` уже определены в `src/types/index.ts`
+  - Обновлён `src/components/index.ts` — экспорт ReportSheet
+- **Тесты**:
+  - `go build ./cmd/api` — компиляция успешна (pass)
+  - `make lint` — 0 ошибок линтинга (pass)
+  - `tsc --noEmit` — 0 ошибок типов (pass)
+  - `useSettingsStore.test.ts` — 8 тестов (6 existing + 2 new: deviceId generation, deviceId persistence) (pass)
+  - All 228 tests pass, 13 suites (pass)

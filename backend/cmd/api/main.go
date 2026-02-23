@@ -102,6 +102,7 @@ func run() error {
 	v1.GET("/stories", storyHandler.ListStories)
 	v1.GET("/stories/:id", storyHandler.GetStory)
 	v1.POST("/listenings", listeningHandler.TrackListening)
+	v1.POST("/reports", reportHandler.CreateReport)
 
 	// Auth routes with stricter rate limiting
 	auth := v1.Group("/auth")
@@ -123,6 +124,8 @@ func run() error {
 	admin.POST("/stories", storyHandler.CreateStory)
 	admin.PUT("/stories/:id", storyHandler.UpdateStory)
 	admin.DELETE("/stories/:id", storyHandler.DeleteStory)
+	admin.GET("/reports", reportHandler.ListReports)
+	admin.PUT("/reports/:id", reportHandler.UpdateReportStatus)
 	admin.GET("/pois/:id/reports", reportHandler.ListByPOI)
 	admin.POST("/pois/:id/inflate", inflationHandler.TriggerInflation)
 	admin.GET("/pois/:id/inflation-jobs", inflationHandler.ListByPOI)
