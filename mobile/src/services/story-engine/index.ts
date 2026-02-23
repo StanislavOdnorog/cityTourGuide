@@ -14,5 +14,6 @@ export {
   type StoryFetcher,
   type StoryPlayer,
   type ListeningTracker,
+  type CachePrefetcher,
   type StoryEngineConfig,
 } from './StoryEngine';

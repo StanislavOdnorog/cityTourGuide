@@ -944,7 +944,7 @@
         "Шаг 4: Очистить кэш — размер обнуляется"
       ],
       "dependencies": ["TASK-036"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-043",

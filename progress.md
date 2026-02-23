@@ -1328,3 +1328,35 @@
   - `npx tsc --noEmit` — 0 ошибок типов (pass)
   - `npm run lint` — 0 ошибок ESLint (pass)
   - `npm run build` — production билд создаётся без ошибок (pass)
+
+### TASK-042: Mobile: Smart Cache — предзагрузка ближайших историй
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Установлены зависимости: `expo-file-system` v19.0.21, `expo-sqlite`
+  - Создан `src/services/cache/StoryCacheManager.ts` — полный cache manager:
+    - SQLite (`expo-sqlite`) для метаданных кэша (story_id, poi_id, audio_url, local_path, file_size, timestamps)
+    - `expo-file-system` v19 API (File, Directory, Paths) для аудио файлов
+    - `getAudioPath()` — возвращает локальный путь, скачивает при необходимости
+    - `isCached()` — проверка наличия в кэше с валидацией файла
+    - `prefetchAhead()` — предзагрузка аудио в радиусе 500м ±45° от heading
+    - `evictIfNeeded()` — LRU-eviction при превышении лимита (100 MB default)
+    - `getStats()` — размер кэша, количество файлов, максимальный размер
+    - `clearAll()` — полная очистка кэша (файлы + БД)
+  - Создан `src/services/cache/index.ts` — barrel export
+  - Интеграция с `StoryEngine`:
+    - Добавлен `CachePrefetcher` интерфейс в StoryEngine
+    - Автоматический prefetch после каждого fetch nearby stories
+  - Интеграция с `WalkingPipeline`:
+    - Cache manager создаётся и инициализируется при start()
+    - PlayerAdapter использует cached audio path (fallback к remote URL)
+    - CachePrefetcher wired в StoryEngine
+    - Cache manager уничтожается при destroy()
+  - Создан `src/store/useCacheStore.ts` — Zustand store для cache stats в UI
+  - Создан `src/hooks/useCacheManager.ts` — React hook для Settings screen (refreshStats, clearCache)
+  - Обновлён `src/services/index.ts`, `src/hooks/index.ts` — экспорты
+  - 24 unit-теста для StoryCacheManager (init, getAudioPath, isCached, getStats, clearAll, evictIfNeeded, prefetchAhead, destroy)
+- **Тесты**:
+  - `npx tsc --noEmit` — 0 ошибок типов (pass)
+  - `npm run lint` — 0 ошибок ESLint (pass)
+  - `npx jest` — 247 тестов, 14 test suites, все пройдены (pass)

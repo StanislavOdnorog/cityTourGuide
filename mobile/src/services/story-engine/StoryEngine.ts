@@ -30,6 +30,15 @@ export interface ListeningTracker {
   getListenedStoryIds(): Set<number>;
 }
 
+export interface CachePrefetcher {
+  prefetchAhead(
+    candidates: NearbyStoryCandidate[],
+    lat: number,
+    lng: number,
+    heading: number,
+  ): void;
+}
+
 export interface StoryEngineConfig {
   radiusM: number;
   language: string;
@@ -48,6 +57,7 @@ export class StoryEngine {
   private readonly fetcher: StoryFetcher;
   private readonly player: StoryPlayer;
   private readonly tracker: ListeningTracker;
+  private readonly cachePrefetcher: CachePrefetcher | null;
   private config: StoryEngineConfig;
 
   private currentStory: ScoredCandidate | null = null;
@@ -58,10 +68,12 @@ export class StoryEngine {
     player: StoryPlayer,
     tracker: ListeningTracker,
     config?: Partial<StoryEngineConfig>,
+    cachePrefetcher?: CachePrefetcher,
   ) {
     this.fetcher = fetcher;
     this.player = player;
     this.tracker = tracker;
+    this.cachePrefetcher = cachePrefetcher ?? null;
     this.pacing = new PacingManager();
     this.config = {
       radiusM: config?.radiusM ?? DEFAULT_RADIUS_M,
@@ -117,6 +129,9 @@ export class StoryEngine {
       language: this.config.language,
       user_id: this.config.userId,
     });
+
+    // Trigger background pre-fetching for nearby stories ahead
+    this.cachePrefetcher?.prefetchAhead(candidates, location.lat, location.lng, location.heading);
 
     if (candidates.length === 0) return null;
 

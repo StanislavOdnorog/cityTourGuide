@@ -71,6 +71,53 @@ jest.mock('react-native-track-player', () => ({
   IOSCategory: { Playback: 'playback' },
 }));
 
+// Mock expo-file-system (used by StoryCacheManager)
+jest.mock('expo-file-system', () => ({
+  File: class MockFile {
+    uri: string;
+    constructor(...uris: unknown[]) {
+      this.uri = String(uris.join('/'));
+    }
+    get exists() {
+      return false;
+    }
+    get size() {
+      return 0;
+    }
+    delete() {}
+    static downloadFileAsync = jest.fn().mockResolvedValue({
+      uri: 'file:///cache/story.mp3',
+      exists: true,
+      size: 50000,
+    });
+  },
+  Directory: class MockDirectory {
+    uri: string;
+    constructor(...uris: unknown[]) {
+      this.uri = String(uris.join('/'));
+    }
+    get exists() {
+      return true;
+    }
+    create() {}
+    delete() {}
+  },
+  Paths: {
+    cache: { uri: 'file:///cache' },
+  },
+}));
+
+// Mock expo-sqlite (used by StoryCacheManager)
+jest.mock('expo-sqlite', () => ({
+  openDatabaseAsync: jest.fn().mockResolvedValue({
+    runAsync: jest.fn().mockResolvedValue({ changes: 0 }),
+    getFirstAsync: jest.fn().mockResolvedValue(null),
+    getAllAsync: jest.fn().mockResolvedValue([]),
+    execAsync: jest.fn().mockResolvedValue(undefined),
+    closeAsync: jest.fn().mockResolvedValue(undefined),
+  }),
+}));
+
 // Mock the API endpoints
 const mockFetchNearby = jest.fn();
 const mockTrackListening = jest.fn().mockResolvedValue(undefined);

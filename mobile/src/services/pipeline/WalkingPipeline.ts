@@ -1,12 +1,14 @@
 import { fetchNearbyStories } from '@/api/endpoints';
 import { trackListening as trackListeningApi } from '@/api/endpoints';
 import { AudioPlayer } from '@/services/audio';
+import { StoryCacheManager } from '@/services/cache';
 import { LocationTracker, type LocationUpdate as TrackerLocationUpdate } from '@/services/location';
 import {
   StoryEngine,
   type StoryFetcher,
   type StoryPlayer,
   type ListeningTracker,
+  type CachePrefetcher,
   type ScoredCandidate,
 } from '@/services/story-engine';
 import { usePlayerStore } from '@/store/usePlayerStore';
@@ -39,6 +41,7 @@ export class WalkingPipeline {
   private readonly locationTracker: LocationTracker;
   private readonly audioPlayer: AudioPlayer;
   private readonly storyEngine: StoryEngine;
+  private readonly cacheManager: StoryCacheManager;
   private config: WalkingPipelineConfig;
   private running = false;
 
@@ -47,14 +50,22 @@ export class WalkingPipeline {
     audioPlayer: AudioPlayer,
     fetcher: StoryFetcher,
     config?: Partial<WalkingPipelineConfig>,
+    cacheManager?: StoryCacheManager,
   ) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.locationTracker = locationTracker;
     this.audioPlayer = audioPlayer;
+    this.cacheManager = cacheManager ?? new StoryCacheManager();
+
+    const cache = this.cacheManager;
 
     const playerAdapter: StoryPlayer = {
       play: (candidate: ScoredCandidate) => {
-        void this.audioPlayer.play(candidate);
+        // Try to use cached audio path, fall back to remote URL
+        void cache.getAudioPath(candidate).then((localPath) => {
+          const cachedCandidate = localPath ? { ...candidate, audio_url: localPath } : candidate;
+          void this.audioPlayer.play(cachedCandidate);
+        });
         usePlayerStore.getState().setCurrentStory(candidate);
         usePlayerStore.getState().setIsPlaying(true);
       },
@@ -77,11 +88,23 @@ export class WalkingPipeline {
       getListenedStoryIds: () => usePlayerStore.getState().listenedStoryIds,
     };
 
-    this.storyEngine = new StoryEngine(fetcher, playerAdapter, trackerAdapter, {
-      radiusM: this.config.radiusM,
-      language: this.config.language,
-      userId: this.config.userId,
-    });
+    const cachePrefetcher: CachePrefetcher = {
+      prefetchAhead: (candidates, lat, lng, heading) => {
+        void cache.prefetchAhead(candidates, lat, lng, heading);
+      },
+    };
+
+    this.storyEngine = new StoryEngine(
+      fetcher,
+      playerAdapter,
+      trackerAdapter,
+      {
+        radiusM: this.config.radiusM,
+        language: this.config.language,
+        userId: this.config.userId,
+      },
+      cachePrefetcher,
+    );
   }
 
   isRunning(): boolean {
@@ -100,6 +123,10 @@ export class WalkingPipeline {
     return this.audioPlayer;
   }
 
+  getCacheManager(): StoryCacheManager {
+    return this.cacheManager;
+  }
+
   /**
    * Start the full pipeline: location tracking + story engine.
    * Requests location permissions if not granted.
@@ -108,6 +135,9 @@ export class WalkingPipeline {
     if (this.running) return;
 
     this.running = true;
+
+    await this.cacheManager.init();
+
     useWalkStore.getState().startWalking();
 
     this.audioPlayer.setOnComplete((completed) => {
@@ -175,6 +205,7 @@ export class WalkingPipeline {
   async destroy(): Promise<void> {
     await this.stop();
     await this.audioPlayer.destroy();
+    await this.cacheManager.destroy();
     usePlayerStore.getState().reset();
   }
 }
@@ -186,6 +217,7 @@ export function createWalkingPipeline(config?: Partial<WalkingPipelineConfig>): 
   const locationTracker = new LocationTracker();
   const audioPlayer = new AudioPlayer();
   const fetcher: StoryFetcher = { fetchNearbyStories };
+  const cacheManager = new StoryCacheManager();
 
-  return new WalkingPipeline(locationTracker, audioPlayer, fetcher, config);
+  return new WalkingPipeline(locationTracker, audioPlayer, fetcher, config, cacheManager);
 }
