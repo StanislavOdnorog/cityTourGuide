@@ -1419,3 +1419,46 @@
   - `go test ./...` — все тесты проходят (pass)
   - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
   - `tsc --noEmit` (admin) — 0 ошибок типов (pass)
+
+### TASK-045: Backend: Inflation Worker — AI-расширение контента для POI
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Реализован полный inflation worker в `internal/worker/inflation_worker.go`:
+    - Polling loop: проверяет `inflation_jobs` таблицу каждые 10 сек (настраиваемо)
+    - Batch processing: до 5 pending jobs за итерацию
+    - Для каждого job: проверка лимита сегментов (max 3), атомарное взятие (SetRunning с WHERE status='pending'), генерация через Claude API, озвучка через ElevenLabs, загрузка в S3, сохранение Story в БД
+    - Graceful shutdown через context cancellation
+  - Обновлён `cmd/worker/main.go` — полноценная точка входа:
+    - Загрузка config, DB pool, все repositories (inflation, story, poi)
+    - Инициализация platform clients (Claude, ElevenLabs, S3)
+    - Создание и запуск InflationWorker с graceful shutdown (SIGINT/SIGTERM)
+  - Добавлены методы в `internal/repository/inflation_repo.go`:
+    - `GetByID()` — получение job по ID
+    - `GetPendingJobs(limit)` — выборка pending jobs, ORDER BY created_at ASC
+    - `SetRunning(jobID)` — атомарный переход pending→running (WHERE status='pending')
+    - `SetCompleted(jobID)` — переход running→completed + increment segments_count
+    - `SetFailed(jobID, errMsg)` — переход в failed с записью error_log
+  - Worker использует interface-based dependencies для тестируемости:
+    - `InflationRepo`, `StoryRepo`, `POIRepo` — интерфейсы для repositories
+  - Job processing pipeline: check segments → claim → fetch POI → Claude story → ElevenLabs audio → S3 upload → DB story → complete
+  - Safety: max 3 segments per POI, atomic job claiming (prevents double processing)
+  - Исправлен pre-existing lint warning в `oauth/apple.go` (G101 false positive)
+  - Написано 10 unit-тестов:
+    - `clampInt16`: 7 subtests (zero, positive, negative, max/min boundaries, overflow)
+    - `NewInflationWorker_Defaults`: default poll interval 10s, batch 5
+    - `NewInflationWorker_CustomConfig`: custom poll interval and batch
+    - `PollAndProcess_NoPendingJobs`: no setRunning calls
+    - `ProcessJob_MaxSegmentsReached`: job fails when 3 segments exist
+    - `ProcessJob_AlreadyClaimed`: no failure if another worker claimed
+    - `ProcessJob_POINotFound`: job fails with descriptive error
+    - `Start_CanceledContext`: worker exits cleanly on context cancel
+    - `InterfaceCompatibility`: compile-time interface check
+    - `AudioKeyFormat`: S3 key format verification
+- **Тесты**:
+  - `go test -v ./internal/worker/...` — 10/10 тестов PASS (pass)
+  - `go test -race ./...` — все тесты проходят (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make build` — оба бинарника (api, worker) скомпилированы (pass)
+  - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
+  - `tsc --noEmit` (admin) — 0 ошибок типов (pass)

@@ -1013,7 +1013,7 @@
         "Шаг 5: 4-й запуск для того же POI — job отклоняется (max 3)"
       ],
       "dependencies": ["TASK-030"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-046",

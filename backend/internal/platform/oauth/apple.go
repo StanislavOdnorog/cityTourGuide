@@ -13,7 +13,7 @@ import (
 
 const (
 	appleJWKSURL  = "https://appleid.apple.com/auth/keys"
-	appleTokenURL = "https://appleid.apple.com/auth/token"
+	appleTokenURL = "https://appleid.apple.com/auth/token" //nolint:gosec // URL, not a credential
 	appleIssuer   = "https://appleid.apple.com"
 )
 
