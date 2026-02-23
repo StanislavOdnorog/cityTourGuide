@@ -918,3 +918,50 @@
   - `make build` — оба бинарника скомпилированы (pass)
   - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
   - `tsc -b` (admin) — 0 ошибок типов (pass)
+
+### TASK-026: Middleware: CORS, rate limiting, request logging, input validation
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создан `internal/middleware/cors.go` — CORS middleware с конфигурируемыми origins:
+    - AllowedOrigins из ENV `ALLOWED_ORIGINS` (comma-separated, default: http://localhost:5173)
+    - Нормализация trailing slash в Origin header
+    - Preflight OPTIONS → 204 No Content с Allow-Methods, Allow-Headers, Max-Age
+    - Credentials: true для JWT cookie support
+    - Blocked origins → 403 Forbidden
+  - Расширен `internal/middleware/ratelimit.go` — три rate limiter instance:
+    - 60 req/min для general API routes (v1 group)
+    - 10 req/min для AI-dependent endpoints (nearby-stories)
+    - 5 req/min для auth endpoints (existing)
+  - Создан `internal/middleware/logging.go` — structured JSON request logging:
+    - Поля: timestamp (RFC3339), level (info/warn/error), method, path, status_code, duration_ms, client_ip, user_id, user_agent
+    - Level: info (2xx/3xx), warn (4xx), error (5xx)
+    - user_id из gin.Context (если JWT аутентифицирован)
+    - Заменяет gin.Default() logger на gin.New() + RequestLogger()
+  - Создан `internal/middleware/validate.go` — GPS input validation middleware:
+    - Проверяет lat [-90, 90] и lng [-180, 180] query params если присутствуют
+    - 400 Bad Request с описанием ошибки до достижения БД
+    - Парсинг числовых значений с обработкой NaN
+  - Обновлён `internal/config/config.go`:
+    - Добавлен `AllowedOrigins []string` в ServerConfig
+    - `ALLOWED_ORIGINS` ENV с comma-separated значениями
+    - `parseOrigins()` helper
+  - Обновлён `cmd/api/main.go`:
+    - gin.New() вместо gin.Default() для контроля middleware
+    - Global: Recovery, RequestLogger, CORS, ValidateGPSParams
+    - API v1: apiRateLimiter (60/min)
+    - nearby-stories: nearbyRateLimiter (10/min)
+    - auth: authRateLimiter (5/min)
+    - admin: JWTAuth middleware
+- **Тесты**:
+  - 7 тестов CORS: allowed origin, blocked origin, no origin, preflight options, trailing slash, credentials, multiple origins — все PASS
+  - 5 тестов RequestLogger: contains fields (JSON), info level, warn level, error level, includes user_id — все PASS
+  - 10 тестов ValidateGPS: valid coords, boundary values (4 sub), lat too high/low, lng too high/low, lat/lng NaN, no GPS params, lat=999 reject — все PASS
+  - 6 тестов RateLimiter (existing): within limit, over limit, different IPs, window expiry, response body — все PASS (retained)
+  - `go test -race ./internal/middleware/...` — 37/37 тестов PASS (21 новых + 16 existing) (pass)
+  - `go test -race ./internal/handler/...` — 69/69 тестов PASS (pass)
+  - `go test -race ./internal/service/...` — 46/46 тестов PASS (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make build` — оба бинарника скомпилированы (pass)
+  - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
+  - `tsc -b` (admin) — 0 ошибок типов (pass)

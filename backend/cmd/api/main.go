@@ -66,11 +66,21 @@ func run() error {
 	storyHandler := handler.NewStoryHandler(storyRepo)
 	authHandler := handler.NewAuthHandler(authService)
 
-	// Rate limiter: 5 requests per minute for auth endpoints
-	authRateLimiter := middleware.NewRateLimiter(5, time.Minute)
+	// Rate limiters
+	authRateLimiter := middleware.NewRateLimiter(5, time.Minute)    // 5 req/min for auth
+	apiRateLimiter := middleware.NewRateLimiter(60, time.Minute)    // 60 req/min general
+	nearbyRateLimiter := middleware.NewRateLimiter(10, time.Minute) // 10 req/min for AI-dependent
 
 	gin.SetMode(cfg.Server.Mode)
-	r := gin.Default()
+	r := gin.New() // use gin.New() instead of gin.Default() to control middleware
+
+	// Global middleware
+	r.Use(gin.Recovery())
+	r.Use(middleware.RequestLogger())
+	r.Use(middleware.CORS(middleware.CORSConfig{
+		AllowedOrigins: cfg.Server.AllowedOrigins,
+	}))
+	r.Use(middleware.ValidateGPSParams())
 
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -78,7 +88,8 @@ func run() error {
 
 	// API v1 routes — public
 	v1 := r.Group("/api/v1")
-	v1.GET("/nearby-stories", nearbyHandler.GetNearbyStories)
+	v1.Use(apiRateLimiter.Middleware())
+	v1.GET("/nearby-stories", nearbyRateLimiter.Middleware(), nearbyHandler.GetNearbyStories)
 	v1.GET("/cities", cityHandler.ListCities)
 	v1.GET("/cities/:id", cityHandler.GetCity)
 	v1.GET("/pois", poiHandler.ListPOIs)
@@ -86,7 +97,7 @@ func run() error {
 	v1.GET("/stories", storyHandler.ListStories)
 	v1.GET("/stories/:id", storyHandler.GetStory)
 
-	// Auth routes with rate limiting
+	// Auth routes with stricter rate limiting
 	auth := v1.Group("/auth")
 	auth.Use(authRateLimiter.Middleware())
 	auth.POST("/register", authHandler.Register)

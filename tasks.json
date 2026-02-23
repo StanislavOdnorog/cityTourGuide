@@ -587,7 +587,7 @@
         "Шаг 4: lat=999 в запросе — 400 Bad Request (до обращения к БД)"
       ],
       "dependencies": ["TASK-002"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-027",

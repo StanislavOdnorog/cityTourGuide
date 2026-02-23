@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -22,8 +23,9 @@ type Config struct {
 
 // ServerConfig holds HTTP server settings.
 type ServerConfig struct {
-	Port string
-	Mode string // "debug", "release", "test"
+	Port           string
+	Mode           string // "debug", "release", "test"
+	AllowedOrigins []string
 }
 
 // DatabaseConfig holds database connection settings.
@@ -64,8 +66,9 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		Server: ServerConfig{
-			Port: getEnv("PORT", "8080"),
-			Mode: getEnv("GIN_MODE", "debug"),
+			Port:           getEnv("PORT", "8080"),
+			Mode:           getEnv("GIN_MODE", "debug"),
+			AllowedOrigins: parseOrigins(getEnv("ALLOWED_ORIGINS", "http://localhost:5173")),
 		},
 		Database: DatabaseConfig{
 			URL: os.Getenv("DATABASE_URL"),
@@ -143,6 +146,21 @@ func getDurationEnv(key string, defaultVal time.Duration) time.Duration {
 		return defaultVal
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+// parseOrigins splits a comma-separated list of origins into a slice.
+func parseOrigins(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	origins := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if o := strings.TrimSpace(p); o != "" {
+			origins = append(origins, o)
+		}
+	}
+	return origins
 }
 
 // maskKey returns a masked version of an API key for safe logging.
