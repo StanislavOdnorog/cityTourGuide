@@ -50,6 +50,8 @@ func run() error {
 	storyRepo := repository.NewStoryRepo(pool)
 	listeningRepo := repository.NewListeningRepo(pool)
 	userRepo := repository.NewUserRepo(pool)
+	reportRepo := repository.NewReportRepo(pool)
+	inflationRepo := repository.NewInflationRepo(pool)
 
 	// Initialize services
 	nearbyService := service.NewNearbyService(poiRepo, storyRepo, listeningRepo)
@@ -66,6 +68,8 @@ func run() error {
 	storyHandler := handler.NewStoryHandler(storyRepo)
 	authHandler := handler.NewAuthHandler(authService)
 	listeningHandler := handler.NewListeningHandler(listeningRepo)
+	reportHandler := handler.NewReportHandler(reportRepo)
+	inflationHandler := handler.NewInflationHandler(inflationRepo)
 
 	// Rate limiters
 	authRateLimiter := middleware.NewRateLimiter(5, time.Minute)    // 5 req/min for auth
@@ -119,6 +123,9 @@ func run() error {
 	admin.POST("/stories", storyHandler.CreateStory)
 	admin.PUT("/stories/:id", storyHandler.UpdateStory)
 	admin.DELETE("/stories/:id", storyHandler.DeleteStory)
+	admin.GET("/pois/:id/reports", reportHandler.ListByPOI)
+	admin.POST("/pois/:id/inflate", inflationHandler.TriggerInflation)
+	admin.GET("/pois/:id/inflation-jobs", inflationHandler.ListByPOI)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Server.Port,

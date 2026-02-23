@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
+import POIDetailPage from './pages/POIDetailPage';
 import POIMapPage from './pages/POIMapPage';
 import { useAuthStore } from './store/authStore';
 
@@ -70,6 +71,7 @@ function AppLayout() {
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/poi-map" element={<POIMapPage />} />
+            <Route path="/pois/:id" element={<POIDetailPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Content>

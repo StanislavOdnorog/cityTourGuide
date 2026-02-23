@@ -1090,3 +1090,42 @@
   - `npm run lint` — 0 ошибок ESLint (pass)
   - `npm run format:check` — все файлы отформатированы корректно (pass)
   - `npm run build` — production билд создаётся без ошибок (pass)
+
+### TASK-051: Admin Panel: POI Detail — истории, статус, аудио-превью
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - **Backend**: Созданы 2 новых репозитория и 2 новых handler'а:
+    - `internal/repository/report_repo.go` — ReportRepo с GetByPOIID (JOIN story ON poi_id)
+    - `internal/repository/inflation_repo.go` — InflationRepo с Create, GetByPOIID, CountActiveByPOIID
+    - `internal/handler/report_handler.go` — ReportHandler с ListByPOI (GET /admin/pois/:id/reports)
+    - `internal/handler/inflation_handler.go` — InflationHandler с TriggerInflation (POST /admin/pois/:id/inflate), ListByPOI (GET /admin/pois/:id/inflation-jobs)
+  - Новые admin endpoints в `cmd/api/main.go`:
+    - `GET /api/v1/admin/pois/:id/reports` — связанные репорты для POI
+    - `POST /api/v1/admin/pois/:id/inflate` — триггер inflation job (с проверкой max 3)
+    - `GET /api/v1/admin/pois/:id/inflation-jobs` — список inflation jobs
+  - **Frontend**: Создана страница POI Detail:
+    - `src/pages/POIDetailPage.tsx` — полная детальная страница POI с:
+      - Информация о POI (name, name_ru, type, coordinates, interest score, address, city_id, status, created_at)
+      - Enable/Disable переключатель для POI (Switch компонент)
+      - Таблица историй с: ID, language, layer_type, текст (expandable), аудио-превью (inline play/pause), duration, confidence, status, is_inflation flag, enable/disable switch
+      - AudioPreview компонент — HTML5 audio с play/pause toggle
+      - Таблица репортов с: ID, story_id, type, comment, status, date; Badge с количеством new репортов
+      - Таблица inflation jobs с: ID, status, trigger_type, segments count, created_at, error_log
+      - Кнопка Trigger Inflation (POST /admin/pois/:id/inflate) с проверкой max 3
+      - Tabs для переключения между Stories, Reports, Inflation Jobs
+      - Back navigation button
+    - `src/hooks/usePOIDetail.ts` — TanStack Query hook с:
+      - Загрузка POI, stories (EN + RU), reports, inflation jobs
+      - useMutation для: updatePOI, toggleStoryStatus, triggerInflation
+      - Автоматическая инвалидация кэша после мутаций
+    - `src/types/index.ts` — добавлены типы InflationJob, InflationJobStatus, InflationTriggerType
+    - `src/hooks/index.ts` — экспорт usePOIDetail
+    - `src/App.tsx` — маршрут `/pois/:id` → POIDetailPage
+    - `src/pages/POIMapPage.tsx` — кнопка "View Details" в POI popup (Link на /pois/:id)
+- **Тесты**:
+  - `cd backend && go build ./cmd/api/` — компиляция успешна (pass)
+  - `cd backend && make lint` — 0 ошибок линтинга (pass)
+  - `cd admin && npx tsc --noEmit` — 0 ошибок типов (pass)
+  - `cd admin && npm run lint` — 0 ошибок ESLint (pass)
+  - `cd admin && npm run build` — production билд создаётся без ошибок (pass)

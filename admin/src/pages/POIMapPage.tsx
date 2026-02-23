@@ -1,4 +1,4 @@
-import { Card, Col, Descriptions, Row, Select, Spin, Tag, Typography } from 'antd';
+import { Button, Card, Col, Descriptions, Row, Select, Spin, Tag, Typography } from 'antd';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -7,6 +7,7 @@ import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 import { useMemo, useState } from 'react';
 import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
+import { Link } from 'react-router-dom';
 import { useCities, usePOIs } from '../hooks';
 import type { POI, POIStatus, POIType } from '../types';
 
@@ -75,21 +76,30 @@ const poiStatusOptions = [
 
 function POIPopup({ poi }: { poi: POI }) {
   return (
-    <Descriptions column={1} size="small" style={{ width: 260 }}>
-      <Descriptions.Item label="Name">{poi.name}</Descriptions.Item>
-      {poi.name_ru && <Descriptions.Item label="Name (RU)">{poi.name_ru}</Descriptions.Item>}
-      <Descriptions.Item label="Type">
-        <Tag color={POI_TYPE_COLORS[poi.type]}>{poi.type}</Tag>
-      </Descriptions.Item>
-      <Descriptions.Item label="Status">
-        <Tag color={STATUS_COLORS[poi.status]}>{poi.status}</Tag>
-      </Descriptions.Item>
-      <Descriptions.Item label="Interest Score">{poi.interest_score}</Descriptions.Item>
-      {poi.address && <Descriptions.Item label="Address">{poi.address}</Descriptions.Item>}
-      <Descriptions.Item label="Coordinates">
-        {poi.lat.toFixed(5)}, {poi.lng.toFixed(5)}
-      </Descriptions.Item>
-    </Descriptions>
+    <div style={{ width: 260 }}>
+      <Descriptions column={1} size="small">
+        <Descriptions.Item label="Name">{poi.name}</Descriptions.Item>
+        {poi.name_ru && <Descriptions.Item label="Name (RU)">{poi.name_ru}</Descriptions.Item>}
+        <Descriptions.Item label="Type">
+          <Tag color={POI_TYPE_COLORS[poi.type]}>{poi.type}</Tag>
+        </Descriptions.Item>
+        <Descriptions.Item label="Status">
+          <Tag color={STATUS_COLORS[poi.status]}>{poi.status}</Tag>
+        </Descriptions.Item>
+        <Descriptions.Item label="Interest Score">{poi.interest_score}</Descriptions.Item>
+        {poi.address && <Descriptions.Item label="Address">{poi.address}</Descriptions.Item>}
+        <Descriptions.Item label="Coordinates">
+          {poi.lat.toFixed(5)}, {poi.lng.toFixed(5)}
+        </Descriptions.Item>
+      </Descriptions>
+      <div style={{ marginTop: 8, textAlign: 'right' }}>
+        <Link to={`/pois/${poi.id}`}>
+          <Button type="primary" size="small">
+            View Details
+          </Button>
+        </Link>
+      </div>
+    </div>
   );
 }
 

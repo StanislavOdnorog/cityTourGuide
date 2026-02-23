@@ -125,3 +125,20 @@ export interface Report {
   resolved_at: string | null;
   created_at: string;
 }
+
+// InflationJob
+export type InflationJobStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type InflationTriggerType = 'user_proximity' | 'admin_manual';
+
+export interface InflationJob {
+  id: number;
+  poi_id: number;
+  status: InflationJobStatus;
+  trigger_type: InflationTriggerType;
+  segments_count: number;
+  max_segments: number;
+  started_at: string | null;
+  completed_at: string | null;
+  error_log: string | null;
+  created_at: string;
+}

@@ -1147,7 +1147,7 @@
         "Шаг 4: Trigger inflation → inflation_job создан со status=pending"
       ],
       "dependencies": ["TASK-050"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-052",
