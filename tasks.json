@@ -191,7 +191,7 @@
         "Шаг 4: npm run build — билд проходит"
       ],
       "dependencies": ["TASK-007"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-009",

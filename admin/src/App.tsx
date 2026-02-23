@@ -1,7 +1,7 @@
-import { ConfigProvider, App as AntApp, Layout, Menu, theme } from 'antd';
 import { DashboardOutlined } from '@ant-design/icons';
-import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ConfigProvider, App as AntApp, Layout, Menu, theme } from 'antd';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import DashboardPage from './pages/DashboardPage';
 import NotFoundPage from './pages/NotFoundPage';
 
@@ -16,9 +16,7 @@ const queryClient = new QueryClient({
   },
 });
 
-const menuItems = [
-  { key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
-];
+const menuItems = [{ key: '/', icon: <DashboardOutlined />, label: 'Dashboard' }];
 
 function AppLayout() {
   const navigate = useNavigate();
@@ -27,7 +25,9 @@ function AppLayout() {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sider breakpoint="lg" collapsedWidth={80}>
-        <div style={{ height: 32, margin: 16, color: '#fff', fontWeight: 700, textAlign: 'center' }}>
+        <div
+          style={{ height: 32, margin: 16, color: '#fff', fontWeight: 700, textAlign: 'center' }}
+        >
           CSG Admin
         </div>
         <Menu

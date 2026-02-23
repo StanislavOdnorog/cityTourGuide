@@ -809,3 +809,26 @@
   - `make lint` — 0 ошибок (pass)
   - `make build` — оба бинарника скомпилированы (pass)
   - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
+
+### TASK-008: Настройка ESLint + Prettier для Admin Panel
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Установлены `prettier` v3.8.1, `eslint-config-prettier` v10.1.8, `eslint-plugin-import` v2.32.0, `eslint-import-resolver-typescript` v4.4.4, `lint-staged` v16.2.7, `husky` v9.1.7
+  - `.prettierrc.json` создан: semi, singleQuote, trailingComma all, printWidth 100, tabWidth 2, endOfLine lf
+  - `.prettierignore` создан: dist, node_modules
+  - `eslint.config.js` обновлён: добавлен `eslint-plugin-import` с правилом `import/order` (groups: builtin → external → internal → parent → sibling → index, alphabetize asc), `@typescript-eslint/no-explicit-any: error`, `eslint-config-prettier` для отключения конфликтующих правил
+  - `import/resolver` настроен с `typescript: true` и `node: true`
+  - Добавлены npm scripts: `lint:fix`, `format`, `format:check`
+  - `prepare` script: `cd .. && husky admin/.husky` — инициализирует husky из поддиректории монорепо
+  - `lint-staged` настроен в package.json: TS/TSX файлы → eslint --fix + prettier --write, JSON/CSS → prettier --write
+  - Husky pre-commit hook: `cd admin && npx lint-staged`
+  - Все существующие файлы отформатированы Prettier
+  - Import order исправлен во всех файлах (App.tsx, vite.config.ts)
+- **Тесты**:
+  - `npm run lint` — 0 ошибок (pass)
+  - Нарушение import order → `npm run lint` — ошибка `import should occur before` (pass)
+  - `@typescript-eslint/no-explicit-any` — ловит `any` типы (pass)
+  - `npm run format:check` — все файлы корректно отформатированы (pass)
+  - `npm run build` — production билд создаётся без ошибок (pass)
+  - `npm run typecheck` — 0 ошибок типов (pass)
