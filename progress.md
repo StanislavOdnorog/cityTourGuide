@@ -1017,3 +1017,30 @@
   - Test job uses postgis/postgis:16-3.4 service container with healthcheck (pass)
   - Build job compiles both api and worker binaries (pass)
   - All acceptance criteria verified through code review (pass)
+
+### TASK-010: CI/CD: GitHub Actions для мобильного приложения и админ-панели
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создан `.github/workflows/mobile.yml` — 4 jobs: lint, typecheck, format, test
+  - Создан `.github/workflows/admin.yml` — 4 jobs: lint, typecheck, format, build
+  - Оба workflow триггерятся на push/PR в main для соответствующих директорий (mobile/**, admin/**)
+  - Node.js версия зафиксирована: 22
+  - `npm ci` для установки зависимостей (использует package-lock.json)
+  - `defaults.run.working-directory` настроен для каждого workflow
+  - `actions/setup-node@v4` с кэшированием npm через `cache-dependency-path`
+  - Mobile jobs: `npm run lint`, `npm run typecheck`, `npm run format:check`, `npm test`
+  - Admin jobs: `npm run lint`, `npm run typecheck`, `npm run format:check`, `npm run build`
+- **Тесты**:
+  - YAML syntax valid (python3 yaml.safe_load) (pass)
+  - mobile.yml triggers on mobile/** changes (push + PR to main) (pass)
+  - admin.yml triggers on admin/** changes (push + PR to main) (pass)
+  - Node.js version = 22 in all jobs (pass)
+  - Mobile: `npm run lint` — 0 ошибок (pass)
+  - Mobile: `npm run typecheck` — 0 ошибок типов (pass)
+  - Mobile: `npm run format:check` — все файлы корректно отформатированы (pass)
+  - Mobile: `npm test` — 9 suites, 194 tests passed (pass)
+  - Admin: `npm run lint` — 0 ошибок (pass)
+  - Admin: `npm run typecheck` — 0 ошибок типов (pass)
+  - Admin: `npm run format:check` — все файлы корректно отформатированы (pass)
+  - Admin: `npm run build` — production билд создаётся без ошибок (pass)
