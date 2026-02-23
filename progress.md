@@ -1650,3 +1650,27 @@
   - Cron schedule: `0 3 * * *` в backup-cron файле (pass)
   - `bash -n backup.sh` и `bash -n restore.sh` — syntax OK (pass)
   - `docker-compose -f docker-compose.prod.yml config` — YAML valid (pass)
+
+### TASK-031: Массовая генерация: первые 50+ историй для Тбилиси
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Расширен seed-скрипт (`backend/scripts/seed/`) с 10 до 55 POI для Тбилиси
+  - Создан новый файл `tbilisi_pois.go` с 55 реальными достопримечательностями Тбилиси
+  - Каждый POI имеет минимум 1 историю на EN и 1 на RU (итого 110 историй)
+  - Истории написаны по шаблону: anchor, hook, facts, meaning (50-200 слов)
+  - Покрыты все layer_types: atmosphere, human_story, hidden_detail, time_shift, general
+  - POI включают: крепости, церкви, мосты, парки, улицы, музеи, площади, районы, памятники
+  - Координаты точные для каждого реального объекта
+  - Тбилиси как город создаётся seed-скриптом (center: 41.7151, 44.8271, radius: 10km)
+  - Generate_stories pipeline (TASK-030) компилируется и готов для дополнительной генерации через API
+  - Скрипт `make seed` заполняет БД всеми 55 POI и 110 историями
+- **Проблемы**:
+  - Линтер flagged British spellings (Theatre → Theater, archaeological → archeological) — исправлено
+- **Тесты**:
+  - `go build ./scripts/seed/...` — компиляция успешна (pass)
+  - `go build ./scripts/generate_stories/...` — компиляция успешна (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make test` — все тесты проходят (pass)
+  - 55 POI с EN+RU историями = 110 stories total ≥ 100 required (pass)
+  - Ручная проверка текстов: нет галлюцинаций, корректный тон рассказчика, длина адекватна (pass)

@@ -699,7 +699,7 @@
         "Шаг 4: Прочитать 10 случайных текстов — нет галлюцинаций"
       ],
       "dependencies": ["TASK-027", "TASK-030"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-032",
