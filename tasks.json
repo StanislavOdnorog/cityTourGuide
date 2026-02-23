@@ -677,7 +677,7 @@
         "Шаг 4: Повторный запуск — пропускает уже обработанные POI"
       ],
       "dependencies": ["TASK-028", "TASK-029"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-031",

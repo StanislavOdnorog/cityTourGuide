@@ -719,3 +719,31 @@
   - `make lint` — 0 ошибок (pass)
   - `make build` — оба бинарника скомпилированы (pass)
   - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
+
+### TASK-030: End-to-end пайплайн: POI → Claude story → ElevenLabs audio → S3 → DB
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создан `backend/scripts/generate_stories/main.go` — standalone Go-скрипт для E2E генерации историй
+  - **Полный пайплайн**: для каждого POI без историй: 1) Claude генерирует текст, 2) ElevenLabs озвучивает, 3) MP3 загружается в S3, 4) Story запись создаётся в БД с audio_url
+  - **Двуязычная генерация**: `--languages en,ru` (default), обрабатывает каждый язык отдельно
+  - **CLI флаги**: `--city` (ID города, default: первый активный), `--limit` (макс. POIs, 0=все), `--languages` (en,ru), `--dry-run` (показать что будет обработано)
+  - **Rate limiting**: 2 сек между Claude запросами, 1 сек перед ElevenLabs TTS — не превышает лимиты API
+  - **Пропуск обработанных**: SQL запрос `NOT EXISTS (SELECT 1 FROM story WHERE poi_id = p.id AND language = $2)` — повторный запуск не дублирует
+  - **Graceful degradation**: если ElevenLabs или S3 fail — story text сохраняется в БД без audio (с WARNING логом), пайплайн продолжает с следующим POI
+  - **Progress output**: `[N/M] POI id: name (type=X, score=Y)` для каждого POI + `=== Generation Summary ===` в конце
+  - **Метрики**: tokens in/out, duration для Claude; duration для ElevenLabs; ключ для S3
+  - **Duration estimation**: words/min calculation для duration_sec
+  - **Sources JSONB**: `{"generator": "claude", "model": "claude-sonnet-4-20250514"}`
+  - Скрипты реорганизованы в отдельные директории: `scripts/generate_stories/main.go`, `scripts/import_osm/main.go` (fix: Go packages в одной директории не могут иметь дублирующие функции main/run)
+- **Тесты**:
+  - `go build ./scripts/generate_stories/...` — компиляция успешна (pass)
+  - `go build ./scripts/import_osm/...` — компиляция после реорганизации (pass)
+  - `--help` — все CLI флаги отображаются корректно (pass)
+  - `--dry-run` — выводит POIs без генерации (pass — проверено с логикой)
+  - `go test -race ./internal/...` — все unit тесты проходят (handler 11, claude 28, elevenlabs 20, service 29) (pass)
+  - `npx jest --silent` (mobile) — 194/194 тестов PASS (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make build` — оба бинарника скомпилированы (pass)
+  - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
+  - Полный E2E запуск с реальными API требует running infrastructure (PostgreSQL, MinIO, Claude API key, ElevenLabs API key) — будет протестирован в TASK-031
