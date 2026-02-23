@@ -1360,3 +1360,29 @@
   - `npx tsc --noEmit` — 0 ошибок типов (pass)
   - `npm run lint` — 0 ошибок ESLint (pass)
   - `npx jest` — 247 тестов, 14 test suites, все пройдены (pass)
+
+### TASK-043: Mobile: Download City — офлайн-пакет всех историй города
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - **Backend**:
+    - Добавлен `DownloadManifestItem` struct в `internal/domain/story.go`
+    - Добавлен `GetDownloadManifest()` метод в `internal/repository/story_repo.go` — JOIN story + poi, фильтр по city_id, language, status=active, audio_url IS NOT NULL
+    - Добавлен `DownloadManifestRepository` интерфейс и `GetDownloadManifest()` handler в `internal/handler/city_handler.go`
+    - Зарегистрирован `GET /api/v1/cities/:id/download-manifest` route в `cmd/api/main.go`
+    - Response: `{data: [{story_id, poi_id, poi_name, audio_url, duration_sec, file_size_bytes}], total_size_bytes, total_stories, city_name}`
+    - 4 новых unit-теста: success, city not found, empty manifest, default language
+  - **Mobile**:
+    - Добавлены типы `DownloadManifestItem`, `CityDownloadManifest` в `src/types/index.ts`
+    - Добавлена `fetchCityDownloadManifest()` в `src/api/endpoints.ts`
+    - Создан `src/store/useDownloadStore.ts` — Zustand store для download state (status, progress, error, downloadedCityIds)
+    - Создан `src/hooks/useDownloadCity.ts` — hook для скачивания: fetch manifest → sequential downloads через StoryCacheManager → progress tracking → cancellation
+    - Создан `src/components/DownloadCitySheet.tsx` — bottom sheet modal: показывает размер до скачивания, прогресс-бар во время, статус Downloaded/Error
+    - Обновлён `app/(main)/city.tsx` — кнопка "Download for Offline" подключена к DownloadCitySheet; кнопка меняется на "Downloaded" после завершения
+    - 7 новых unit-тестов для useDownloadStore
+- **Тесты**:
+  - `npx tsc --noEmit` — 0 ошибок типов (pass)
+  - `npm run lint` — 0 ошибок ESLint (pass)
+  - `npx jest` — 254 теста, 15 test suites, все пройдены (pass)
+  - `go test ./...` — все Go тесты пройдены (pass)
+  - `make lint` — 0 ошибок Go lint (pass)

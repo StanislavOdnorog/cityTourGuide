@@ -26,6 +26,16 @@ const (
 	StoryStatusPendingReview StoryStatus = "pending_review"
 )
 
+// DownloadManifestItem represents a single story entry in the city download manifest.
+type DownloadManifestItem struct {
+	StoryID       int     `json:"story_id"`
+	POIID         int     `json:"poi_id"`
+	POIName       string  `json:"poi_name"`
+	AudioURL      *string `json:"audio_url"`
+	DurationSec   *int16  `json:"duration_sec"`
+	FileSizeBytes int64   `json:"file_size_bytes"`
+}
+
 // Story represents an audio story linked to a POI.
 type Story struct {
 	ID          int             `json:"id"`

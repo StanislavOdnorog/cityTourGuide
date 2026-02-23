@@ -169,6 +169,22 @@ export interface CityPOIsResponse {
   total_stories: number;
 }
 
+export interface DownloadManifestItem {
+  story_id: number;
+  poi_id: number;
+  poi_name: string;
+  audio_url: string | null;
+  duration_sec: number | null;
+  file_size_bytes: number;
+}
+
+export interface CityDownloadManifest {
+  data: DownloadManifestItem[];
+  total_size_bytes: number;
+  total_stories: number;
+  city_name: string;
+}
+
 export interface ApiError {
   error: string;
 }

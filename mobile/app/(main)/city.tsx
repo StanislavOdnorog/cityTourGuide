@@ -1,9 +1,12 @@
 import { useLocalSearchParams, router } from 'expo-router';
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import MapView, { Marker, Callout, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DownloadCitySheet } from '@/components/DownloadCitySheet';
 import { useCityScreen, type CityMarker } from '@/hooks/useCityScreen';
+import { useDownloadCity } from '@/hooks/useDownloadCity';
+import { useCityStore } from '@/store/useCityStore';
 
 const MARKER_COLORS: Record<string, string> = {
   green: '#4ADE80',
@@ -38,6 +41,7 @@ export default function CityScreen() {
   const cityId = Number(params.cityId) || 1;
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
+  const [downloadSheetVisible, setDownloadSheetVisible] = useState(false);
 
   const {
     cityName,
@@ -51,6 +55,18 @@ export default function CityScreen() {
     refresh,
   } = useCityScreen(cityId);
 
+  const selectedCity = useCityStore((s) => s.selectedCity);
+  const downloadSizeMB = selectedCity?.download_size_mb ?? 0;
+
+  const {
+    status: downloadStatus,
+    progress: downloadProgress,
+    error: downloadError,
+    isDownloaded,
+    startDownload,
+    cancelDownload,
+  } = useDownloadCity(cityId);
+
   const initialRegion: Region = {
     latitude: centerLat || 41.7151,
     longitude: centerLng || 44.8271,
@@ -61,6 +77,26 @@ export default function CityScreen() {
   const handleBack = useCallback(() => {
     router.back();
   }, []);
+
+  const handleDownloadPress = useCallback(() => {
+    if (isDownloaded) return;
+    setDownloadSheetVisible(true);
+  }, [isDownloaded]);
+
+  const handleDownloadStart = useCallback(() => {
+    void startDownload();
+  }, [startDownload]);
+
+  const handleDownloadCancel = useCallback(() => {
+    cancelDownload();
+    setDownloadSheetVisible(false);
+  }, [cancelDownload]);
+
+  const handleDownloadSheetClose = useCallback(() => {
+    if (downloadStatus !== 'downloading') {
+      setDownloadSheetVisible(false);
+    }
+  }, [downloadStatus]);
 
   if (isLoading && markers.length === 0) {
     return (
@@ -124,15 +160,19 @@ export default function CityScreen() {
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <Pressable
+          onPress={handleDownloadPress}
           style={({ pressed }) => [
             styles.actionButton,
-            styles.downloadButton,
-            pressed && styles.buttonPressed,
+            isDownloaded ? styles.downloadedButton : styles.downloadButton,
+            pressed && !isDownloaded && styles.buttonPressed,
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Download for Offline"
+          accessibilityLabel={isDownloaded ? 'Downloaded' : 'Download for Offline'}
+          disabled={isDownloaded}
         >
-          <Text style={styles.actionButtonText}>Download for Offline</Text>
+          <Text style={[styles.actionButtonText, isDownloaded && styles.downloadedButtonText]}>
+            {isDownloaded ? 'Downloaded' : 'Download for Offline'}
+          </Text>
         </Pressable>
 
         <Pressable
@@ -147,6 +187,21 @@ export default function CityScreen() {
           <Text style={styles.buyButtonText}>Buy City</Text>
         </Pressable>
       </View>
+
+      <DownloadCitySheet
+        visible={downloadSheetVisible}
+        cityName={cityName ?? 'City'}
+        status={downloadStatus}
+        totalSizeMB={downloadSizeMB}
+        totalStories={totalStories}
+        completedFiles={downloadProgress.completedFiles}
+        totalFiles={downloadProgress.totalFiles}
+        completedMB={downloadProgress.completedBytes / (1024 * 1024)}
+        onStart={handleDownloadStart}
+        onCancel={handleDownloadCancel}
+        onClose={handleDownloadSheetClose}
+        error={downloadError}
+      />
     </View>
   );
 }
@@ -226,6 +281,12 @@ const styles = StyleSheet.create({
   },
   downloadButton: {
     backgroundColor: '#4ADE80',
+  },
+  downloadedButton: {
+    backgroundColor: '#2A2A2A',
+  },
+  downloadedButtonText: {
+    color: '#4ADE80',
   },
   buyButton: {
     backgroundColor: 'transparent',

@@ -21,14 +21,20 @@ type CityRepository interface {
 	Delete(ctx context.Context, id int) error
 }
 
+// DownloadManifestRepository defines the interface for fetching download manifest data.
+type DownloadManifestRepository interface {
+	GetDownloadManifest(ctx context.Context, cityID int, language string) ([]domain.DownloadManifestItem, error)
+}
+
 // CityHandler handles CRUD operations for cities.
 type CityHandler struct {
-	repo CityRepository
+	repo         CityRepository
+	manifestRepo DownloadManifestRepository
 }
 
 // NewCityHandler creates a new CityHandler.
-func NewCityHandler(repo CityRepository) *CityHandler {
-	return &CityHandler{repo: repo}
+func NewCityHandler(repo CityRepository, manifestRepo DownloadManifestRepository) *CityHandler {
+	return &CityHandler{repo: repo, manifestRepo: manifestRepo}
 }
 
 // createCityRequest represents the request body for creating a city.
@@ -203,6 +209,49 @@ func (h *CityHandler) DeleteCity(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "city deleted"})
+}
+
+// GetDownloadManifest handles GET /api/v1/cities/:id/download-manifest.
+func (h *CityHandler) GetDownloadManifest(c *gin.Context) {
+	id, ok := parseIDParam(c)
+	if !ok {
+		return
+	}
+
+	// Verify city exists
+	city, err := h.repo.GetByID(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "city not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch city"})
+		return
+	}
+
+	language := c.DefaultQuery("language", "en")
+
+	items, err := h.manifestRepo.GetDownloadManifest(c.Request.Context(), id, language)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch download manifest"})
+		return
+	}
+
+	if items == nil {
+		items = []domain.DownloadManifestItem{}
+	}
+
+	var totalSizeBytes int64
+	for i := range items {
+		totalSizeBytes += items[i].FileSizeBytes
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":             items,
+		"total_size_bytes": totalSizeBytes,
+		"total_stories":    len(items),
+		"city_name":        city.Name,
+	})
 }
 
 // parseIDParam extracts and validates the :id URL parameter.

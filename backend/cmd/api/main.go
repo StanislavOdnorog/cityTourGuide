@@ -63,7 +63,7 @@ func run() error {
 
 	// Initialize handlers
 	nearbyHandler := handler.NewNearbyHandler(nearbyService)
-	cityHandler := handler.NewCityHandler(cityRepo)
+	cityHandler := handler.NewCityHandler(cityRepo, storyRepo)
 	poiHandler := handler.NewPOIHandler(poiRepo)
 	storyHandler := handler.NewStoryHandler(storyRepo)
 	authHandler := handler.NewAuthHandler(authService)
@@ -97,6 +97,7 @@ func run() error {
 	v1.GET("/nearby-stories", nearbyRateLimiter.Middleware(), nearbyHandler.GetNearbyStories)
 	v1.GET("/cities", cityHandler.ListCities)
 	v1.GET("/cities/:id", cityHandler.GetCity)
+	v1.GET("/cities/:id/download-manifest", cityHandler.GetDownloadManifest)
 	v1.GET("/pois", poiHandler.ListPOIs)
 	v1.GET("/pois/:id", poiHandler.GetPOI)
 	v1.GET("/stories", storyHandler.ListStories)

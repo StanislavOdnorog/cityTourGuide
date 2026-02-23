@@ -174,6 +174,39 @@ func (r *StoryRepo) Delete(ctx context.Context, id int) error {
 	return nil
 }
 
+// GetDownloadManifest returns stories for a city with POI name, for building download manifests.
+func (r *StoryRepo) GetDownloadManifest(ctx context.Context, cityID int, language string) ([]domain.DownloadManifestItem, error) {
+	query := `
+		SELECT s.id, s.poi_id, p.name, s.audio_url, s.duration_sec
+		FROM story s
+		INNER JOIN poi p ON s.poi_id = p.id
+		WHERE p.city_id = $1 AND s.language = $2 AND s.status = 'active' AND s.audio_url IS NOT NULL
+		ORDER BY p.interest_score DESC, s.order_index`
+
+	rows, err := r.pool.Query(ctx, query, cityID, language)
+	if err != nil {
+		return nil, fmt.Errorf("story_repo: get download manifest: %w", err)
+	}
+	defer rows.Close()
+
+	var items []domain.DownloadManifestItem
+	for rows.Next() {
+		var item domain.DownloadManifestItem
+		if err := rows.Scan(
+			&item.StoryID, &item.POIID, &item.POIName, &item.AudioURL, &item.DurationSec,
+		); err != nil {
+			return nil, fmt.Errorf("story_repo: get download manifest scan: %w", err)
+		}
+		items = append(items, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("story_repo: get download manifest rows: %w", err)
+	}
+
+	return items, nil
+}
+
 // CountByPOI returns the number of stories for a given POI.
 func (r *StoryRepo) CountByPOI(ctx context.Context, poiID int) (int, error) {
 	query := `SELECT COUNT(*) FROM story WHERE poi_id = $1`

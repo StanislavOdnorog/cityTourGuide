@@ -6,6 +6,7 @@ import type {
   City,
   CityPOI,
   CityPOIsResponse,
+  CityDownloadManifest,
 } from '@/types';
 import apiClient from './client';
 
@@ -44,6 +45,17 @@ export async function fetchCities(): Promise<City[]> {
 export async function fetchCityById(id: number): Promise<City> {
   const response = await apiClient.get<{ data: City }>(`/api/v1/cities/${id}`);
   return response.data.data;
+}
+
+export async function fetchCityDownloadManifest(
+  cityId: number,
+  language?: string,
+): Promise<CityDownloadManifest> {
+  const response = await apiClient.get<CityDownloadManifest>(
+    `/api/v1/cities/${cityId}/download-manifest`,
+    { params: { language } },
+  );
+  return response.data;
 }
 
 export async function fetchCityPOIs(

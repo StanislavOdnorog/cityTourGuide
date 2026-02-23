@@ -15,6 +15,19 @@ import (
 	"github.com/saas/city-stories-guide/backend/internal/repository"
 )
 
+// mockManifestRepo implements DownloadManifestRepository for testing.
+type mockManifestRepo struct {
+	items []domain.DownloadManifestItem
+	err   error
+}
+
+func (m *mockManifestRepo) GetDownloadManifest(_ context.Context, _ int, _ string) ([]domain.DownloadManifestItem, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.items, nil
+}
+
 // mockCityRepo implements CityRepository for testing.
 type mockCityRepo struct {
 	cities    []domain.City
@@ -68,6 +81,7 @@ func setupCityRouter(h *CityHandler) *gin.Engine {
 	r := gin.New()
 	r.GET("/api/v1/cities", h.ListCities)
 	r.GET("/api/v1/cities/:id", h.GetCity)
+	r.GET("/api/v1/cities/:id/download-manifest", h.GetDownloadManifest)
 	r.POST("/api/v1/admin/cities", h.CreateCity)
 	r.PUT("/api/v1/admin/cities/:id", h.UpdateCity)
 	r.DELETE("/api/v1/admin/cities/:id", h.DeleteCity)
@@ -82,7 +96,7 @@ func TestListCities_Success(t *testing.T) {
 			{ID: 2, Name: "Batumi", Country: "GE", CenterLat: 41.6, CenterLng: 41.6, RadiusKm: 10, IsActive: true},
 		},
 	}
-	h := NewCityHandler(mock)
+	h := NewCityHandler(mock, &mockManifestRepo{})
 	r := setupCityRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/cities", nil)
@@ -120,7 +134,7 @@ func TestListCities_Success(t *testing.T) {
 
 func TestListCities_EmptyResult(t *testing.T) {
 	mock := &mockCityRepo{cities: nil}
-	h := NewCityHandler(mock)
+	h := NewCityHandler(mock, &mockManifestRepo{})
 	r := setupCityRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/cities", nil)
@@ -148,7 +162,7 @@ func TestListCities_Pagination(t *testing.T) {
 		cities[i] = domain.City{ID: i + 1, Name: "City", Country: "GE"}
 	}
 	mock := &mockCityRepo{cities: cities}
-	h := NewCityHandler(mock)
+	h := NewCityHandler(mock, &mockManifestRepo{})
 	r := setupCityRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/cities?page=2&per_page=10", nil)
@@ -183,7 +197,7 @@ func TestListCities_Pagination(t *testing.T) {
 
 func TestListCities_ServiceError(t *testing.T) {
 	mock := &mockCityRepo{err: repository.ErrNotFound}
-	h := NewCityHandler(mock)
+	h := NewCityHandler(mock, &mockManifestRepo{})
 	r := setupCityRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/cities", nil)
@@ -199,7 +213,7 @@ func TestGetCity_Success(t *testing.T) {
 	mock := &mockCityRepo{
 		city: &domain.City{ID: 1, Name: "Tbilisi", Country: "GE", CenterLat: 41.7, CenterLng: 44.8, RadiusKm: 15, IsActive: true},
 	}
-	h := NewCityHandler(mock)
+	h := NewCityHandler(mock, &mockManifestRepo{})
 	r := setupCityRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/cities/1", nil)
@@ -223,7 +237,7 @@ func TestGetCity_Success(t *testing.T) {
 
 func TestGetCity_NotFound(t *testing.T) {
 	mock := &mockCityRepo{err: repository.ErrNotFound}
-	h := NewCityHandler(mock)
+	h := NewCityHandler(mock, &mockManifestRepo{})
 	r := setupCityRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/cities/999", nil)
@@ -245,7 +259,7 @@ func TestGetCity_NotFound(t *testing.T) {
 
 func TestGetCity_InvalidID(t *testing.T) {
 	mock := &mockCityRepo{}
-	h := NewCityHandler(mock)
+	h := NewCityHandler(mock, &mockManifestRepo{})
 	r := setupCityRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/cities/abc", nil)
@@ -259,7 +273,7 @@ func TestGetCity_InvalidID(t *testing.T) {
 
 func TestCreateCity_Success(t *testing.T) {
 	mock := &mockCityRepo{}
-	h := NewCityHandler(mock)
+	h := NewCityHandler(mock, &mockManifestRepo{})
 	r := setupCityRouter(h)
 
 	body := `{"name":"Tbilisi","country":"GE","center_lat":41.7151,"center_lng":44.8271,"radius_km":15}`
@@ -291,7 +305,7 @@ func TestCreateCity_Success(t *testing.T) {
 
 func TestCreateCity_MissingRequired(t *testing.T) {
 	mock := &mockCityRepo{}
-	h := NewCityHandler(mock)
+	h := NewCityHandler(mock, &mockManifestRepo{})
 	r := setupCityRouter(h)
 
 	body := `{"name":"Tbilisi"}`
@@ -307,7 +321,7 @@ func TestCreateCity_MissingRequired(t *testing.T) {
 
 func TestCreateCity_WithOptionalFields(t *testing.T) {
 	mock := &mockCityRepo{}
-	h := NewCityHandler(mock)
+	h := NewCityHandler(mock, &mockManifestRepo{})
 	r := setupCityRouter(h)
 
 	isActive := false
@@ -341,7 +355,7 @@ func TestCreateCity_WithOptionalFields(t *testing.T) {
 
 func TestUpdateCity_Success(t *testing.T) {
 	mock := &mockCityRepo{}
-	h := NewCityHandler(mock)
+	h := NewCityHandler(mock, &mockManifestRepo{})
 	r := setupCityRouter(h)
 
 	body := `{"name":"Tbilisi Updated","country":"GE","center_lat":41.7151,"center_lng":44.8271,"radius_km":20}`
@@ -367,7 +381,7 @@ func TestUpdateCity_Success(t *testing.T) {
 
 func TestUpdateCity_NotFound(t *testing.T) {
 	mock := &mockCityRepo{err: repository.ErrNotFound}
-	h := NewCityHandler(mock)
+	h := NewCityHandler(mock, &mockManifestRepo{})
 	r := setupCityRouter(h)
 
 	body := `{"name":"Tbilisi","country":"GE","center_lat":41.7,"center_lng":44.8,"radius_km":15}`
@@ -383,7 +397,7 @@ func TestUpdateCity_NotFound(t *testing.T) {
 
 func TestDeleteCity_Success(t *testing.T) {
 	mock := &mockCityRepo{}
-	h := NewCityHandler(mock)
+	h := NewCityHandler(mock, &mockManifestRepo{})
 	r := setupCityRouter(h)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/cities/1", nil)
@@ -405,7 +419,7 @@ func TestDeleteCity_Success(t *testing.T) {
 
 func TestDeleteCity_NotFound(t *testing.T) {
 	mock := &mockCityRepo{deleteErr: repository.ErrNotFound}
-	h := NewCityHandler(mock)
+	h := NewCityHandler(mock, &mockManifestRepo{})
 	r := setupCityRouter(h)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/cities/999", nil)
@@ -414,5 +428,115 @@ func TestDeleteCity_NotFound(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestGetDownloadManifest_Success(t *testing.T) {
+	audioURL := "https://s3.example.com/audio/story_1.mp3"
+	dur := int16(120)
+	manifestMock := &mockManifestRepo{
+		items: []domain.DownloadManifestItem{
+			{StoryID: 1, POIID: 10, POIName: "Narikala Fortress", AudioURL: &audioURL, DurationSec: &dur, FileSizeBytes: 2880000},
+			{StoryID: 2, POIID: 10, POIName: "Narikala Fortress", AudioURL: &audioURL, DurationSec: &dur, FileSizeBytes: 1920000},
+		},
+	}
+	cityMock := &mockCityRepo{
+		city: &domain.City{ID: 1, Name: "Tbilisi", Country: "GE", CenterLat: 41.7, CenterLng: 44.8, RadiusKm: 15, IsActive: true},
+	}
+	h := NewCityHandler(cityMock, manifestMock)
+	r := setupCityRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/cities/1/download-manifest?language=en", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Data           []domain.DownloadManifestItem `json:"data"`
+		TotalSizeBytes int64                         `json:"total_size_bytes"`
+		TotalStories   int                           `json:"total_stories"`
+		CityName       string                        `json:"city_name"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if len(resp.Data) != 2 {
+		t.Errorf("expected 2 items, got %d", len(resp.Data))
+	}
+	if resp.TotalSizeBytes != 4800000 {
+		t.Errorf("expected total_size_bytes=4800000, got %d", resp.TotalSizeBytes)
+	}
+	if resp.TotalStories != 2 {
+		t.Errorf("expected total_stories=2, got %d", resp.TotalStories)
+	}
+	if resp.CityName != "Tbilisi" {
+		t.Errorf("expected city_name=Tbilisi, got %q", resp.CityName)
+	}
+}
+
+func TestGetDownloadManifest_CityNotFound(t *testing.T) {
+	cityMock := &mockCityRepo{err: repository.ErrNotFound}
+	h := NewCityHandler(cityMock, &mockManifestRepo{})
+	r := setupCityRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/cities/999/download-manifest", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestGetDownloadManifest_EmptyManifest(t *testing.T) {
+	cityMock := &mockCityRepo{
+		city: &domain.City{ID: 1, Name: "Tbilisi", Country: "GE"},
+	}
+	manifestMock := &mockManifestRepo{items: nil}
+	h := NewCityHandler(cityMock, manifestMock)
+	r := setupCityRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/cities/1/download-manifest", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp struct {
+		Data           []domain.DownloadManifestItem `json:"data"`
+		TotalSizeBytes int64                         `json:"total_size_bytes"`
+		TotalStories   int                           `json:"total_stories"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if len(resp.Data) != 0 {
+		t.Errorf("expected empty data, got %d items", len(resp.Data))
+	}
+	if resp.TotalSizeBytes != 0 {
+		t.Errorf("expected total_size_bytes=0, got %d", resp.TotalSizeBytes)
+	}
+}
+
+func TestGetDownloadManifest_DefaultLanguage(t *testing.T) {
+	cityMock := &mockCityRepo{
+		city: &domain.City{ID: 1, Name: "Tbilisi", Country: "GE"},
+	}
+	manifestMock := &mockManifestRepo{items: []domain.DownloadManifestItem{}}
+	h := NewCityHandler(cityMock, manifestMock)
+	r := setupCityRouter(h)
+
+	// No language param — should default to "en"
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/cities/1/download-manifest", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
 	}
 }
