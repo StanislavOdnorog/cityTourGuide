@@ -1,9 +1,19 @@
-import { DashboardOutlined } from '@ant-design/icons';
+import { DashboardOutlined, LogoutOutlined } from '@ant-design/icons';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ConfigProvider, App as AntApp, Layout, Menu, theme } from 'antd';
-import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { ConfigProvider, App as AntApp, Layout, Menu, Button, theme } from 'antd';
+import { useEffect } from 'react';
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+  useLocation,
+} from 'react-router-dom';
 import DashboardPage from './pages/DashboardPage';
+import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
+import { useAuthStore } from './store/authStore';
 
 const { Header, Content, Sider } = Layout;
 
@@ -21,6 +31,12 @@ const menuItems = [{ key: '/', icon: <DashboardOutlined />, label: 'Dashboard' }
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, logout } = useAuthStore();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -39,7 +55,22 @@ function AppLayout() {
         />
       </Sider>
       <Layout>
-        <Header style={{ padding: '0 24px', background: '#fff' }} />
+        <Header
+          style={{
+            padding: '0 24px',
+            background: '#fff',
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+          }}
+        >
+          {user?.email && (
+            <span style={{ marginRight: 16, color: '#666' }}>{user.email}</span>
+          )}
+          <Button icon={<LogoutOutlined />} onClick={handleLogout}>
+            Logout
+          </Button>
+        </Header>
         <Content style={{ margin: 24 }}>
           <Routes>
             <Route path="/" element={<DashboardPage />} />
@@ -51,13 +82,45 @@ function AppLayout() {
   );
 }
 
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function AuthInit({ children }: { children: React.ReactNode }) {
+  const hydrateFromStorage = useAuthStore((s) => s.hydrateFromStorage);
+
+  useEffect(() => {
+    hydrateFromStorage();
+  }, [hydrateFromStorage]);
+
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
     <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm }}>
       <AntApp>
         <QueryClientProvider client={queryClient}>
           <BrowserRouter>
-            <AppLayout />
+            <AuthInit>
+              <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route
+                  path="/*"
+                  element={
+                    <ProtectedRoute>
+                      <AppLayout />
+                    </ProtectedRoute>
+                  }
+                />
+              </Routes>
+            </AuthInit>
           </BrowserRouter>
         </QueryClientProvider>
       </AntApp>

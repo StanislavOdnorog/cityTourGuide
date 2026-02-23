@@ -1044,3 +1044,30 @@
   - Admin: `npm run typecheck` — 0 ошибок типов (pass)
   - Admin: `npm run format:check` — все файлы корректно отформатированы (pass)
   - Admin: `npm run build` — production билд создаётся без ошибок (pass)
+
+### TASK-049: Admin Panel: Login page и авторизация
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - **Backend**:
+    - Миграция `000012_add_is_admin_to_users.up/down.sql` — добавляет `is_admin BOOLEAN DEFAULT false` в users
+    - `domain/user.go` — добавлено поле `IsAdmin bool` в структуру User
+    - `repository/user_repo.go` — все 4 метода (Create, GetByID, GetByEmail, CreateAnonymous) обновлены для включения `is_admin` в SQL-запросы
+    - `service/auth_service.go` — JWT токены теперь содержат `admin` claim; добавлен метод `ValidateAdminToken` проверяющий admin claim
+    - `middleware/admin_auth.go` — новый middleware `AdminAuth`, проверяет JWT + admin claim; 401 для невалидного токена, 403 для не-admin
+    - `cmd/api/main.go` — admin routes используют `AdminAuth` вместо `JWTAuth`
+  - **Admin Panel**:
+    - Установлены `zustand` v5 и `axios` для state management и HTTP-клиента
+    - `src/types/index.ts` — TypeScript интерфейсы: User, TokenPair, LoginResponse, ApiError
+    - `src/store/authStore.ts` — Zustand store: token/refreshToken/user state, setAuth (сохраняет в localStorage), logout (очищает localStorage), hydrateFromStorage (восстановление при reload)
+    - `src/api/client.ts` — axios instance с baseURL из config; request interceptor добавляет `Authorization: Bearer <token>`; response interceptor для refresh при 401; экспортирует `login()` функцию
+    - `src/pages/LoginPage.tsx` — форма Ant Design (email + password), проверяет `is_admin` после логина, показывает ошибки (401/429/network), redirectит на Dashboard
+    - `src/App.tsx` — `ProtectedRoute` компонент (redirect на /login если не авторизован), `AuthInit` (hydrate на mount), Header с email и Logout кнопкой, маршрут /login
+    - `src/store/index.ts` и `src/api/index.ts` — реэкспорт
+- **Тесты**:
+  - `go build ./cmd/api` — компиляция успешна (pass)
+  - `go build ./cmd/worker` — компиляция успешна (pass)
+  - `make lint` — 0 ошибок линтинга (pass)
+  - `cd admin && npx tsc --noEmit` — 0 ошибок типов (pass)
+  - `cd admin && npm run lint` — 0 ошибок (pass)
+  - `cd admin && npm run build` — production билд успешно (pass)

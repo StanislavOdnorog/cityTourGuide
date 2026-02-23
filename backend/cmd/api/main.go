@@ -107,9 +107,9 @@ func run() error {
 	auth.POST("/device", authHandler.DeviceAuth)
 	auth.POST("/refresh", authHandler.Refresh)
 
-	// API v1 routes — admin (protected with JWT)
+	// API v1 routes — admin (protected with JWT + admin claim)
 	admin := v1.Group("/admin")
-	admin.Use(middleware.JWTAuth(authService))
+	admin.Use(middleware.AdminAuth(authService))
 	admin.POST("/cities", cityHandler.CreateCity)
 	admin.PUT("/cities/:id", cityHandler.UpdateCity)
 	admin.DELETE("/cities/:id", cityHandler.DeleteCity)

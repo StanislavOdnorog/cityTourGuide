@@ -26,7 +26,7 @@ func (r *UserRepo) Create(ctx context.Context, user *domain.User) (*domain.User,
 	query := `
 		INSERT INTO users (email, name, password_hash, auth_provider, language_pref, is_anonymous)
 		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id, email, name, password_hash, auth_provider, language_pref, is_anonymous, created_at, updated_at`
+		RETURNING id, email, name, password_hash, auth_provider, language_pref, is_anonymous, is_admin, created_at, updated_at`
 
 	var u domain.User
 	err := r.pool.QueryRow(ctx, query,
@@ -44,6 +44,7 @@ func (r *UserRepo) Create(ctx context.Context, user *domain.User) (*domain.User,
 		&u.AuthProvider,
 		&u.LanguagePref,
 		&u.IsAnonymous,
+		&u.IsAdmin,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)
@@ -57,7 +58,7 @@ func (r *UserRepo) Create(ctx context.Context, user *domain.User) (*domain.User,
 // GetByID returns a user by their UUID.
 func (r *UserRepo) GetByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
-		SELECT id, email, name, password_hash, auth_provider, language_pref, is_anonymous, created_at, updated_at
+		SELECT id, email, name, password_hash, auth_provider, language_pref, is_anonymous, is_admin, created_at, updated_at
 		FROM users
 		WHERE id = $1`
 
@@ -70,6 +71,7 @@ func (r *UserRepo) GetByID(ctx context.Context, id string) (*domain.User, error)
 		&u.AuthProvider,
 		&u.LanguagePref,
 		&u.IsAnonymous,
+		&u.IsAdmin,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)
@@ -86,7 +88,7 @@ func (r *UserRepo) GetByID(ctx context.Context, id string) (*domain.User, error)
 // GetByEmail returns a user by their email address.
 func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, email, name, password_hash, auth_provider, language_pref, is_anonymous, created_at, updated_at
+		SELECT id, email, name, password_hash, auth_provider, language_pref, is_anonymous, is_admin, created_at, updated_at
 		FROM users
 		WHERE email = $1`
 
@@ -99,6 +101,7 @@ func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*domain.User, 
 		&u.AuthProvider,
 		&u.LanguagePref,
 		&u.IsAnonymous,
+		&u.IsAdmin,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)
@@ -118,7 +121,7 @@ func (r *UserRepo) CreateAnonymous(ctx context.Context, deviceID, languagePref s
 		INSERT INTO users (id, auth_provider, language_pref, is_anonymous)
 		VALUES ($1, $2, $3, true)
 		ON CONFLICT (id) DO UPDATE SET updated_at = NOW()
-		RETURNING id, email, name, password_hash, auth_provider, language_pref, is_anonymous, created_at, updated_at`
+		RETURNING id, email, name, password_hash, auth_provider, language_pref, is_anonymous, is_admin, created_at, updated_at`
 
 	var u domain.User
 	err := r.pool.QueryRow(ctx, query,
@@ -133,6 +136,7 @@ func (r *UserRepo) CreateAnonymous(ctx context.Context, deviceID, languagePref s
 		&u.AuthProvider,
 		&u.LanguagePref,
 		&u.IsAnonymous,
+		&u.IsAdmin,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)

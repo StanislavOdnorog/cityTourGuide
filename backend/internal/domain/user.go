@@ -20,6 +20,7 @@ type User struct {
 	AuthProvider AuthProvider `json:"auth_provider"`
 	LanguagePref string       `json:"language_pref"`
 	IsAnonymous  bool         `json:"is_anonymous"`
+	IsAdmin      bool         `json:"is_admin"`
 	CreatedAt    time.Time    `json:"created_at"`
 	UpdatedAt    time.Time    `json:"updated_at"`
 }

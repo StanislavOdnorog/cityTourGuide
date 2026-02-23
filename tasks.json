@@ -1102,7 +1102,7 @@
         "Шаг 4: Logout → redirect на /login"
       ],
       "dependencies": ["TASK-007", "TASK-025"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-050",

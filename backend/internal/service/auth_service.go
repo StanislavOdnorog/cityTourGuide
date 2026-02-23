@@ -87,7 +87,7 @@ func (s *AuthService) Register(ctx context.Context, email, password, name string
 		return nil, nil, fmt.Errorf("auth: create user: %w", err)
 	}
 
-	tokens, err := s.generateTokenPair(created.ID)
+	tokens, err := s.generateTokenPair(created.ID, created.IsAdmin)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -113,7 +113,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*domai
 		return nil, nil, ErrInvalidCredentials
 	}
 
-	tokens, err := s.generateTokenPair(user.ID)
+	tokens, err := s.generateTokenPair(user.ID, user.IsAdmin)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -132,7 +132,7 @@ func (s *AuthService) DeviceAuth(ctx context.Context, deviceID, language string)
 		return nil, nil, fmt.Errorf("auth: device auth: %w", err)
 	}
 
-	tokens, err := s.generateTokenPair(user.ID)
+	tokens, err := s.generateTokenPair(user.ID, user.IsAdmin)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -156,8 +156,8 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 		return nil, ErrInvalidToken
 	}
 
-	// Verify user still exists
-	_, err = s.repo.GetByID(ctx, userID)
+	// Verify user still exists and get current admin status
+	user, err := s.repo.GetByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return nil, ErrInvalidToken
@@ -165,7 +165,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 		return nil, fmt.Errorf("auth: refresh: %w", err)
 	}
 
-	return s.generateTokenPair(userID)
+	return s.generateTokenPair(user.ID, user.IsAdmin)
 }
 
 // ValidateAccessToken validates an access token and returns the user ID.
@@ -187,15 +187,39 @@ func (s *AuthService) ValidateAccessToken(tokenString string) (string, error) {
 	return userID, nil
 }
 
-func (s *AuthService) generateTokenPair(userID string) (*TokenPair, error) {
+// ValidateAdminToken validates an access token and returns the user ID only if the user is admin.
+func (s *AuthService) ValidateAdminToken(tokenString string) (string, error) {
+	claims, err := s.parseToken(tokenString)
+	if err != nil {
+		return "", ErrInvalidToken
+	}
+
+	if claims["type"] != "access" {
+		return "", ErrInvalidToken
+	}
+
+	userID, ok := claims["sub"].(string)
+	if !ok || userID == "" {
+		return "", ErrInvalidToken
+	}
+
+	admin, _ := claims["admin"].(bool)
+	if !admin {
+		return "", fmt.Errorf("admin access required")
+	}
+
+	return userID, nil
+}
+
+func (s *AuthService) generateTokenPair(userID string, isAdmin bool) (*TokenPair, error) {
 	now := time.Now()
 
-	accessToken, err := s.createToken(userID, "access", now.Add(s.config.AccessTTL))
+	accessToken, err := s.createToken(userID, "access", now.Add(s.config.AccessTTL), isAdmin)
 	if err != nil {
 		return nil, fmt.Errorf("auth: generate access token: %w", err)
 	}
 
-	refreshToken, err := s.createToken(userID, "refresh", now.Add(s.config.RefreshTTL))
+	refreshToken, err := s.createToken(userID, "refresh", now.Add(s.config.RefreshTTL), isAdmin)
 	if err != nil {
 		return nil, fmt.Errorf("auth: generate refresh token: %w", err)
 	}
@@ -207,12 +231,13 @@ func (s *AuthService) generateTokenPair(userID string) (*TokenPair, error) {
 	}, nil
 }
 
-func (s *AuthService) createToken(userID, tokenType string, expiresAt time.Time) (string, error) {
+func (s *AuthService) createToken(userID, tokenType string, expiresAt time.Time, isAdmin bool) (string, error) {
 	claims := jwt.MapClaims{
-		"sub":  userID,
-		"type": tokenType,
-		"iat":  time.Now().Unix(),
-		"exp":  expiresAt.Unix(),
+		"sub":   userID,
+		"type":  tokenType,
+		"iat":   time.Now().Unix(),
+		"exp":   expiresAt.Unix(),
+		"admin": isAdmin,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
