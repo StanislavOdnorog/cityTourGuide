@@ -7,6 +7,9 @@ import type {
   CityPOI,
   CityPOIsResponse,
   CityDownloadManifest,
+  Purchase,
+  VerifyPurchaseRequest,
+  PurchaseStatusResponse,
 } from '@/types';
 import apiClient from './client';
 
@@ -69,4 +72,18 @@ export async function fetchCityPOIs(
     pois: response.data.data,
     totalStories: response.data.total_stories,
   };
+}
+
+// Purchase endpoints
+
+export async function verifyPurchase(request: VerifyPurchaseRequest): Promise<Purchase> {
+  const response = await apiClient.post<{ data: Purchase }>('/api/v1/purchases/verify', request);
+  return response.data.data;
+}
+
+export async function fetchPurchaseStatus(): Promise<PurchaseStatusResponse> {
+  const response = await apiClient.get<{ data: PurchaseStatusResponse }>(
+    '/api/v1/purchases/status',
+  );
+  return response.data.data;
 }

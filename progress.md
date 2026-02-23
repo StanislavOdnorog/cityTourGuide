@@ -1491,3 +1491,53 @@
   - Миграции: `migrate -path /app/migrations -database "$DATABASE_URL" up` (pass — code review)
   - Health check: `/healthz` verification после деплоя (pass — code review)
   - Rollback: git revert + push → новый деплой (pass — design review)
+
+### TASK-047: Backend + Mobile: In-App Purchases (IAP) и Freemium
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - **Backend** — Purchase Repository (`internal/repository/purchase_repo.go`):
+    - Create, GetByID, GetByTransactionID, GetByUserID, GetActivePurchases, CountTodayListenings
+    - Active purchases filter: lifetime, non-expired subscriptions, city packs
+    - Deduplication by transaction_id (unique index)
+  - **Backend** — Purchase Service (`internal/service/purchase_service.go`):
+    - VerifyAndCreate: receipt validation, deduplication, auto-expiration for subscriptions (30 days)
+    - GetStatus: returns PurchaseStatus with has_full_access, is_lifetime, city_packs, free stories counters
+    - HasCityAccess: checks lifetime, subscription, city pack, or freemium allowance
+    - CanListenFree: checks daily free story limit (5/day default)
+    - Sentinel errors: ErrDuplicateTransaction, ErrInvalidReceipt
+  - **Backend** — Purchase Handler (`internal/handler/purchase_handler.go`):
+    - POST /api/v1/purchases/verify — JWT-protected, verifies receipt, creates purchase
+    - GET /api/v1/purchases/status — JWT-protected, returns user purchase/access status
+  - **Backend** — Route registration in `cmd/api/main.go`:
+    - Purchase routes under `/api/v1/purchases` with JWT auth middleware
+  - **Mobile** — FreemiumTracker (`src/services/freemium/FreemiumTracker.ts`):
+    - Daily free story counter with AsyncStorage persistence
+    - Auto-reset at midnight (local time) via date comparison
+    - canListenFree, getRemainingListens, getUsedListens, recordListen, reset
+  - **Mobile** — Purchase Store (`src/store/usePurchaseStore.ts`):
+    - Zustand store with AsyncStorage persistence
+    - PurchaseStatus state: has_full_access, city_packs, free_stories_left/used/limit
+    - Actions: hasFullAccess, hasCityAccess, canListenFree, decrementFreeStories, showPaywall/hidePaywall
+    - IAP product catalog: City Pack ($4.99), Monthly ($6.99/mo), Lifetime ($19.99)
+  - **Mobile** — API endpoints (`src/api/endpoints.ts`):
+    - verifyPurchase: POST /api/v1/purchases/verify
+    - fetchPurchaseStatus: GET /api/v1/purchases/status
+  - **Mobile** — Types (`src/types/index.ts`):
+    - VerifyPurchaseRequest, PurchaseStatusResponse interfaces
+  - **Mobile** — Paywall component (`src/components/Paywall.tsx`):
+    - Modal bottom sheet with dark theme
+    - 3 product options: City Pack, Monthly, Lifetime
+    - Free stories remaining indicator
+    - Purchase flow: IAP → verify → refresh status
+    - Restore Purchases button
+  - **Tests**:
+    - 13 unit tests for usePurchaseStore (all pass)
+    - 10 unit tests for FreemiumTracker (all pass)
+- **Тесты**:
+  - `npx tsc --noEmit` — 0 ошибок типов (pass)
+  - `make lint` (backend) — 0 ошибок линтинга (pass)
+  - `go build ./...` — компиляция бэкенда успешна (pass)
+  - `npx jest` — 277 тестов, все пройдены (254 existing + 23 new) (pass)
+  - usePurchaseStore: hasFullAccess, canListenFree, hasCityAccess, decrementFreeStories (pass)
+  - FreemiumTracker: daily reset, limit enforcement, persistence (pass)

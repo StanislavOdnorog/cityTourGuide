@@ -7,5 +7,7 @@ export {
   fetchCities,
   fetchCityById,
   fetchCityPOIs,
+  verifyPurchase,
+  fetchPurchaseStatus,
 } from './endpoints';
 export type { FetchNearbyStoriesParams } from './endpoints';

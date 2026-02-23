@@ -16,3 +16,4 @@ export {
 } from './audio';
 export { WalkingPipeline, createWalkingPipeline, type WalkingPipelineConfig } from './pipeline';
 export { StoryCacheManager, type CacheStats, type CachedStoryMeta } from './cache';
+export { FreemiumTracker } from './freemium';

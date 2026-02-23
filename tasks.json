@@ -1058,7 +1058,7 @@
         "Шаг 4: LTD purchase → все истории доступны без лимита"
       ],
       "dependencies": ["TASK-025", "TASK-036"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-048",

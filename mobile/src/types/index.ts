@@ -188,3 +188,24 @@ export interface CityDownloadManifest {
 export interface ApiError {
   error: string;
 }
+
+// Purchase API types
+
+export interface VerifyPurchaseRequest {
+  platform: 'ios' | 'android';
+  transaction_id: string;
+  receipt: string;
+  type: PurchaseType;
+  city_id?: number;
+  price: number;
+}
+
+export interface PurchaseStatusResponse {
+  has_full_access: boolean;
+  is_lifetime: boolean;
+  active_subscription: Purchase | null;
+  city_packs: Purchase[];
+  free_stories_used: number;
+  free_stories_limit: number;
+  free_stories_left: number;
+}

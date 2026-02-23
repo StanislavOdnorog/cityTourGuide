@@ -53,6 +53,7 @@ func run() error {
 	userRepo := repository.NewUserRepo(pool)
 	reportRepo := repository.NewReportRepo(pool)
 	inflationRepo := repository.NewInflationRepo(pool)
+	purchaseRepo := repository.NewPurchaseRepo(pool)
 
 	// Initialize services
 	nearbyService := service.NewNearbyService(poiRepo, storyRepo, listeningRepo)
@@ -61,6 +62,7 @@ func run() error {
 		AccessTTL:  cfg.JWT.AccessTTL,
 		RefreshTTL: cfg.JWT.RefreshTTL,
 	})
+	purchaseService := service.NewPurchaseService(purchaseRepo)
 
 	// Initialize handlers
 	nearbyHandler := handler.NewNearbyHandler(nearbyService)
@@ -68,6 +70,7 @@ func run() error {
 	poiHandler := handler.NewPOIHandler(poiRepo)
 	storyHandler := handler.NewStoryHandler(storyRepo)
 	authHandler := handler.NewAuthHandler(authService)
+	purchaseHandler := handler.NewPurchaseHandler(purchaseService)
 
 	// Set up OAuth verifiers (only if configured)
 	if cfg.OAuth.GoogleClientID != "" {
@@ -123,6 +126,12 @@ func run() error {
 	v1.GET("/stories/:id", storyHandler.GetStory)
 	v1.POST("/listenings", listeningHandler.TrackListening)
 	v1.POST("/reports", reportHandler.CreateReport)
+
+	// Purchase routes (protected with JWT)
+	purchases := v1.Group("/purchases")
+	purchases.Use(middleware.JWTAuth(authService))
+	purchases.POST("/verify", purchaseHandler.VerifyPurchase)
+	purchases.GET("/status", purchaseHandler.GetStatus)
 
 	// Auth routes with stricter rate limiting
 	auth := v1.Group("/auth")
