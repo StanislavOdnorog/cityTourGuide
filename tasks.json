@@ -856,7 +856,7 @@
         "Шаг 4: История заканчивается — notification и MiniPlayer скрываются"
       ],
       "dependencies": ["TASK-036"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-039",

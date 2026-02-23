@@ -1199,3 +1199,38 @@
   - healthcheck на postgres (pg_isready) и backend (wget /healthz) (pass)
   - `.env.production` в .gitignore (pass)
   - `go build ./cmd/api && go build ./cmd/worker` — backend компилируется (pass)
+
+### TASK-038: Mobile: Now Playing notification и мини-плеер
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создан `src/components/MiniPlayer.tsx` — компактная панель внизу экрана:
+    - Показывается только при активном воспроизведении (currentStory !== null)
+    - Кнопка Play/Pause (зелёная круглая, 44px) — управляет TrackPlayer напрямую
+    - Название текущей истории (poi_name) с numberOfLines={1}
+    - Прогресс-бар (flex-based, зелёный #4ADE80 на тёмном #333333 фоне)
+    - Время воспроизведения: текущая позиция / общая длительность (formatTime utility)
+    - Кнопка Report (флаг, ⚑) — показывает Alert с подтверждением (placeholder для TASK-044)
+    - Safe area insets для нижнего отступа (useSafeAreaInsets)
+    - Тёмная тема (#1A1A1A фон, белый текст, серый #888 для вспомогательного)
+  - Использует hooks из react-native-track-player:
+    - `useIsPlaying()` — точное состояние play/pause (реагирует на remote events)
+    - `useProgress(500)` — обновление позиции каждые 500ms
+  - Создан `src/utils/formatTime.ts` — утилита форматирования секунд в m:ss
+  - Обновлён `src/utils/index.ts` — export formatTime
+  - Обновлён `src/components/index.ts` — export MiniPlayer
+  - Обновлён `app/(main)/_layout.tsx` — MiniPlayer интегрирован под Stack navigator
+  - Now Playing system notification уже работает через react-native-track-player:
+    - Metadata: title=poi_name, artist='City Stories Guide', duration
+    - Capabilities: Play, Pause, Stop (compact: Play, Pause)
+    - Remote events: RemotePlay, RemotePause, RemoteStop обработаны в AudioPlayer
+    - Android: AppKilledPlaybackBehavior.ContinuePlayback
+    - Notification исчезает при TrackPlayer.reset() (stop/complete)
+- **Тесты**:
+  - `tsc --noEmit` — 0 ошибок типов (pass)
+  - 11 новых тестов в `src/utils/__tests__/formatTime.test.ts`:
+    - formatTime: 0 sec, seconds < 60, exact minutes, min+sec, fractional, large, padding (7 tests)
+    - Progress logic: ratio, clamp to 0, clamp to 1, exact duration (4 tests)
+  - All 211 tests pass, 11 suites (pass)
+  - MiniPlayer скрыт когда currentStory === null (return null)
+  - MiniPlayer показан с play/pause, progress bar, report при воспроизведении
