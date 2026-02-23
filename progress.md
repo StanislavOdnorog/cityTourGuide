@@ -1161,3 +1161,41 @@
   - Язык сохраняется через AsyncStorage persist middleware (pass)
   - Permissions запрашиваются на третьем экране (pass)
   - После completeOnboarding() — redirect на Home (pass)
+
+### TASK-053: Docker: production docker-compose + Caddy reverse proxy
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создан `backend/Dockerfile` — multi-stage build для API сервера:
+    - Build stage: golang:1.24-alpine, CGO_ENABLED=0, `-ldflags="-s -w"` для минимального размера
+    - Runtime stage: alpine:3.21 с ca-certificates и tzdata
+    - Копирует binary + migrations директорию
+    - EXPOSE 8080
+  - Создан `backend/Dockerfile.worker` — multi-stage build для Worker сервиса:
+    - Аналогичная структура, компилирует cmd/worker
+    - Runtime stage без migrations (worker не мигрирует)
+  - Создан `infra/caddy.Dockerfile` — multi-stage build для Caddy с admin static files:
+    - Build stage: node:22-alpine, npm ci + npm run build для admin panel
+    - Runtime stage: caddy:2-alpine с admin dist в /srv/admin
+  - Создан `infra/Caddyfile` — reverse proxy конфигурация:
+    - `{$API_DOMAIN}` → reverse_proxy backend:8080
+    - `{$ADMIN_DOMAIN}` → file_server /srv/admin с SPA fallback (try_files)
+    - Auto-HTTPS через `{$ACME_EMAIL}`
+    - Security headers: HSTS, X-Content-Type-Options, X-Frame-Options
+  - Создан `infra/docker-compose.prod.yml` — 4 сервиса:
+    - postgres: PostGIS 16, healthcheck (pg_isready), restart: always, internal network
+    - backend: API server, healthcheck (/healthz via wget), depends_on postgres healthy, restart: always
+    - worker: background worker, depends_on postgres healthy, restart: always
+    - caddy: reverse proxy + admin static, ports 80/443, auto-HTTPS, depends_on backend healthy
+    - Все сервисы на internal bridge network
+    - Environment variables через ${} references из .env.production
+  - Создан `infra/.env.production.example` — шаблон для production env vars
+  - Обновлён `.gitignore` — добавлен `.env.production` в исключения
+- **Тесты**:
+  - `docker-compose -f docker-compose.prod.yml config` — валидация конфигурации успешна (pass)
+  - `docker build -t csg-api-test backend/` — API image builds successfully (pass)
+  - `docker build -f Dockerfile.worker -t csg-worker-test backend/` — Worker image builds successfully (pass)
+  - restart: always на всех 4 сервисах (pass)
+  - healthcheck на postgres (pg_isready) и backend (wget /healthz) (pass)
+  - `.env.production` в .gitignore (pass)
+  - `go build ./cmd/api && go build ./cmd/worker` — backend компилируется (pass)

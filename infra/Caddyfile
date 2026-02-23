@@ -1,0 +1,28 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$API_DOMAIN:api.localhost} {
+	reverse_proxy backend:8080
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+	}
+}
+
+{$ADMIN_DOMAIN:admin.localhost} {
+	root * /srv/admin
+	file_server
+
+	# SPA fallback
+	try_files {path} /index.html
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+	}
+}

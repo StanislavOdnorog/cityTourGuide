@@ -1193,7 +1193,7 @@
         "Шаг 4: Убить backend → автоматический restart"
       ],
       "dependencies": ["TASK-003", "TASK-002", "TASK-007"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-054",
