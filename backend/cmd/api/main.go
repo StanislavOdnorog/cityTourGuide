@@ -65,6 +65,7 @@ func run() error {
 	poiHandler := handler.NewPOIHandler(poiRepo)
 	storyHandler := handler.NewStoryHandler(storyRepo)
 	authHandler := handler.NewAuthHandler(authService)
+	listeningHandler := handler.NewListeningHandler(listeningRepo)
 
 	// Rate limiters
 	authRateLimiter := middleware.NewRateLimiter(5, time.Minute)    // 5 req/min for auth
@@ -96,6 +97,7 @@ func run() error {
 	v1.GET("/pois/:id", poiHandler.GetPOI)
 	v1.GET("/stories", storyHandler.ListStories)
 	v1.GET("/stories/:id", storyHandler.GetStory)
+	v1.POST("/listenings", listeningHandler.TrackListening)
 
 	// Auth routes with stricter rate limiting
 	auth := v1.Group("/auth")

@@ -52,6 +52,47 @@ func (r *ListeningRepo) Create(ctx context.Context, userID string, storyID int, 
 	return &l, nil
 }
 
+// CreateOrUpdate inserts a new listening record or updates an existing one (UPSERT).
+// If a record for the same user_id+story_id exists, updates completed, listened_at, and location.
+func (r *ListeningRepo) CreateOrUpdate(ctx context.Context, userID string, storyID int, completed bool, lat, lng *float64) (*domain.UserListening, error) {
+	var query string
+	var args []interface{}
+
+	if lat != nil && lng != nil {
+		query = `
+			INSERT INTO user_listening (user_id, story_id, completed, location)
+			VALUES ($1, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography)
+			ON CONFLICT (user_id, story_id) DO UPDATE SET
+				completed = EXCLUDED.completed,
+				listened_at = NOW(),
+				location = EXCLUDED.location
+			RETURNING id, user_id, story_id, listened_at, completed,
+				ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng`
+		args = []interface{}{userID, storyID, completed, *lng, *lat}
+	} else {
+		query = `
+			INSERT INTO user_listening (user_id, story_id, completed)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (user_id, story_id) DO UPDATE SET
+				completed = EXCLUDED.completed,
+				listened_at = NOW()
+			RETURNING id, user_id, story_id, listened_at, completed,
+				NULL::double precision AS lat, NULL::double precision AS lng`
+		args = []interface{}{userID, storyID, completed}
+	}
+
+	var l domain.UserListening
+	err := r.pool.QueryRow(ctx, query, args...).Scan(
+		&l.ID, &l.UserID, &l.StoryID, &l.ListenedAt, &l.Completed,
+		&l.Lat, &l.Lng,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("listening_repo: create or update: %w", err)
+	}
+
+	return &l, nil
+}
+
 // GetListenedStoryIDs returns a list of story IDs that a user has listened to.
 // Used for deduplication when selecting nearby stories.
 func (r *ListeningRepo) GetListenedStoryIDs(ctx context.Context, userID string) ([]int, error) {

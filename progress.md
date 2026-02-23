@@ -965,3 +965,36 @@
   - `make build` — оба бинарника скомпилированы (pass)
   - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
   - `tsc -b` (admin) — 0 ошибок типов (pass)
+
+### TASK-024: Handler: POST /api/v1/listenings — трекинг прослушиваний
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создана миграция `000011_add_unique_user_listening` — заменяет обычный индекс (user_id, story_id) на UNIQUE для поддержки UPSERT
+  - Добавлен метод `CreateOrUpdate` в `ListeningRepo` — `INSERT ... ON CONFLICT (user_id, story_id) DO UPDATE SET completed, listened_at, location`
+  - Создан `internal/handler/listening_handler.go` — handler для POST /api/v1/listenings:
+    - Интерфейс `ListeningRepository` для dependency injection
+    - Структура `trackListeningRequest`: user_id (required), story_id (required), completed (default false), lat/lng (optional)
+    - Валидация: story_id > 0, lat/lng в паре, lat [-90,90], lng [-180,180]
+    - HTTP 201 Created при успехе, 400 при невалидных данных, 500 при ошибке
+    - Поддержка device UUID для анонимных пользователей (user_id — строка UUID)
+  - Идемпотентность: повторный POST с тем же user_id+story_id обновляет completed/listened_at/location, не дублирует
+  - Маршрут зарегистрирован: POST /api/v1/listenings в cmd/api/main.go (public API v1 group)
+  - Создан `internal/handler/listening_handler_test.go` — 15 unit-тестов:
+    - Success: 201 с полными данными, 201 без координат (2)
+    - Missing fields: missing user_id, missing story_id (2)
+    - Invalid story_id: отрицательное значение → 400 (1)
+    - Coordinate validation: lat без lng, lng без lat, lat too high/low (sub-tests), lng too high/low (sub-tests) (4)
+    - Service error: 500 с generic error (1)
+    - Default completed: false по умолчанию (1)
+    - Params passthrough: все параметры передаются в repo корректно (1)
+    - Boundary coordinates: max/min lat/lng + zeros (sub-tests) (1)
+    - Response fields: id, user_id, story_id, listened_at, completed, lat, lng (1)
+    - Edge cases: empty body → 400, invalid JSON → 400 (2)
+- **Тесты**:
+  - `go test -v -race ./internal/handler/...` — 84/84 тестов PASS (15 новых + 69 existing) (pass)
+  - `go test -race ./internal/...` — все unit тесты проходят (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make build` — оба бинарника скомпилированы (pass)
+  - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
+  - `tsc -b` (admin) — 0 ошибок типов (pass)
