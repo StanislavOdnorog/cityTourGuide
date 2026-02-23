@@ -1,0 +1,2373 @@
+openapi: 3.0.3
+info:
+  title: City Stories Guide API
+  description: |
+    REST API for City Stories Guide — an ambient audio guide app that tells stories
+    about nearby places while walking. Provides endpoints for discovering nearby stories,
+    managing cities/POIs/stories, authentication, purchases, and admin operations.
+  version: 1.0.0
+  contact:
+    name: City Stories Guide Team
+
+servers:
+  - url: /api/v1
+    description: API v1
+
+tags:
+  - name: Health
+    description: Health and readiness checks
+  - name: Nearby
+    description: Location-based story discovery
+  - name: Cities
+    description: City management
+  - name: POIs
+    description: Points of Interest
+  - name: Stories
+    description: Audio stories for POIs
+  - name: Listenings
+    description: Story listening tracking
+  - name: Reports
+    description: Content reports
+  - name: Device Tokens
+    description: Push notification device registration
+  - name: Auth
+    description: Authentication and authorization
+  - name: Users
+    description: User account management
+  - name: Purchases
+    description: In-app purchases and subscriptions
+  - name: "Admin: Cities"
+    description: Admin city CRUD operations
+  - name: "Admin: POIs"
+    description: Admin POI CRUD operations
+  - name: "Admin: Stories"
+    description: Admin story CRUD operations
+  - name: "Admin: Reports"
+    description: Admin report management
+  - name: "Admin: Inflation"
+    description: Admin AI story inflation jobs
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token obtained from auth endpoints
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: "invalid request"
+
+    PaginationMeta:
+      type: object
+      properties:
+        total:
+          type: integer
+          example: 42
+        page:
+          type: integer
+          example: 1
+        per_page:
+          type: integer
+          example: 20
+
+    City:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "Tbilisi"
+        name_ru:
+          type: string
+          nullable: true
+          example: "Тбилиси"
+        country:
+          type: string
+          example: "Georgia"
+        center_lat:
+          type: number
+          format: double
+          example: 41.7151
+        center_lng:
+          type: number
+          format: double
+          example: 44.8271
+        radius_km:
+          type: number
+          format: double
+          example: 15.0
+        is_active:
+          type: boolean
+          example: true
+        download_size_mb:
+          type: number
+          format: double
+          example: 120.5
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    POI:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        city_id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "Narikala Fortress"
+        name_ru:
+          type: string
+          nullable: true
+          example: "Крепость Нарикала"
+        lat:
+          type: number
+          format: double
+          example: 41.6875
+        lng:
+          type: number
+          format: double
+          example: 44.8084
+        type:
+          type: string
+          enum: [building, street, park, monument, church, bridge, square, museum, district, other]
+          example: "monument"
+        tags:
+          type: object
+          nullable: true
+          example: { "era": "4th century", "style": "fortress" }
+        address:
+          type: string
+          nullable: true
+          example: "Narikala, Tbilisi"
+        interest_score:
+          type: integer
+          format: int16
+          example: 85
+        status:
+          type: string
+          enum: [active, disabled, pending_review]
+          example: "active"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Story:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        poi_id:
+          type: integer
+          example: 1
+        language:
+          type: string
+          example: "en"
+        text:
+          type: string
+          example: "Standing on this ancient hill, you can almost hear..."
+        audio_url:
+          type: string
+          nullable: true
+          example: "https://storage.example.com/stories/1/en.mp3"
+        duration_sec:
+          type: integer
+          format: int16
+          nullable: true
+          example: 120
+        layer_type:
+          type: string
+          enum: [atmosphere, human_story, hidden_detail, time_shift, general]
+          example: "atmosphere"
+        order_index:
+          type: integer
+          format: int16
+          example: 0
+        is_inflation:
+          type: boolean
+          example: false
+        confidence:
+          type: integer
+          format: int16
+          example: 90
+        sources:
+          type: object
+          nullable: true
+        status:
+          type: string
+          enum: [active, disabled, reported, pending_review]
+          example: "active"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    StoryCandidate:
+      type: object
+      properties:
+        poi_id:
+          type: integer
+          example: 1
+        poi_name:
+          type: string
+          example: "Narikala Fortress"
+        story_id:
+          type: integer
+          example: 5
+        story_text:
+          type: string
+          example: "Standing on this ancient hill..."
+        audio_url:
+          type: string
+          nullable: true
+          example: "https://storage.example.com/stories/5/en.mp3"
+        duration_sec:
+          type: integer
+          format: int16
+          nullable: true
+          example: 120
+        distance_m:
+          type: number
+          format: double
+          example: 45.2
+        score:
+          type: number
+          format: double
+          example: 0.87
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        email:
+          type: string
+          nullable: true
+          example: "user@example.com"
+        name:
+          type: string
+          nullable: true
+          example: "John Doe"
+        auth_provider:
+          type: string
+          enum: [email, google, apple]
+          example: "email"
+        provider_id:
+          type: string
+          nullable: true
+        language_pref:
+          type: string
+          example: "en"
+        is_anonymous:
+          type: boolean
+          example: false
+        is_admin:
+          type: boolean
+          example: false
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        deletion_scheduled_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TokenPair:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIs..."
+        refresh_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIs..."
+        expires_in:
+          type: integer
+          format: int64
+          description: Token TTL in seconds
+          example: 3600
+
+    UserListening:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        user_id:
+          type: string
+          format: uuid
+        story_id:
+          type: integer
+          example: 5
+        listened_at:
+          type: string
+          format: date-time
+        completed:
+          type: boolean
+          example: true
+        lat:
+          type: number
+          format: double
+          nullable: true
+          example: 41.6875
+        lng:
+          type: number
+          format: double
+          nullable: true
+          example: 44.8084
+
+    Report:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        story_id:
+          type: integer
+          example: 5
+        user_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [wrong_location, wrong_fact, inappropriate_content]
+          example: "wrong_fact"
+        comment:
+          type: string
+          nullable: true
+          example: "The date mentioned is incorrect"
+        user_lat:
+          type: number
+          format: double
+          nullable: true
+        user_lng:
+          type: number
+          format: double
+          nullable: true
+        status:
+          type: string
+          enum: [new, reviewed, resolved, dismissed]
+          example: "new"
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    DeviceToken:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        user_id:
+          type: string
+          format: uuid
+        token:
+          type: string
+          example: "fcm-token-abc123"
+        platform:
+          type: string
+          enum: [ios, android]
+          example: "ios"
+        is_active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Purchase:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        user_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [city_pack, subscription, lifetime]
+          example: "city_pack"
+        city_id:
+          type: integer
+          nullable: true
+          example: 1
+        platform:
+          type: string
+          example: "ios"
+        transaction_id:
+          type: string
+          nullable: true
+          example: "txn_abc123"
+        price:
+          type: number
+          format: double
+          example: 4.99
+        is_ltd:
+          type: boolean
+          example: false
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    PurchaseStatus:
+      type: object
+      properties:
+        has_full_access:
+          type: boolean
+          example: false
+        is_lifetime:
+          type: boolean
+          example: false
+        active_subscription:
+          $ref: "#/components/schemas/Purchase"
+        city_packs:
+          type: array
+          items:
+            $ref: "#/components/schemas/Purchase"
+        free_stories_used:
+          type: integer
+          example: 3
+        free_stories_limit:
+          type: integer
+          example: 5
+        free_stories_left:
+          type: integer
+          example: 2
+
+    InflationJob:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        poi_id:
+          type: integer
+          example: 1
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+          example: "pending"
+        trigger_type:
+          type: string
+          enum: [user_proximity, admin_manual]
+          example: "admin_manual"
+        segments_count:
+          type: integer
+          format: int16
+          example: 0
+        max_segments:
+          type: integer
+          format: int16
+          example: 5
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_log:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    DownloadManifestItem:
+      type: object
+      properties:
+        story_id:
+          type: integer
+          example: 1
+        poi_id:
+          type: integer
+          example: 1
+        poi_name:
+          type: string
+          example: "Narikala Fortress"
+        audio_url:
+          type: string
+          nullable: true
+          example: "https://storage.example.com/stories/1/en.mp3"
+        duration_sec:
+          type: integer
+          format: int16
+          nullable: true
+          example: 120
+        file_size_bytes:
+          type: integer
+          format: int64
+          example: 1048576
+
+paths:
+  # ──────────── Health ────────────
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Returns 200 if the server is running.
+      operationId: healthz
+      servers:
+        - url: /
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+
+  /readyz:
+    get:
+      tags: [Health]
+      summary: Readiness check
+      description: Returns 200 if the server is ready to handle requests (database connected).
+      operationId: readyz
+      servers:
+        - url: /
+      responses:
+        "200":
+          description: Server is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+        "503":
+          description: Service unavailable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "unavailable"
+                  error:
+                    type: string
+                    example: "database unreachable"
+
+  # ──────────── Nearby Stories ────────────
+  /nearby-stories:
+    get:
+      tags: [Nearby]
+      summary: Get nearby stories
+      description: |
+        Returns stories for POIs near the given coordinates, ranked by relevance.
+        Rate limited to 10 requests/minute per IP.
+      operationId: getNearbyStories
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          description: Latitude (-90 to 90)
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+            example: 41.6941
+        - name: lng
+          in: query
+          required: true
+          description: Longitude (-180 to 180)
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+            example: 44.8337
+        - name: radius
+          in: query
+          description: Search radius in meters (10–500, default 150)
+          schema:
+            type: number
+            format: double
+            minimum: 10
+            maximum: 500
+            default: 150
+        - name: heading
+          in: query
+          description: User heading in degrees (-1 means unavailable)
+          schema:
+            type: number
+            format: double
+            default: -1
+        - name: speed
+          in: query
+          description: User speed in m/s (≥0)
+          schema:
+            type: number
+            format: double
+            minimum: 0
+            default: 0
+        - name: language
+          in: query
+          description: Story language code
+          schema:
+            type: string
+            default: "en"
+        - name: user_id
+          in: query
+          description: Optional user UUID for personalization
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: List of story candidates sorted by relevance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StoryCandidate"
+        "400":
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────── Cities ────────────
+  /cities:
+    get:
+      tags: [Cities]
+      summary: List cities
+      operationId: listCities
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Paginated list of cities
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/City"
+                  meta:
+                    $ref: "#/components/schemas/PaginationMeta"
+
+  /cities/{id}:
+    get:
+      tags: [Cities]
+      summary: Get city by ID
+      operationId: getCity
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: City details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/City"
+        "404":
+          description: City not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /cities/{id}/download-manifest:
+    get:
+      tags: [Cities]
+      summary: Get download manifest for offline mode
+      description: Returns list of all audio files for a city to enable offline download.
+      operationId: getCityDownloadManifest
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: language
+          in: query
+          description: Story language
+          schema:
+            type: string
+            default: "en"
+      responses:
+        "200":
+          description: Download manifest
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DownloadManifestItem"
+                  total_size_bytes:
+                    type: integer
+                    format: int64
+                  total_stories:
+                    type: integer
+                  city_name:
+                    type: string
+        "404":
+          description: City not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────── POIs ────────────
+  /pois:
+    get:
+      tags: [POIs]
+      summary: List POIs
+      operationId: listPOIs
+      parameters:
+        - name: city_id
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, disabled, pending_review]
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [building, street, park, monument, church, bridge, square, museum, district, other]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Paginated list of POIs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/POI"
+                  meta:
+                    $ref: "#/components/schemas/PaginationMeta"
+        "400":
+          description: Missing city_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /pois/{id}:
+    get:
+      tags: [POIs]
+      summary: Get POI by ID
+      operationId: getPOI
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: POI details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/POI"
+        "404":
+          description: POI not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────── Stories ────────────
+  /stories:
+    get:
+      tags: [Stories]
+      summary: List stories
+      operationId: listStories
+      parameters:
+        - name: poi_id
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: language
+          in: query
+          schema:
+            type: string
+            default: "en"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, disabled, reported, pending_review]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Paginated list of stories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Story"
+                  meta:
+                    $ref: "#/components/schemas/PaginationMeta"
+        "400":
+          description: Missing poi_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /stories/{id}:
+    get:
+      tags: [Stories]
+      summary: Get story by ID
+      operationId: getStory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Story details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Story"
+        "404":
+          description: Story not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────── Listenings ────────────
+  /listenings:
+    post:
+      tags: [Listenings]
+      summary: Track a story listening event
+      operationId: trackListening
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, story_id]
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+                story_id:
+                  type: integer
+                completed:
+                  type: boolean
+                  default: false
+                lat:
+                  type: number
+                  format: double
+                lng:
+                  type: number
+                  format: double
+      responses:
+        "201":
+          description: Listening event created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/UserListening"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────── Reports ────────────
+  /reports:
+    post:
+      tags: [Reports]
+      summary: Create a content report
+      operationId: createReport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [story_id, user_id, type]
+              properties:
+                story_id:
+                  type: integer
+                user_id:
+                  type: string
+                  format: uuid
+                type:
+                  type: string
+                  enum: [wrong_location, wrong_fact, inappropriate_content]
+                comment:
+                  type: string
+                lat:
+                  type: number
+                  format: double
+                lng:
+                  type: number
+                  format: double
+      responses:
+        "201":
+          description: Report created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Report"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────── Device Tokens ────────────
+  /device-tokens:
+    post:
+      tags: [Device Tokens]
+      summary: Register a device token for push notifications
+      operationId: registerDeviceToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, token, platform]
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+                token:
+                  type: string
+                platform:
+                  type: string
+                  enum: [ios, android]
+      responses:
+        "201":
+          description: Device token registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/DeviceToken"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [Device Tokens]
+      summary: Unregister a device token
+      operationId: unregisterDeviceToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        "200":
+          description: Device token unregistered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "device token unregistered"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────── Auth ────────────
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new account
+      description: Rate limited to 5 requests/minute per IP.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "user@example.com"
+                password:
+                  type: string
+                  minLength: 8
+                  example: "securepass123"
+                name:
+                  type: string
+                  example: "John Doe"
+      responses:
+        "201":
+          description: Account created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/User"
+                  tokens:
+                    $ref: "#/components/schemas/TokenPair"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login with email and password
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/User"
+                  tokens:
+                    $ref: "#/components/schemas/TokenPair"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Account scheduled for deletion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/device:
+    post:
+      tags: [Auth]
+      summary: Anonymous device authentication
+      description: Creates or returns an anonymous user based on device ID.
+      operationId: deviceAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_id]
+              properties:
+                device_id:
+                  type: string
+                  example: "device-uuid-abc123"
+                language:
+                  type: string
+                  example: "en"
+      responses:
+        "200":
+          description: Device authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/User"
+                  tokens:
+                    $ref: "#/components/schemas/TokenPair"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: Tokens refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tokens:
+                    $ref: "#/components/schemas/TokenPair"
+        "401":
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/google:
+    post:
+      tags: [Auth]
+      summary: Google Sign-In
+      operationId: googleAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id_token]
+              properties:
+                id_token:
+                  type: string
+                  description: Google ID token from client SDK
+      responses:
+        "200":
+          description: Google auth successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/User"
+                  tokens:
+                    $ref: "#/components/schemas/TokenPair"
+        "401":
+          description: Invalid Google token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Account scheduled for deletion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Google Sign-In not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/apple:
+    post:
+      tags: [Auth]
+      summary: Apple Sign-In
+      operationId: appleAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+                  description: Apple authorization code
+                id_token:
+                  type: string
+                  description: Apple ID token
+      responses:
+        "200":
+          description: Apple auth successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/User"
+                  tokens:
+                    $ref: "#/components/schemas/TokenPair"
+        "400":
+          description: Either code or id_token is required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Invalid Apple token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Account scheduled for deletion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Apple Sign-In not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────── Users (Protected) ────────────
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get current user profile
+      operationId: getMe
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [Users]
+      summary: Delete account (GDPR soft delete)
+      description: Schedules account for deletion with a 30-day grace period.
+      operationId: deleteAccount
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Deletion scheduled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Account scheduled for deletion"
+                  grace_period:
+                    type: string
+                    example: "30 days"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /users/me/restore:
+    post:
+      tags: [Users]
+      summary: Restore a deleted account
+      description: Cancels pending deletion within the 30-day grace period.
+      operationId: restoreAccount
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Account restored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Account restored successfully"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────── Purchases (Protected) ────────────
+  /purchases/verify:
+    post:
+      tags: [Purchases]
+      summary: Verify an in-app purchase
+      operationId: verifyPurchase
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform, transaction_id, receipt, type, price]
+              properties:
+                platform:
+                  type: string
+                  example: "ios"
+                transaction_id:
+                  type: string
+                  example: "txn_abc123"
+                receipt:
+                  type: string
+                type:
+                  type: string
+                  enum: [city_pack, subscription, lifetime]
+                city_id:
+                  type: integer
+                  nullable: true
+                  description: Required for city_pack purchases
+                price:
+                  type: number
+                  format: double
+                  minimum: 0
+                  exclusiveMinimum: true
+                  example: 4.99
+      responses:
+        "201":
+          description: Purchase verified and recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Purchase"
+        "400":
+          description: Invalid receipt or request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Transaction already processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /purchases/status:
+    get:
+      tags: [Purchases]
+      summary: Get purchase/access status
+      operationId: getPurchaseStatus
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Current purchase status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/PurchaseStatus"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────── Admin: Cities ────────────
+  /admin/cities:
+    post:
+      tags: ["Admin: Cities"]
+      summary: Create a city
+      operationId: adminCreateCity
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, country, center_lat, center_lng, radius_km, download_size_mb]
+              properties:
+                name:
+                  type: string
+                name_ru:
+                  type: string
+                country:
+                  type: string
+                center_lat:
+                  type: number
+                  format: double
+                center_lng:
+                  type: number
+                  format: double
+                radius_km:
+                  type: number
+                  format: double
+                is_active:
+                  type: boolean
+                download_size_mb:
+                  type: number
+                  format: double
+      responses:
+        "201":
+          description: City created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/City"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /admin/cities/{id}:
+    put:
+      tags: ["Admin: Cities"]
+      summary: Update a city
+      operationId: adminUpdateCity
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, country, center_lat, center_lng, radius_km, download_size_mb]
+              properties:
+                name:
+                  type: string
+                name_ru:
+                  type: string
+                country:
+                  type: string
+                center_lat:
+                  type: number
+                  format: double
+                center_lng:
+                  type: number
+                  format: double
+                radius_km:
+                  type: number
+                  format: double
+                is_active:
+                  type: boolean
+                download_size_mb:
+                  type: number
+                  format: double
+      responses:
+        "200":
+          description: City updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/City"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: City not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: ["Admin: Cities"]
+      summary: Delete a city
+      operationId: adminDeleteCity
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: City deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "city deleted"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: City not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────── Admin: POIs ────────────
+  /admin/pois:
+    post:
+      tags: ["Admin: POIs"]
+      summary: Create a POI
+      operationId: adminCreatePOI
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [city_id, name, lat, lng, type]
+              properties:
+                city_id:
+                  type: integer
+                name:
+                  type: string
+                name_ru:
+                  type: string
+                lat:
+                  type: number
+                  format: double
+                lng:
+                  type: number
+                  format: double
+                type:
+                  type: string
+                  enum: [building, street, park, monument, church, bridge, square, museum, district, other]
+                tags:
+                  type: object
+                address:
+                  type: string
+                interest_score:
+                  type: integer
+                  format: int16
+                status:
+                  type: string
+                  enum: [active, disabled, pending_review]
+      responses:
+        "201":
+          description: POI created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/POI"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /admin/pois/{id}:
+    put:
+      tags: ["Admin: POIs"]
+      summary: Update a POI
+      operationId: adminUpdatePOI
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [city_id, name, lat, lng, type]
+              properties:
+                city_id:
+                  type: integer
+                name:
+                  type: string
+                name_ru:
+                  type: string
+                lat:
+                  type: number
+                  format: double
+                lng:
+                  type: number
+                  format: double
+                type:
+                  type: string
+                  enum: [building, street, park, monument, church, bridge, square, museum, district, other]
+                tags:
+                  type: object
+                address:
+                  type: string
+                interest_score:
+                  type: integer
+                  format: int16
+                status:
+                  type: string
+                  enum: [active, disabled, pending_review]
+      responses:
+        "200":
+          description: POI updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/POI"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: POI not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: ["Admin: POIs"]
+      summary: Delete a POI
+      operationId: adminDeletePOI
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: POI deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "POI deleted"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: POI not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────── Admin: Stories ────────────
+  /admin/stories:
+    post:
+      tags: ["Admin: Stories"]
+      summary: Create a story
+      operationId: adminCreateStory
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [poi_id, language, text, layer_type]
+              properties:
+                poi_id:
+                  type: integer
+                language:
+                  type: string
+                text:
+                  type: string
+                audio_url:
+                  type: string
+                duration_sec:
+                  type: integer
+                  format: int16
+                layer_type:
+                  type: string
+                  enum: [atmosphere, human_story, hidden_detail, time_shift, general]
+                order_index:
+                  type: integer
+                  format: int16
+                is_inflation:
+                  type: boolean
+                confidence:
+                  type: integer
+                  format: int16
+                sources:
+                  type: object
+                status:
+                  type: string
+                  enum: [active, disabled, reported, pending_review]
+      responses:
+        "201":
+          description: Story created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Story"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /admin/stories/{id}:
+    put:
+      tags: ["Admin: Stories"]
+      summary: Update a story
+      operationId: adminUpdateStory
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [poi_id, language, text, layer_type]
+              properties:
+                poi_id:
+                  type: integer
+                language:
+                  type: string
+                text:
+                  type: string
+                audio_url:
+                  type: string
+                duration_sec:
+                  type: integer
+                  format: int16
+                layer_type:
+                  type: string
+                  enum: [atmosphere, human_story, hidden_detail, time_shift, general]
+                order_index:
+                  type: integer
+                  format: int16
+                is_inflation:
+                  type: boolean
+                confidence:
+                  type: integer
+                  format: int16
+                sources:
+                  type: object
+                status:
+                  type: string
+                  enum: [active, disabled, reported, pending_review]
+      responses:
+        "200":
+          description: Story updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Story"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Story not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: ["Admin: Stories"]
+      summary: Delete a story
+      operationId: adminDeleteStory
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Story deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "story deleted"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Story not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────── Admin: Reports ────────────
+  /admin/reports:
+    get:
+      tags: ["Admin: Reports"]
+      summary: List reports
+      operationId: adminListReports
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [new, reviewed, resolved, dismissed]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Paginated list of reports
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Report"
+                  meta:
+                    $ref: "#/components/schemas/PaginationMeta"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /admin/reports/{id}:
+    put:
+      tags: ["Admin: Reports"]
+      summary: Update report status
+      operationId: adminUpdateReportStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [new, reviewed, resolved, dismissed]
+      responses:
+        "200":
+          description: Report status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Report"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /admin/pois/{id}/reports:
+    get:
+      tags: ["Admin: Reports"]
+      summary: List reports for a specific POI
+      operationId: adminListReportsByPOI
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: POI ID
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Reports for the POI
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Report"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────── Admin: Inflation ────────────
+  /admin/pois/{id}/inflate:
+    post:
+      tags: ["Admin: Inflation"]
+      summary: Trigger AI story inflation for a POI
+      description: Creates an inflation job to generate additional story segments using AI.
+      operationId: adminTriggerInflation
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: POI ID
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Inflation job created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/InflationJob"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: POI not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /admin/pois/{id}/inflation-jobs:
+    get:
+      tags: ["Admin: Inflation"]
+      summary: List inflation jobs for a POI
+      operationId: adminListInflationJobsByPOI
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: POI ID
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Inflation jobs for the POI
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/InflationJob"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"

@@ -1748,3 +1748,27 @@
   - app.json содержит bundleIdentifier и package (pass)
   - Background location usage description присутствует в iOS infoPlist (pass)
   - Android permissions настроены для location и foreground service (pass)
+
+### TASK-060: OpenAPI/Swagger спецификация для REST API
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создан `backend/api/openapi.yaml` — полная OpenAPI 3.0.3 спецификация (34 пути, 15 схем)
+  - Все endpoints покрыты: health, nearby, cities, POIs, stories, listenings, reports, device-tokens, auth, users, purchases, admin CRUD, inflation jobs
+  - Request/Response schemas описаны полностью с типами, enum, nullable, required, примерами
+  - Auth requirements указаны: BearerAuth для protected и admin endpoints
+  - Создан `backend/api/spec.go` — Go embed для встраивания YAML в бинарник
+  - Создан `backend/internal/handler/swagger_handler.go` — обслуживает:
+    - GET `/api/openapi.yaml` — raw YAML спецификация
+    - GET `/api/docs/*any` — Swagger UI (gin-swagger + swagger-files)
+  - Установлены зависимости: `swaggo/gin-swagger` v1.6.1, `swaggo/files` v1.0.1
+  - `cmd/api/main.go` обновлён: `handler.RegisterSwagger(r)` зарегистрирован после health endpoints
+- **Тесты**:
+  - Swagger UI на /api/docs/index.html — HTTP 200 (pass)
+  - OpenAPI spec на /api/openapi.yaml — HTTP 200, корректный YAML (pass)
+  - Все 34 endpoint'а описаны (34 path, соответствует main.go) (pass)
+  - YAML валидация: OpenAPI 3.0.3, 34 paths, 15 schemas (pass)
+  - `npx tsc --noEmit` (mobile + admin) — 0 ошибок (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make test` — все тесты пройдены (pass)
+  - `make build` — оба бинарника собираются (pass)

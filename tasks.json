@@ -1347,7 +1347,7 @@
         "Шаг 4: Валидировать openapi.yaml через online validator"
       ],
       "dependencies": ["TASK-021", "TASK-022"],
-      "status": "pending"
+      "status": "done"
     }
   ]
 }

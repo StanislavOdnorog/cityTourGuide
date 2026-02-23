@@ -143,6 +143,9 @@ func run() error {
 	r.GET("/healthz", healthHandler.Healthz)
 	r.GET("/readyz", healthHandler.Readyz)
 
+	// Swagger UI & OpenAPI spec
+	handler.RegisterSwagger(r)
+
 	// API v1 routes — public
 	v1 := r.Group("/api/v1")
 	v1.Use(apiRateLimiter.Middleware())
