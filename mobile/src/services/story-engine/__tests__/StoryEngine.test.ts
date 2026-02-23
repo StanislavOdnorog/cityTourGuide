@@ -1,6 +1,6 @@
+import type { NearbyStoryCandidate } from '@/types';
 import { StoryEngine } from '../StoryEngine';
 import type { StoryFetcher, StoryPlayer, ListeningTracker, LocationUpdate } from '../StoryEngine';
-import type { NearbyStoryCandidate } from '@/types';
 
 function makeCandidate(overrides: Partial<NearbyStoryCandidate> = {}): NearbyStoryCandidate {
   return {
@@ -108,9 +108,7 @@ describe('StoryEngine', () => {
 
   it('tracks listening when story completes', async () => {
     const { fetcher, player, tracker, trackedListenings } = createMocks();
-    (fetcher.fetchNearbyStories as jest.Mock).mockResolvedValue([
-      makeCandidate({ story_id: 7 }),
-    ]);
+    (fetcher.fetchNearbyStories as jest.Mock).mockResolvedValue([makeCandidate({ story_id: 7 })]);
     const engine = new StoryEngine(fetcher, player, tracker);
     engine.start();
 
@@ -187,9 +185,7 @@ describe('StoryEngine', () => {
 
   it('sets currentStory while playing and clears on completion', async () => {
     const { fetcher, player, tracker } = createMocks();
-    (fetcher.fetchNearbyStories as jest.Mock).mockResolvedValue([
-      makeCandidate({ story_id: 3 }),
-    ]);
+    (fetcher.fetchNearbyStories as jest.Mock).mockResolvedValue([makeCandidate({ story_id: 3 })]);
     const engine = new StoryEngine(fetcher, player, tracker);
     engine.start();
 
@@ -215,9 +211,7 @@ describe('StoryEngine', () => {
 
   it('does not trigger after stop', async () => {
     const { fetcher, player, tracker } = createMocks();
-    (fetcher.fetchNearbyStories as jest.Mock).mockResolvedValue([
-      makeCandidate({ story_id: 1 }),
-    ]);
+    (fetcher.fetchNearbyStories as jest.Mock).mockResolvedValue([makeCandidate({ story_id: 1 })]);
     const engine = new StoryEngine(fetcher, player, tracker);
     engine.start();
     engine.stop();
@@ -229,9 +223,7 @@ describe('StoryEngine', () => {
 
   it('reset clears all state', async () => {
     const { fetcher, player, tracker } = createMocks();
-    (fetcher.fetchNearbyStories as jest.Mock).mockResolvedValue([
-      makeCandidate({ story_id: 1 }),
-    ]);
+    (fetcher.fetchNearbyStories as jest.Mock).mockResolvedValue([makeCandidate({ story_id: 1 })]);
     const engine = new StoryEngine(fetcher, player, tracker);
     engine.start();
     await engine.onLocationUpdate(makeLocation());

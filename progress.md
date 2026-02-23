@@ -832,3 +832,32 @@
   - `npm run format:check` — все файлы корректно отформатированы (pass)
   - `npm run build` — production билд создаётся без ошибок (pass)
   - `npm run typecheck` — 0 ошибок типов (pass)
+
+### TASK-006: Настройка ESLint + Prettier + lint-staged для мобильного приложения
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Установлены ESLint v9.39, Prettier v3.8, lint-staged v16.2, husky v9.1
+  - Установлены плагины: @typescript-eslint v8.56, eslint-plugin-react v7.37, eslint-plugin-react-hooks v7.0, eslint-plugin-react-native v5.0, eslint-plugin-import v2.32, eslint-import-resolver-typescript v4.4, eslint-config-prettier v10.1, globals v17.3
+  - `eslint.config.js` создан (flat config формат ESLint v9):
+    - @typescript-eslint/no-explicit-any: error
+    - @typescript-eslint/no-unused-vars: error (с игнорированием `_` префикса)
+    - react-hooks/rules-of-hooks: error, exhaustive-deps: warn
+    - react-native/no-unused-styles: error, no-inline-styles: error
+    - import/order: error (groups: builtin → external → internal → parent → sibling → index, alphabetize asc)
+    - react/react-in-jsx-scope: off, react/prop-types: off
+    - eslint-config-prettier для отключения конфликтующих правил
+  - `.prettierrc.json` создан: semi, singleQuote, trailingComma all, printWidth 100, tabWidth 2, endOfLine lf
+  - `.prettierignore` создан: node_modules, .expo, dist, android, ios, coverage
+  - Добавлены npm scripts: `lint`, `lint:fix`, `format`, `format:check`
+  - `prepare` script: `cd .. && husky mobile/.husky` — инициализирует husky из поддиректории монорепо
+  - `lint-staged` настроен в package.json: TS/TSX файлы → eslint --fix + prettier --write, JSON → prettier --write
+  - Husky pre-commit hook: `cd mobile && npx lint-staged`
+  - Все 24 ESLint ошибки исправлены: import order (15 auto-fixed, 6 manual), unused vars (3), no-this-alias (1)
+  - Все существующие файлы отформатированы Prettier
+- **Тесты**:
+  - `npm run lint` — 0 ошибок (pass)
+  - Добавить `any` в файл → `npm run lint` — ошибка `@typescript-eslint/no-explicit-any` (pass)
+  - `npm run format:check` — все файлы корректно отформатированы (pass)
+  - `tsc --noEmit` — 0 ошибок типов (pass)
+  - `npm test` — 194/194 тестов PASS (pass)

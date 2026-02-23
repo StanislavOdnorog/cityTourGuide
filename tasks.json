@@ -148,7 +148,7 @@
         "Шаг 4: git commit — lint-staged срабатывает автоматически"
       ],
       "dependencies": ["TASK-005"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-007",

@@ -23,7 +23,10 @@ describe('useWalkStore', () => {
   it('stopWalking sets isWalking to false and clears location', () => {
     useWalkStore.getState().startWalking();
     useWalkStore.getState().updateLocation({
-      lat: 41.7, lng: 44.8, heading: 90, speed: 1.2,
+      lat: 41.7,
+      lng: 44.8,
+      heading: 90,
+      speed: 1.2,
     });
     useWalkStore.getState().stopWalking();
 
@@ -42,7 +45,10 @@ describe('useWalkStore', () => {
 
   it('updateLocation replaces previous location', () => {
     useWalkStore.getState().updateLocation({
-      lat: 41.7, lng: 44.8, heading: 90, speed: 1.0,
+      lat: 41.7,
+      lng: 44.8,
+      heading: 90,
+      speed: 1.0,
     });
     const newLoc = { lat: 41.72, lng: 44.83, heading: 180, speed: 1.5 };
     useWalkStore.getState().updateLocation(newLoc);

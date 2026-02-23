@@ -1,5 +1,5 @@
-import { usePlayerStore } from '../usePlayerStore';
 import type { ScoredCandidate } from '@/services/story-engine';
+import { usePlayerStore } from '../usePlayerStore';
 
 const mockCandidate: ScoredCandidate = {
   poi_id: 1,

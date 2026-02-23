@@ -1,9 +1,9 @@
+/* eslint-disable import/order -- imports must be split around jest.mock calls */
 import type { ScoredCandidate } from '@/services/story-engine';
-
 // --- Mock react-native-track-player ---
 
 let mockState = 'idle';
-let mockVolume = 1.0;
+let _mockVolume = 1.0;
 let mockTracks: Array<Record<string, unknown>> = [];
 let mockProgress = { position: 0, duration: 0, buffered: 0 };
 
@@ -23,10 +23,10 @@ const _pause = jest.fn().mockImplementation(async () => {
 const _reset = jest.fn().mockImplementation(async () => {
   mockState = 'idle';
   mockTracks = [];
-  mockVolume = 1.0;
+  _mockVolume = 1.0;
 });
 const _setVolume = jest.fn().mockImplementation(async (vol: number) => {
-  mockVolume = vol;
+  _mockVolume = vol;
 });
 const _getPlaybackState = jest.fn().mockImplementation(async () => ({ state: mockState }));
 const _getProgress = jest.fn().mockImplementation(async () => mockProgress);
@@ -112,7 +112,7 @@ function emitEvent(event: string, data?: unknown): void {
 
 function resetMocks(): void {
   mockState = 'idle';
-  mockVolume = 1.0;
+  _mockVolume = 1.0;
   mockTracks = [];
   mockProgress = { position: 0, duration: 0, buffered: 0 };
   eventListeners.clear();

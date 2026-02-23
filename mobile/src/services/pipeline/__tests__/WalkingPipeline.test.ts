@@ -1,7 +1,8 @@
+/* eslint-disable import/order -- imports must be split around jest.mock calls */
 import type { ScoredCandidate } from '@/services/story-engine';
-import type { NearbyStoryCandidate } from '@/types';
-import { useWalkStore } from '@/store/useWalkStore';
 import { usePlayerStore } from '@/store/usePlayerStore';
+import { useWalkStore } from '@/store/useWalkStore';
+import type { NearbyStoryCandidate } from '@/types';
 
 // --- Mocks ---
 
@@ -46,15 +47,15 @@ jest.mock('react-native-track-player', () => ({
       state: mockTrackPlayerState,
     })),
     getProgress: jest.fn().mockResolvedValue({ position: 0, duration: 0, buffered: 0 }),
-    addEventListener: jest.fn().mockImplementation(
-      (event: string, handler: (...args: unknown[]) => void) => {
+    addEventListener: jest
+      .fn()
+      .mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
         if (!mockTrackPlayerEventListeners.has(event)) {
           mockTrackPlayerEventListeners.set(event, []);
         }
         mockTrackPlayerEventListeners.get(event)!.push(handler);
         return { remove: jest.fn() };
-      },
-    ),
+      }),
   },
   Capability: { Play: 'play', Pause: 'pause', Stop: 'stop' },
   Event: {
@@ -80,10 +81,10 @@ jest.mock('@/api/endpoints', () => ({
 }));
 
 // Import after mocks
-import { LocationTracker } from '@/services/location';
 import { AudioPlayer } from '@/services/audio';
-import { WalkingPipeline } from '../WalkingPipeline';
+import { LocationTracker } from '@/services/location';
 import type { StoryFetcher } from '@/services/story-engine';
+import { WalkingPipeline } from '../WalkingPipeline';
 
 function makeCandidate(overrides: Partial<NearbyStoryCandidate> = {}): NearbyStoryCandidate {
   return {
@@ -471,8 +472,13 @@ describe('WalkingPipeline', () => {
       // First location update → should play story_id=10 (highest score)
       locationTracker.processLocationObject({
         coords: {
-          latitude: 41.7, longitude: 44.8, heading: 90, speed: 1.2,
-          altitude: null, accuracy: 10, altitudeAccuracy: null,
+          latitude: 41.7,
+          longitude: 44.8,
+          heading: 90,
+          speed: 1.2,
+          altitude: null,
+          accuracy: 10,
+          altitudeAccuracy: null,
         },
         timestamp: Date.now(),
       });
@@ -496,8 +502,13 @@ describe('WalkingPipeline', () => {
       mockFetchNearby.mockResolvedValue([candidate1, candidate2]);
       locationTracker.processLocationObject({
         coords: {
-          latitude: 41.71, longitude: 44.81, heading: 90, speed: 1.2,
-          altitude: null, accuracy: 10, altitudeAccuracy: null,
+          latitude: 41.71,
+          longitude: 44.81,
+          heading: 90,
+          speed: 1.2,
+          altitude: null,
+          accuracy: 10,
+          altitudeAccuracy: null,
         },
         timestamp: Date.now(),
       });
@@ -518,8 +529,13 @@ describe('WalkingPipeline', () => {
       // Play first story
       locationTracker.processLocationObject({
         coords: {
-          latitude: 41.7, longitude: 44.8, heading: 90, speed: 1.2,
-          altitude: null, accuracy: 10, altitudeAccuracy: null,
+          latitude: 41.7,
+          longitude: 44.8,
+          heading: 90,
+          speed: 1.2,
+          altitude: null,
+          accuracy: 10,
+          altitudeAccuracy: null,
         },
         timestamp: Date.now(),
       });
@@ -540,8 +556,13 @@ describe('WalkingPipeline', () => {
 
       locationTracker.processLocationObject({
         coords: {
-          latitude: 41.71, longitude: 44.81, heading: 90, speed: 1.2,
-          altitude: null, accuracy: 10, altitudeAccuracy: null,
+          latitude: 41.71,
+          longitude: 44.81,
+          heading: 90,
+          speed: 1.2,
+          altitude: null,
+          accuracy: 10,
+          altitudeAccuracy: null,
         },
         timestamp: Date.now(),
       });
@@ -593,7 +614,7 @@ describe('WalkingPipeline', () => {
       usePlayerStore.getState().setIsPlaying(true);
 
       // Trigger error callback
-      const errorHandlers = mockTrackPlayerEventListeners.get('remote-stop') ?? [];
+      const _errorHandlers = mockTrackPlayerEventListeners.get('remote-stop') ?? [];
       // Actually, let's trigger via the onError callback that pipeline set
       // AudioPlayer onError is called when play() gets a candidate without audio_url
       const candidateNoAudio = makeCandidate({ audio_url: null });
@@ -601,8 +622,13 @@ describe('WalkingPipeline', () => {
 
       locationTracker.processLocationObject({
         coords: {
-          latitude: 41.7, longitude: 44.8, heading: 90, speed: 1.2,
-          altitude: null, accuracy: 10, altitudeAccuracy: null,
+          latitude: 41.7,
+          longitude: 44.8,
+          heading: 90,
+          speed: 1.2,
+          altitude: null,
+          accuracy: 10,
+          altitudeAccuracy: null,
         },
         timestamp: Date.now(),
       });

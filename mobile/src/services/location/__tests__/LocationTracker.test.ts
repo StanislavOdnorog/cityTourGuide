@@ -1,5 +1,5 @@
 import { LocationTracker } from '../LocationTracker';
-import type { LocationUpdate, LocationCallback } from '../LocationTracker';
+import type { LocationUpdate } from '../LocationTracker';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -16,10 +16,8 @@ jest.mock('expo-location', () => ({
     mockRequestForegroundPermissionsAsync(...args),
   requestBackgroundPermissionsAsync: (...args: unknown[]) =>
     mockRequestBackgroundPermissionsAsync(...args),
-  getForegroundPermissionsAsync: (...args: unknown[]) =>
-    mockGetForegroundPermissionsAsync(...args),
-  getBackgroundPermissionsAsync: (...args: unknown[]) =>
-    mockGetBackgroundPermissionsAsync(...args),
+  getForegroundPermissionsAsync: (...args: unknown[]) => mockGetForegroundPermissionsAsync(...args),
+  getBackgroundPermissionsAsync: (...args: unknown[]) => mockGetBackgroundPermissionsAsync(...args),
   watchPositionAsync: (...args: unknown[]) => mockWatchPositionAsync(...args),
   startLocationUpdatesAsync: (...args: unknown[]) => mockStartLocationUpdatesAsync(...args),
   stopLocationUpdatesAsync: (...args: unknown[]) => mockStopLocationUpdatesAsync(...args),
@@ -37,13 +35,15 @@ jest.mock('expo-task-manager', () => ({
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function makeLocationObject(overrides: {
-  latitude?: number;
-  longitude?: number;
-  speed?: number;
-  heading?: number;
-  timestamp?: number;
-} = {}) {
+function makeLocationObject(
+  overrides: {
+    latitude?: number;
+    longitude?: number;
+    speed?: number;
+    heading?: number;
+    timestamp?: number;
+  } = {},
+) {
   return {
     coords: {
       latitude: overrides.latitude ?? 41.7151,
@@ -63,9 +63,7 @@ function grantAllPermissions() {
   mockGetBackgroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
 }
 
-function createStartedTracker(
-  config?: Partial<ConstructorParameters<typeof LocationTracker>[0]>,
-) {
+function createStartedTracker(config?: Partial<ConstructorParameters<typeof LocationTracker>[0]>) {
   const tracker = new LocationTracker(config);
   grantAllPermissions();
   mockWatchPositionAsync.mockResolvedValue({ remove: jest.fn() });

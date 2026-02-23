@@ -65,12 +65,9 @@ export class AudioPlayer {
   }
 
   private subscribeToEvents(): void {
-    this.playbackEndSubscription = TrackPlayer.addEventListener(
-      Event.PlaybackQueueEnded,
-      () => {
-        this.handlePlaybackComplete(true);
-      },
-    );
+    this.playbackEndSubscription = TrackPlayer.addEventListener(Event.PlaybackQueueEnded, () => {
+      this.handlePlaybackComplete(true);
+    });
 
     this.remotePlaySubscription = TrackPlayer.addEventListener(Event.RemotePlay, async () => {
       await TrackPlayer.play();

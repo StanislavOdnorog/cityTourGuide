@@ -1,3 +1,6 @@
+import { fetchNearbyStories } from '@/api/endpoints';
+import { trackListening as trackListeningApi } from '@/api/endpoints';
+import { AudioPlayer } from '@/services/audio';
 import { LocationTracker, type LocationUpdate as TrackerLocationUpdate } from '@/services/location';
 import {
   StoryEngine,
@@ -6,11 +9,8 @@ import {
   type ListeningTracker,
   type ScoredCandidate,
 } from '@/services/story-engine';
-import { AudioPlayer } from '@/services/audio';
-import { fetchNearbyStories } from '@/api/endpoints';
-import { trackListening as trackListeningApi } from '@/api/endpoints';
-import { useWalkStore } from '@/store/useWalkStore';
 import { usePlayerStore } from '@/store/usePlayerStore';
+import { useWalkStore } from '@/store/useWalkStore';
 
 export interface WalkingPipelineConfig {
   radiusM: number;
@@ -180,9 +180,7 @@ export class WalkingPipeline {
 /**
  * Factory: creates a WalkingPipeline with default real dependencies.
  */
-export function createWalkingPipeline(
-  config?: Partial<WalkingPipelineConfig>,
-): WalkingPipeline {
+export function createWalkingPipeline(config?: Partial<WalkingPipelineConfig>): WalkingPipeline {
   const locationTracker = new LocationTracker();
   const audioPlayer = new AudioPlayer();
   const fetcher: StoryFetcher = { fetchNearbyStories };

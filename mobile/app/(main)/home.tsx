@@ -1,12 +1,5 @@
 import { useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  Animated,
-  Easing,
-} from 'react-native';
+import { View, Text, StyleSheet, Pressable, Animated, Easing } from 'react-native';
 import { useHomeScreen } from '@/hooks/useHomeScreen';
 
 const CITY_NAME = 'Tbilisi';
@@ -54,25 +47,14 @@ function PulseIndicator() {
 
   return (
     <View style={styles.pulseContainer}>
-      <Animated.View
-        style={[
-          styles.pulseRing,
-          { transform: [{ scale }], opacity },
-        ]}
-      />
+      <Animated.View style={[styles.pulseRing, { transform: [{ scale }], opacity }]} />
       <View style={styles.pulseDot} />
     </View>
   );
 }
 
 export default function HomeScreen() {
-  const {
-    isWalking,
-    isPlaying,
-    currentStoryName,
-    listenedCount,
-    toggleWalking,
-  } = useHomeScreen();
+  const { isWalking, isPlaying, currentStoryName, listenedCount, toggleWalking } = useHomeScreen();
 
   return (
     <View style={styles.container}>
@@ -88,9 +70,7 @@ export default function HomeScreen() {
           <View style={styles.listeningSection}>
             <PulseIndicator />
             <Text style={styles.listeningText}>
-              {isPlaying && currentStoryName
-                ? currentStoryName
-                : 'Listening...'}
+              {isPlaying && currentStoryName ? currentStoryName : 'Listening...'}
             </Text>
           </View>
         )}
@@ -105,9 +85,7 @@ export default function HomeScreen() {
           accessibilityRole="button"
           accessibilityLabel={isWalking ? 'Stop Walking' : 'Start Walking'}
         >
-          <Text style={styles.mainButtonText}>
-            {isWalking ? 'Stop' : 'Start Walking'}
-          </Text>
+          <Text style={styles.mainButtonText}>{isWalking ? 'Stop' : 'Start Walking'}</Text>
         </Pressable>
       </View>
 

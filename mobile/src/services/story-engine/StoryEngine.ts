@@ -1,6 +1,6 @@
 import type { NearbyStoryCandidate } from '@/types';
-import { scoreAndRankCandidates, type ScoredCandidate } from './ScoringAlgorithm';
 import { PacingManager } from './PacingManager';
+import { scoreAndRankCandidates, type ScoredCandidate } from './ScoringAlgorithm';
 
 export interface LocationUpdate {
   lat: number;

@@ -1,4 +1,3 @@
-import apiClient from './client';
 import type {
   NearbyStoryCandidate,
   NearbyStoriesResponse,
@@ -6,6 +5,7 @@ import type {
   ReportStoryRequest,
   City,
 } from '@/types';
+import apiClient from './client';
 
 export interface FetchNearbyStoriesParams {
   lat: number;

@@ -14,7 +14,12 @@ export type POIType =
 
 export type POIStatus = 'active' | 'disabled' | 'pending_review';
 
-export type StoryLayerType = 'atmosphere' | 'human_story' | 'hidden_detail' | 'time_shift' | 'general';
+export type StoryLayerType =
+  | 'atmosphere'
+  | 'human_story'
+  | 'hidden_detail'
+  | 'time_shift'
+  | 'general';
 
 export type StoryStatus = 'active' | 'disabled' | 'reported' | 'pending_review';
 

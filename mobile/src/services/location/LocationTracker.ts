@@ -45,7 +45,10 @@ let activeTracker: LocationTracker | null = null;
  */
 TaskManager.defineTask(
   BACKGROUND_LOCATION_TASK,
-  async ({ data, error }: TaskManager.TaskManagerTaskBody<{ locations: Location.LocationObject[] }>) => {
+  async ({
+    data,
+    error,
+  }: TaskManager.TaskManagerTaskBody<{ locations: Location.LocationObject[] }>) => {
     if (error) return;
     if (!data || !activeTracker) return;
 
@@ -120,7 +123,7 @@ export class LocationTracker {
       throw new Error('Location permissions not granted');
     }
 
-    activeTracker = this;
+    activeTracker = this; // eslint-disable-line @typescript-eslint/no-this-alias
     this.state = 'active';
     this.lastMovementTimestamp = Date.now();
 

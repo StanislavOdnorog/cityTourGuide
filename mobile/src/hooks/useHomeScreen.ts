@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { useWalkStore } from '@/store/useWalkStore';
-import { usePlayerStore } from '@/store/usePlayerStore';
 import { createWalkingPipeline, type WalkingPipeline } from '@/services/pipeline';
+import { usePlayerStore } from '@/store/usePlayerStore';
+import { useWalkStore } from '@/store/useWalkStore';
 
 interface HomeScreenState {
   isWalking: boolean;

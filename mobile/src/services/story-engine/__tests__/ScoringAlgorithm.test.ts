@@ -1,3 +1,4 @@
+import type { NearbyStoryCandidate } from '@/types';
 import {
   bearing,
   angleDiff,
@@ -6,7 +7,6 @@ import {
   calculateScore,
   scoreAndRankCandidates,
 } from '../ScoringAlgorithm';
-import type { NearbyStoryCandidate } from '@/types';
 
 function makeCandidate(overrides: Partial<NearbyStoryCandidate> = {}): NearbyStoryCandidate {
   return {

@@ -1,1 +1,5 @@
-export { WalkingPipeline, createWalkingPipeline, type WalkingPipelineConfig } from './WalkingPipeline';
+export {
+  WalkingPipeline,
+  createWalkingPipeline,
+  type WalkingPipelineConfig,
+} from './WalkingPipeline';

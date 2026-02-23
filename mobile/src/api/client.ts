@@ -10,9 +10,7 @@ export function setTokens(access: string | null, refresh: string | null): void {
   refreshToken = refresh;
 }
 
-export function setRefreshHandler(
-  handler: (token: string) => Promise<string | null>,
-): void {
+export function setRefreshHandler(handler: (token: string) => Promise<string | null>): void {
   onRefreshToken = handler;
 }
 
@@ -55,7 +53,12 @@ apiClient.interceptors.response.use(
       _retry?: boolean;
     };
 
-    if (error.response?.status === 401 && !originalRequest._retry && refreshToken && onRefreshToken) {
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      refreshToken &&
+      onRefreshToken
+    ) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({

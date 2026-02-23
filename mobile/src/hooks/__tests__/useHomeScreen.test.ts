@@ -1,6 +1,6 @@
-import { useWalkStore } from '@/store/useWalkStore';
-import { usePlayerStore } from '@/store/usePlayerStore';
 import type { ScoredCandidate } from '@/services/story-engine';
+import { usePlayerStore } from '@/store/usePlayerStore';
+import { useWalkStore } from '@/store/useWalkStore';
 
 /**
  * Tests for useHomeScreen hook logic.
@@ -136,7 +136,10 @@ describe('useHomeScreen – store integration', () => {
     it('clearing walking also clears location', () => {
       useWalkStore.getState().startWalking();
       useWalkStore.getState().updateLocation({
-        lat: 41.7, lng: 44.8, heading: 90, speed: 1.2,
+        lat: 41.7,
+        lng: 44.8,
+        heading: 90,
+        speed: 1.2,
       });
       useWalkStore.getState().stopWalking();
 
