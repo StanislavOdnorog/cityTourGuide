@@ -748,6 +748,32 @@
   - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
   - Полный E2E запуск с реальными API требует running infrastructure (PostgreSQL, MinIO, Claude API key, ElevenLabs API key) — будет протестирован в TASK-031
 
+### TASK-007: Инициализация React Admin Panel: Vite + React + TypeScript + Ant Design
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Vite проект создан через `npm create vite@latest admin -- --template react-ts` (Vite 7.3.1, React 19.2, TypeScript 5.9)
+  - Ant Design v6 (antd + @ant-design/icons) установлен
+  - React Router v7 (react-router-dom) установлен и настроен (BrowserRouter, Routes, Route)
+  - TanStack Query v5 (@tanstack/react-query) установлен и настроен (QueryClientProvider, staleTime 30s)
+  - TypeScript strict mode включён в tsconfig.app.json и tsconfig.node.json
+  - Базовая структура src/ создана: api, pages, components, hooks, store, utils, types, constants — каждая с index.ts
+  - `src/App.tsx`: ConfigProvider (Ant Design), App (Ant Design), QueryClientProvider, BrowserRouter, Layout с Sider + Menu + Content
+  - `src/pages/DashboardPage.tsx`: базовая страница с Typography компонентами
+  - `src/pages/NotFoundPage.tsx`: 404 страница с Result компонентом Ant Design
+  - `src/main.tsx`: entry point с StrictMode
+  - `src/constants/index.ts`: API_BASE_URL из VITE_API_BASE_URL env (default localhost:8080)
+  - Добавлен script `typecheck` в package.json
+  - Удалены дефолтные Vite файлы (App.css, index.css, assets/react.svg)
+- **Тесты**:
+  - `tsc -b` — 0 ошибок типов (pass)
+  - `npm run build` — production билд создаётся без ошибок (pass)
+  - `npm run lint` — 0 ошибок ESLint (pass)
+  - Ant Design компоненты: Layout, Sider, Menu, Typography, Result, Button, ConfigProvider (pass — code review)
+  - React Router: BrowserRouter + Routes (/ → Dashboard, * → NotFound) (pass — code review)
+  - TanStack Query: QueryClientProvider с QueryClient (pass — code review)
+  - Структура src/: api, pages, components, hooks, store, utils, types, constants (pass)
+
 ### TASK-022: Handlers: CRUD API для cities, POIs, stories (admin endpoints)
 - **Дата**: 2026-02-23
 - **Статус**: done

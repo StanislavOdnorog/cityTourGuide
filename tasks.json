@@ -170,7 +170,7 @@
         "Шаг 4: npm run build — production билд создаётся без ошибок"
       ],
       "dependencies": ["TASK-001"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-008",
