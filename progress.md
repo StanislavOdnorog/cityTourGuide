@@ -679,3 +679,43 @@
   - `make lint` — 0 ошибок (pass)
   - `make build` — оба бинарника скомпилированы (pass)
   - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
+
+### TASK-029: Интеграция ElevenLabs API: Text-to-Speech генерация аудио
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создан `internal/platform/elevenlabs/client.go` — ElevenLabs TTS API клиент
+  - Метод `GenerateAudio(ctx, text, language) → *AudioResult{Audio io.Reader, Duration}`
+  - **Выбор голоса**: EN и RU голоса через Config (default: Rachel `21m00Tcm4TlvDq8ikWAM`, multilingual model handles both)
+  - **Модель**: `eleven_multilingual_v2` (multilingual v2, поддерживает EN и RU)
+  - **Voice settings**: stability 0.5, similarity_boost 0.75, style 0.3 (configurable)
+  - **Retry с exponential backoff**: 3 попытки, backoff 1s→2s→4s, retry на 429/5xx, не retry на 4xx
+  - **Заголовки**: `xi-api-key`, `Content-Type: application/json`, `Accept: audio/mpeg`
+  - **Валидация**: пустой текст → ошибка, пустой audio response → ошибка
+  - **APIError**: форматирование с truncation (200 символов)
+  - HTTP клиент с 120 сек timeout (TTS может быть медленным)
+  - Config: APIKey, BaseURL, ModelID, VoiceEN, VoiceRU, Stability, Similarity, Style
+  - Исправлен `TestGenerateAudio_ContextCanceled` — заменён blocking handler на slow response для корректного закрытия httptest.Server
+- **Тесты**:
+  - `go test -v -race ./internal/platform/elevenlabs/...` — 20/20 тестов PASS (pass)
+  - GenerateAudio EN — MP3 данные возвращаются корректно (pass)
+  - GenerateAudio RU — используется ru-voice-id (pass)
+  - Пустой текст → ошибка "elevenlabs: text is required" (pass)
+  - Voice selection: EN voice для en/fr, RU voice для ru (pass)
+  - Headers: xi-api-key, Content-Type, Accept проверены (pass)
+  - Request body: text, model_id, voice_settings (stability, similarity, style) (pass)
+  - Default config: все значения по умолчанию корректны (pass)
+  - Custom config: все значения переопределяются (pass)
+  - Retry 429: 2 failures → 3rd success (pass)
+  - Retry 500: 1 failure → 2nd success (pass)
+  - No retry on 400: 1 attempt only (pass)
+  - Max retries exhausted: 3 attempts → error (pass)
+  - Context canceled: timeout → error (pass)
+  - Empty audio response → error (pass)
+  - APIError format и truncation (pass)
+  - Model in request body (pass)
+  - BaseURL trailing slash trimmed (pass)
+  - Non-EN language defaults to EN voice (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make build` — оба бинарника скомпилированы (pass)
+  - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)

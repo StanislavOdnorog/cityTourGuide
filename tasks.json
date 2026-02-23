@@ -654,7 +654,7 @@
         "Шаг 4: GenerateAudio для RU текста — русский голос"
       ],
       "dependencies": ["TASK-023", "TASK-015"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-030",
