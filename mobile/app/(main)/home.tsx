@@ -61,15 +61,26 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable
-          onPress={() =>
-            router.push({ pathname: '/(main)/city', params: { cityId: String(CITY_ID) } })
-          }
-          accessibilityRole="button"
-          accessibilityLabel="Open city map"
-        >
-          <Text style={styles.cityName}>{CITY_NAME}</Text>
-        </Pressable>
+        <View style={styles.headerRow}>
+          <View style={styles.headerSpacer} />
+          <Pressable
+            onPress={() =>
+              router.push({ pathname: '/(main)/city', params: { cityId: String(CITY_ID) } })
+            }
+            accessibilityRole="button"
+            accessibilityLabel="Open city map"
+          >
+            <Text style={styles.cityName}>{CITY_NAME}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => router.push('/(main)/settings')}
+            style={styles.settingsButton}
+            accessibilityRole="button"
+            accessibilityLabel="Open settings"
+          >
+            <Text style={styles.settingsIcon}>{'⚙'}</Text>
+          </Pressable>
+        </View>
         <Text style={styles.storyStat}>
           {listenedCount} {listenedCount === 1 ? 'story' : 'stories'} listened
         </Text>
@@ -116,6 +127,25 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  headerSpacer: {
+    width: 48,
+  },
+  settingsButton: {
+    width: 48,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settingsIcon: {
+    fontSize: 22,
+    color: '#888888',
   },
   cityName: {
     fontSize: 18,

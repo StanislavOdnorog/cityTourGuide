@@ -13,6 +13,8 @@ describe('useSettingsStore', () => {
     useSettingsStore.setState({
       language: 'en',
       onboardingCompleted: false,
+      geoNotifications: true,
+      contentNotifications: true,
       _hasHydrated: false,
     });
   });
@@ -21,6 +23,8 @@ describe('useSettingsStore', () => {
     const state = useSettingsStore.getState();
     expect(state.language).toBe('en');
     expect(state.onboardingCompleted).toBe(false);
+    expect(state.geoNotifications).toBe(true);
+    expect(state.contentNotifications).toBe(true);
   });
 
   it('setLanguage changes language to ru', () => {
@@ -64,5 +68,38 @@ describe('useSettingsStore', () => {
     const originalId = useSettingsStore.getState().deviceId;
     useSettingsStore.getState().setLanguage('ru');
     expect(useSettingsStore.getState().deviceId).toBe(originalId);
+  });
+
+  it('setGeoNotifications disables geo notifications', () => {
+    useSettingsStore.getState().setGeoNotifications(false);
+    expect(useSettingsStore.getState().geoNotifications).toBe(false);
+  });
+
+  it('setGeoNotifications re-enables geo notifications', () => {
+    useSettingsStore.getState().setGeoNotifications(false);
+    useSettingsStore.getState().setGeoNotifications(true);
+    expect(useSettingsStore.getState().geoNotifications).toBe(true);
+  });
+
+  it('setContentNotifications disables content notifications', () => {
+    useSettingsStore.getState().setContentNotifications(false);
+    expect(useSettingsStore.getState().contentNotifications).toBe(false);
+  });
+
+  it('setContentNotifications re-enables content notifications', () => {
+    useSettingsStore.getState().setContentNotifications(false);
+    useSettingsStore.getState().setContentNotifications(true);
+    expect(useSettingsStore.getState().contentNotifications).toBe(true);
+  });
+
+  it('notification settings persist across language changes', () => {
+    useSettingsStore.getState().setGeoNotifications(false);
+    useSettingsStore.getState().setContentNotifications(false);
+    useSettingsStore.getState().setLanguage('ru');
+
+    const state = useSettingsStore.getState();
+    expect(state.geoNotifications).toBe(false);
+    expect(state.contentNotifications).toBe(false);
+    expect(state.language).toBe('ru');
   });
 });

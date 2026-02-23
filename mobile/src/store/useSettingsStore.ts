@@ -16,12 +16,16 @@ interface SettingsState {
   language: AppLanguage;
   onboardingCompleted: boolean;
   deviceId: string;
+  geoNotifications: boolean;
+  contentNotifications: boolean;
   _hasHydrated: boolean;
 }
 
 interface SettingsActions {
   setLanguage: (language: AppLanguage) => void;
   completeOnboarding: () => void;
+  setGeoNotifications: (enabled: boolean) => void;
+  setContentNotifications: (enabled: boolean) => void;
   setHasHydrated: (value: boolean) => void;
 }
 
@@ -31,10 +35,14 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
       language: 'en',
       onboardingCompleted: false,
       deviceId: generateDeviceId(),
+      geoNotifications: true,
+      contentNotifications: true,
       _hasHydrated: false,
 
       setLanguage: (language) => set({ language }),
       completeOnboarding: () => set({ onboardingCompleted: true }),
+      setGeoNotifications: (enabled) => set({ geoNotifications: enabled }),
+      setContentNotifications: (enabled) => set({ contentNotifications: enabled }),
       setHasHydrated: (value) => set({ _hasHydrated: value }),
     }),
     {
@@ -44,6 +52,8 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
         language: state.language,
         onboardingCompleted: state.onboardingCompleted,
         deviceId: state.deviceId,
+        geoNotifications: state.geoNotifications,
+        contentNotifications: state.contentNotifications,
       }),
       onRehydrateStorage: () => () => {
         useSettingsStore.setState({ _hasHydrated: true });

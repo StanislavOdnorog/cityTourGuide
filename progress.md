@@ -1541,3 +1541,24 @@
   - `npx jest` — 277 тестов, все пройдены (254 existing + 23 new) (pass)
   - usePurchaseStore: hasFullAccess, canListenFree, hasCityAccess, decrementFreeStories (pass)
   - FreemiumTracker: daily reset, limit enforcement, persistence (pass)
+
+### TASK-041: Mobile: Settings Screen (язык, уведомления, кэш, аккаунт)
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создан `app/(main)/settings.tsx` — полноценный экран настроек с тёмной темой
+  - **Секция Language**: EN/RU toggle с визуальным переключателем (сегментированный контрол)
+  - **Секция Notifications**: отдельные Switch для geo-уведомлений ("Nearby stories") и content-уведомлений ("New content") с описаниями
+  - **Секция Cache**: отображение размера кэша (X MB / 100 MB), количество файлов, кнопка "Clear Cache" с Alert-подтверждением и ActivityIndicator
+  - **Секция Subscription**: статус покупки (Free / Lifetime / Monthly / City Packs), счётчик бесплатных историй
+  - **Секция Account**: тип аккаунта (Anonymous)
+  - Расширен `useSettingsStore` — добавлены `geoNotifications` и `contentNotifications` (boolean) с persist в AsyncStorage
+  - Добавлена навигация: gear icon (⚙) в header Home Screen → push `/(main)/settings`
+  - Обновлён `src/store/index.ts` — добавлены экспорты `useCacheStore` и `useDownloadStore`
+  - Обновлены unit-тесты `useSettingsStore.test.ts` — 5 новых тестов для notification settings
+- **Тесты**:
+  - `npx tsc --noEmit` — 0 ошибок типов (pass)
+  - `npx jest` — 282/282 тестов PASS, 17 suites (pass)
+  - `npm run lint` — 0 ошибок ESLint (pass)
+  - useSettingsStore: geoNotifications toggle, contentNotifications toggle, persistence across state changes (pass)
+  - Все acceptance criteria выполнены: язык переключается и сохраняется, уведомления вкл/выкл по типам, кэш отображается и очищается с подтверждением, статус покупок показывается

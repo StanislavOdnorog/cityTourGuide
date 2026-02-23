@@ -922,7 +922,7 @@
         "Шаг 4: Проверить отображение статуса покупок"
       ],
       "dependencies": ["TASK-037"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-042",
