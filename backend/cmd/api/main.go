@@ -12,6 +12,7 @@ import (
 
 	"github.com/saas/city-stories-guide/backend/internal/config"
 	"github.com/saas/city-stories-guide/backend/internal/handler"
+	"github.com/saas/city-stories-guide/backend/internal/middleware"
 	"github.com/saas/city-stories-guide/backend/internal/repository"
 	"github.com/saas/city-stories-guide/backend/internal/service"
 )
@@ -48,15 +49,25 @@ func run() error {
 	poiRepo := repository.NewPOIRepo(pool)
 	storyRepo := repository.NewStoryRepo(pool)
 	listeningRepo := repository.NewListeningRepo(pool)
+	userRepo := repository.NewUserRepo(pool)
 
 	// Initialize services
 	nearbyService := service.NewNearbyService(poiRepo, storyRepo, listeningRepo)
+	authService := service.NewAuthService(userRepo, service.AuthConfig{
+		Secret:     cfg.JWT.Secret,
+		AccessTTL:  cfg.JWT.AccessTTL,
+		RefreshTTL: cfg.JWT.RefreshTTL,
+	})
 
 	// Initialize handlers
 	nearbyHandler := handler.NewNearbyHandler(nearbyService)
 	cityHandler := handler.NewCityHandler(cityRepo)
 	poiHandler := handler.NewPOIHandler(poiRepo)
 	storyHandler := handler.NewStoryHandler(storyRepo)
+	authHandler := handler.NewAuthHandler(authService)
+
+	// Rate limiter: 5 requests per minute for auth endpoints
+	authRateLimiter := middleware.NewRateLimiter(5, time.Minute)
 
 	gin.SetMode(cfg.Server.Mode)
 	r := gin.Default()
@@ -75,8 +86,17 @@ func run() error {
 	v1.GET("/stories", storyHandler.ListStories)
 	v1.GET("/stories/:id", storyHandler.GetStory)
 
-	// API v1 routes — admin (auth middleware will be added in a separate task)
+	// Auth routes with rate limiting
+	auth := v1.Group("/auth")
+	auth.Use(authRateLimiter.Middleware())
+	auth.POST("/register", authHandler.Register)
+	auth.POST("/login", authHandler.Login)
+	auth.POST("/device", authHandler.DeviceAuth)
+	auth.POST("/refresh", authHandler.Refresh)
+
+	// API v1 routes — admin (protected with JWT)
 	admin := v1.Group("/admin")
+	admin.Use(middleware.JWTAuth(authService))
 	admin.POST("/cities", cityHandler.CreateCity)
 	admin.PUT("/cities/:id", cityHandler.UpdateCity)
 	admin.DELETE("/cities/:id", cityHandler.DeleteCity)

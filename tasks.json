@@ -566,7 +566,7 @@
         "Шаг 5: 6 запросов /auth/login за минуту — 429"
       ],
       "dependencies": ["TASK-017"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-026",

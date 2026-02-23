@@ -861,3 +861,60 @@
   - `npm run format:check` — все файлы корректно отформатированы (pass)
   - `tsc --noEmit` — 0 ошибок типов (pass)
   - `npm test` — 194/194 тестов PASS (pass)
+
+### TASK-025: JWT-аутентификация: middleware, анонимные пользователи, регистрация
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Миграция `000010_add_password_hash_to_users` — добавлен столбец `password_hash TEXT` в таблицу users
+  - Обновлена domain-модель `User` — добавлен `PasswordHash *string` с `json:"-"` (не утекает в JSON)
+  - Установлен `golang-jwt/jwt/v5` v5.3.1 для работы с JWT токенами
+  - Создан `internal/repository/user_repo.go` — CRUD: Create, GetByID, GetByEmail, CreateAnonymous (UPSERT по device UUID)
+  - Создан `internal/service/auth_service.go` — полная логика аутентификации:
+    - `Register(email, password, name)` — bcrypt хэширование, создание пользователя, генерация JWT пары
+    - `Login(email, password)` — проверка email, bcrypt.CompareHashAndPassword, генерация JWT
+    - `DeviceAuth(deviceID, language)` — создание/получение анонимного пользователя по device UUID
+    - `RefreshTokens(refreshToken)` — валидация refresh token, проверка существования пользователя, новая JWT пара
+    - `ValidateAccessToken(token)` — валидация access token, возврат user ID
+    - JWT tokens: HS256, type claim (`access`/`refresh`), sub (user ID), exp, iat
+    - Sentinel errors: ErrInvalidCredentials, ErrEmailAlreadyExists, ErrInvalidToken
+  - Создан `internal/handler/auth_handler.go` — 4 HTTP endpoint'а:
+    - POST /api/v1/auth/register — email+password+name, gin binding валидация (email, min=8 password), 201
+    - POST /api/v1/auth/login — email+password, 200 с JWT парой
+    - POST /api/v1/auth/device — device_id+language, создание анонимного пользователя, 200
+    - POST /api/v1/auth/refresh — refresh_token, 200 с новой JWT парой
+    - Email нормализация: lowercase + trim
+    - Правильные HTTP коды: 400, 401, 409, 500
+  - Создан `internal/middleware/auth.go` — JWT middleware:
+    - `JWTAuth(validator)` — обязательная аутентификация, 401 при отсутствии/невалидности токена
+    - `OptionalJWTAuth(validator)` — опциональная, не блокирует без токена
+    - Парсинг `Authorization: Bearer <token>`, case-insensitive "bearer"
+    - Проверка пустого токена после "Bearer "
+    - user_id устанавливается в gin.Context
+  - Создан `internal/middleware/ratelimit.go` — IP-based rate limiter:
+    - Конфигурируемый лимит и окно (5 req/min для auth)
+    - Background cleanup горутина
+    - 429 Too Many Requests при превышении
+  - `cmd/api/main.go` обновлён:
+    - Инициализация userRepo, authService, authHandler, authRateLimiter
+    - Auth routes: /api/v1/auth/* с rate limiting middleware
+    - Admin routes: /api/v1/admin/* защищены JWTAuth middleware
+  - **Тестовое покрытие**: 50 новых unit-тестов:
+    - 17 тестов auth_service: register, login, device, refresh, validate, bcrypt, token types, wrong secret
+    - 16 тестов auth_handler: register (success, missing fields, invalid email, short password, duplicate, error), login (success, invalid, missing), device (success, missing), refresh (success, invalid, missing), email normalization
+    - 10 тестов middleware/auth: valid token, missing header, invalid format (3 sub), invalid token, case-insensitive, context user_id, optional with/without/invalid
+    - 6 тестов middleware/ratelimit: within limit, over limit, different IPs, window expiry, response body
+- **Тесты**:
+  - POST /api/v1/auth/register — 201, токены получены, password_hash не в JSON (pass)
+  - POST /api/v1/auth/login — 200, новые токены (pass)
+  - GET /api/v1/nearby-stories с Bearer token — 200 (pass)
+  - POST /api/v1/admin/cities без токена — 401 "authorization header required" (pass)
+  - POST /api/v1/admin/cities с Bearer token — 200, город создан (pass)
+  - 6 запросов /auth/login за минуту — 4-6 получают 429 (pass)
+  - `go test -race ./internal/handler/...` — 69/69 тестов PASS (16 новых + 53 existing) (pass)
+  - `go test -race ./internal/service/...` — 46/46 тестов PASS (17 новых + 29 existing) (pass)
+  - `go test -race ./internal/middleware/...` — 16/16 тестов PASS (pass)
+  - `make lint` — 0 ошибок (pass)
+  - `make build` — оба бинарника скомпилированы (pass)
+  - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
+  - `tsc -b` (admin) — 0 ошибок типов (pass)

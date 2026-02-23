@@ -16,6 +16,7 @@ type User struct {
 	ID           string       `json:"id"` // UUID
 	Email        *string      `json:"email"`
 	Name         *string      `json:"name"`
+	PasswordHash *string      `json:"-"` // never expose in JSON
 	AuthProvider AuthProvider `json:"auth_provider"`
 	LanguagePref string       `json:"language_pref"`
 	IsAnonymous  bool         `json:"is_anonymous"`
