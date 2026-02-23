@@ -1071,3 +1071,22 @@
   - `cd admin && npx tsc --noEmit` — 0 ошибок типов (pass)
   - `cd admin && npm run lint` — 0 ошибок (pass)
   - `cd admin && npm run build` — production билд успешно (pass)
+
+### TASK-050: Admin Panel: Dashboard и карта POI (Leaflet)
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Установлены `leaflet`, `react-leaflet`, `react-leaflet-cluster`, `@types/leaflet`
+  - `src/types/index.ts` — добавлены TypeScript типы: City, POI, Story, Report, PaginatedResponse, PaginationMeta, все ENUM типы (POIType, POIStatus, StoryLayerType, StoryStatus, ReportType, ReportStatus)
+  - `src/hooks/useDashboardStats.ts` — TanStack Query hook для загрузки статистики (cities count, POIs count, stories count, reports count) через существующие API endpoints
+  - `src/hooks/useCities.ts` — TanStack Query hook для загрузки списка городов
+  - `src/hooks/usePOIs.ts` — TanStack Query hook для загрузки POI с пагинацией и фильтрами (city_id, status, type)
+  - `src/pages/DashboardPage.tsx` — статистические карточки (4 метрики с иконками и цветами), таблица городов (Ant Design Table)
+  - `src/pages/POIMapPage.tsx` — полноэкранная карта Leaflet с: MarkerClusterGroup для кластеризации, цветные SVG-маркеры по типу POI, Popup с деталями POI при клике (name, type, status, interest score, address, координаты), фильтры по городу/типу/статусу (Select dropdowns), автовыбор первого города, счётчик POI
+  - `src/App.tsx` — добавлен маршрут `/poi-map` и пункт меню "POI Map" с иконкой EnvironmentOutlined
+  - Исправлены проблемы с иконками Leaflet (webpack/vite fix через import image assets)
+- **Тесты**:
+  - `npx tsc --noEmit --project tsconfig.app.json` — 0 ошибок типов (pass)
+  - `npm run lint` — 0 ошибок ESLint (pass)
+  - `npm run format:check` — все файлы отформатированы корректно (pass)
+  - `npm run build` — production билд создаётся без ошибок (pass)

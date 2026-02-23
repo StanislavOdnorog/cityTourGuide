@@ -1125,7 +1125,7 @@
         "Шаг 5: Применить фильтр по типу — маркеры фильтруются"
       ],
       "dependencies": ["TASK-049", "TASK-022"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-051",

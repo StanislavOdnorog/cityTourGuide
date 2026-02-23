@@ -1,18 +1,12 @@
-import { DashboardOutlined, LogoutOutlined } from '@ant-design/icons';
+import { DashboardOutlined, EnvironmentOutlined, LogoutOutlined } from '@ant-design/icons';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ConfigProvider, App as AntApp, Layout, Menu, Button, theme } from 'antd';
 import { useEffect } from 'react';
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
-  useNavigate,
-  useLocation,
-} from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
+import POIMapPage from './pages/POIMapPage';
 import { useAuthStore } from './store/authStore';
 
 const { Header, Content, Sider } = Layout;
@@ -26,7 +20,10 @@ const queryClient = new QueryClient({
   },
 });
 
-const menuItems = [{ key: '/', icon: <DashboardOutlined />, label: 'Dashboard' }];
+const menuItems = [
+  { key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
+  { key: '/poi-map', icon: <EnvironmentOutlined />, label: 'POI Map' },
+];
 
 function AppLayout() {
   const navigate = useNavigate();
@@ -64,9 +61,7 @@ function AppLayout() {
             alignItems: 'center',
           }}
         >
-          {user?.email && (
-            <span style={{ marginRight: 16, color: '#666' }}>{user.email}</span>
-          )}
+          {user?.email && <span style={{ marginRight: 16, color: '#666' }}>{user.email}</span>}
           <Button icon={<LogoutOutlined />} onClick={handleLogout}>
             Logout
           </Button>
@@ -74,6 +69,7 @@ function AppLayout() {
         <Content style={{ margin: 24 }}>
           <Routes>
             <Route path="/" element={<DashboardPage />} />
+            <Route path="/poi-map" element={<POIMapPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Content>
