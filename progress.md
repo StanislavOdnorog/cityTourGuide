@@ -1386,3 +1386,36 @@
   - `npx jest` — 254 теста, 15 test suites, все пройдены (pass)
   - `go test ./...` — все Go тесты пройдены (pass)
   - `make lint` — 0 ошибок Go lint (pass)
+
+### TASK-046: Backend: OAuth 2.0 — Google и Apple Sign-In
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - **Миграция**: `000013_add_provider_id_to_users` — добавляет `provider_id VARCHAR(255)` в users, создаёт unique index `idx_users_provider` по (auth_provider, provider_id) для быстрого поиска OAuth пользователей
+  - **Domain model**: добавлено поле `ProviderID *string` в `domain.User` (json: `provider_id,omitempty`)
+  - **Repository**: обновлены все SQL-запросы Create/GetByID/GetByEmail/CreateAnonymous для включения `provider_id`; новый метод `GetByProviderID(ctx, provider, providerID)` — поиск пользователя по OAuth provider + provider-specific ID
+  - **Platform OAuth code**: создан пакет `internal/platform/oauth/`:
+    - `jwks.go` — JWKSCache: кэширование RSA публичных ключей из JWKS endpoints (Google/Apple), thread-safe, TTL 1 час, автоматическая ротация ключей
+    - `google.go` — GoogleVerifier: верификация Google ID token через JWKS (RS256), проверка issuer (accounts.google.com), audience (client_id), извлечение sub/email/name
+    - `apple.go` — AppleVerifier: обмен authorization_code на id_token через Apple token endpoint, генерация client_secret JWT (ES256 с ECDSA ключом), верификация id_token через Apple JWKS, поддержка прямой верификации id_token от мобильного SDK
+    - `adapter.go` — адаптеры GoogleHandlerAdapter/AppleHandlerAdapter для связи platform → handler интерфейсов
+  - **Config**: добавлен `OAuthConfig` с полями GoogleClientID, AppleClientID, AppleTeamID, AppleKeyID, ApplePrivateKey; загрузка из ENV переменных (GOOGLE_CLIENT_ID, APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY)
+  - **Service**: добавлен метод `OAuthLogin(ctx, provider, claims)` в AuthService — find-or-create паттерн: ищет по provider+providerID, при первом входе создаёт нового пользователя, при повторном — возвращает существующего + JWT пару
+  - **Handler**: добавлены 2 новых endpoint'а:
+    - `POST /api/v1/auth/google` — принимает `{id_token}`, верифицирует через Google JWKS, вызывает OAuthLogin
+    - `POST /api/v1/auth/apple` — принимает `{code}` или `{id_token}`, верифицирует через Apple, вызывает OAuthLogin
+    - Graceful degradation: если OAuth provider не сконфигурирован → 503 "not configured"
+    - GoogleVerifier/AppleVerifier инжектируются через SetGoogleVerifier/SetAppleVerifier
+  - **Routes**: зарегистрированы `/auth/google` и `/auth/apple` в auth group с rate limiting
+  - **main.go**: условная инициализация OAuth verifiers (только если ENV переменные заданы), логирование "Google/Apple Sign-In enabled"
+  - **Тестовое покрытие**: 14 новых unit-тестов:
+    - 4 теста auth_service: OAuthLogin new user (Google), existing user (повторный вход — тот же user_id), Apple new user, no email still works
+    - 10 тестов auth_handler: GoogleAuth success/invalid token/missing token/not configured, AppleAuth with code/with id_token/invalid token/missing both/not configured
+  - Все существующие тесты обновлены: mock interfaces расширены (OAuthLogin, GetByProviderID)
+- **Тесты**:
+  - `go build ./...` — компиляция всех пакетов успешна (pass)
+  - `go test -v ./internal/handler/` — 24/24 тестов PASS (10 новых OAuth + 14 existing) (pass)
+  - `go test -v ./internal/service/` — 21/21 тестов PASS (4 новых OAuth + 17 existing) (pass)
+  - `go test ./...` — все тесты проходят (pass)
+  - `tsc --noEmit` (mobile) — 0 ошибок типов (pass)
+  - `tsc --noEmit` (admin) — 0 ошибок типов (pass)

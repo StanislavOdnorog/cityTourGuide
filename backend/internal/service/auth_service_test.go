@@ -13,6 +13,7 @@ import (
 type mockUserRepo struct {
 	users         map[string]*domain.User
 	emailIndex    map[string]*domain.User
+	providerIndex map[string]*domain.User // key: "provider:providerID"
 	createErr     error
 	getByIDErr    error
 	getByEmailErr error
@@ -20,8 +21,9 @@ type mockUserRepo struct {
 
 func newMockUserRepo() *mockUserRepo {
 	return &mockUserRepo{
-		users:      make(map[string]*domain.User),
-		emailIndex: make(map[string]*domain.User),
+		users:         make(map[string]*domain.User),
+		emailIndex:    make(map[string]*domain.User),
+		providerIndex: make(map[string]*domain.User),
 	}
 }
 
@@ -36,6 +38,9 @@ func (m *mockUserRepo) Create(_ context.Context, user *domain.User) (*domain.Use
 	m.users[u.ID] = &u
 	if u.Email != nil {
 		m.emailIndex[*u.Email] = &u
+	}
+	if u.ProviderID != nil {
+		m.providerIndex[string(u.AuthProvider)+":"+*u.ProviderID] = &u
 	}
 	return &u, nil
 }
@@ -56,6 +61,15 @@ func (m *mockUserRepo) GetByEmail(_ context.Context, email string) (*domain.User
 		return nil, m.getByEmailErr
 	}
 	u, ok := m.emailIndex[email]
+	if !ok {
+		return nil, repository.ErrNotFound
+	}
+	return u, nil
+}
+
+func (m *mockUserRepo) GetByProviderID(_ context.Context, provider domain.AuthProvider, providerID string) (*domain.User, error) {
+	key := string(provider) + ":" + providerID
+	u, ok := m.providerIndex[key]
 	if !ok {
 		return nil, repository.ErrNotFound
 	}
@@ -375,5 +389,117 @@ func TestAuthService_Register_PasswordHashed(t *testing.T) {
 	}
 	if *user.PasswordHash == "password123" {
 		t.Error("password should be hashed, not stored in plain text")
+	}
+}
+
+func TestAuthService_OAuthLogin_NewUser(t *testing.T) {
+	repo := newMockUserRepo()
+	svc := NewAuthService(repo, testConfig())
+
+	claims := &OAuthClaims{
+		Sub:   "google-user-id-123",
+		Email: "user@gmail.com",
+		Name:  "Google User",
+	}
+
+	user, tokens, err := svc.OAuthLogin(context.Background(), domain.AuthProviderGoogle, claims)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if user == nil {
+		t.Fatal("user should not be nil")
+	}
+	if user.AuthProvider != domain.AuthProviderGoogle {
+		t.Errorf("expected google provider, got %s", user.AuthProvider)
+	}
+	if user.ProviderID == nil || *user.ProviderID != "google-user-id-123" {
+		t.Errorf("expected provider_id google-user-id-123, got %v", user.ProviderID)
+	}
+	if user.Email == nil || *user.Email != "user@gmail.com" {
+		t.Errorf("expected email user@gmail.com, got %v", user.Email)
+	}
+	if user.Name == nil || *user.Name != "Google User" {
+		t.Errorf("expected name Google User, got %v", user.Name)
+	}
+	if user.IsAnonymous {
+		t.Error("OAuth user should not be anonymous")
+	}
+	if tokens == nil || tokens.AccessToken == "" {
+		t.Error("tokens should not be nil/empty")
+	}
+}
+
+func TestAuthService_OAuthLogin_ExistingUser(t *testing.T) {
+	repo := newMockUserRepo()
+	svc := NewAuthService(repo, testConfig())
+
+	claims := &OAuthClaims{
+		Sub:   "google-user-id-123",
+		Email: "user@gmail.com",
+		Name:  "Google User",
+	}
+
+	// First login — creates user
+	user1, _, err := svc.OAuthLogin(context.Background(), domain.AuthProviderGoogle, claims)
+	if err != nil {
+		t.Fatalf("first login failed: %v", err)
+	}
+
+	// Second login — returns same user
+	user2, tokens2, err := svc.OAuthLogin(context.Background(), domain.AuthProviderGoogle, claims)
+	if err != nil {
+		t.Fatalf("second login failed: %v", err)
+	}
+
+	if user2.ID != user1.ID {
+		t.Errorf("expected same user ID %s, got %s", user1.ID, user2.ID)
+	}
+	if tokens2 == nil || tokens2.AccessToken == "" {
+		t.Error("tokens should not be nil/empty on second login")
+	}
+}
+
+func TestAuthService_OAuthLogin_AppleNewUser(t *testing.T) {
+	repo := newMockUserRepo()
+	svc := NewAuthService(repo, testConfig())
+
+	claims := &OAuthClaims{
+		Sub:   "apple-user-id-456",
+		Email: "user@icloud.com",
+	}
+
+	user, tokens, err := svc.OAuthLogin(context.Background(), domain.AuthProviderApple, claims)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if user.AuthProvider != domain.AuthProviderApple {
+		t.Errorf("expected apple provider, got %s", user.AuthProvider)
+	}
+	if user.ProviderID == nil || *user.ProviderID != "apple-user-id-456" {
+		t.Errorf("expected provider_id apple-user-id-456, got %v", user.ProviderID)
+	}
+	if tokens == nil || tokens.AccessToken == "" {
+		t.Error("tokens should not be nil/empty")
+	}
+}
+
+func TestAuthService_OAuthLogin_NoEmailStillWorks(t *testing.T) {
+	repo := newMockUserRepo()
+	svc := NewAuthService(repo, testConfig())
+
+	// Apple may not provide email on subsequent logins
+	claims := &OAuthClaims{
+		Sub: "apple-user-id-789",
+	}
+
+	user, _, err := svc.OAuthLogin(context.Background(), domain.AuthProviderApple, claims)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if user.Email != nil {
+		t.Errorf("expected nil email, got %v", user.Email)
 	}
 }

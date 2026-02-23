@@ -18,7 +18,15 @@ type AuthUserRepository interface {
 	Create(ctx context.Context, user *domain.User) (*domain.User, error)
 	GetByID(ctx context.Context, id string) (*domain.User, error)
 	GetByEmail(ctx context.Context, email string) (*domain.User, error)
+	GetByProviderID(ctx context.Context, provider domain.AuthProvider, providerID string) (*domain.User, error)
 	CreateAnonymous(ctx context.Context, deviceID, languagePref string) (*domain.User, error)
+}
+
+// OAuthClaims holds common claims extracted from an OAuth provider's token.
+type OAuthClaims struct {
+	Sub   string
+	Email string
+	Name  string
 }
 
 // AuthConfig holds JWT configuration for the auth service.
@@ -166,6 +174,51 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 	}
 
 	return s.generateTokenPair(user.ID, user.IsAdmin)
+}
+
+// OAuthLogin finds or creates a user for an OAuth provider and returns a JWT pair.
+// If the user already exists (matched by provider+providerID), it returns the existing user.
+// If the user is new, it creates one with the provider's claims.
+func (s *AuthService) OAuthLogin(ctx context.Context, provider domain.AuthProvider, claims *OAuthClaims) (*domain.User, *TokenPair, error) {
+	// Try to find existing user by provider + provider_id
+	user, err := s.repo.GetByProviderID(ctx, provider, claims.Sub)
+	if err == nil {
+		// Existing user found — generate tokens and return
+		tokens, tokenErr := s.generateTokenPair(user.ID, user.IsAdmin)
+		if tokenErr != nil {
+			return nil, nil, tokenErr
+		}
+		return user, tokens, nil
+	}
+	if !errors.Is(err, repository.ErrNotFound) {
+		return nil, nil, fmt.Errorf("auth: oauth lookup: %w", err)
+	}
+
+	// New user — create with OAuth provider info
+	newUser := &domain.User{
+		AuthProvider: provider,
+		ProviderID:   &claims.Sub,
+		LanguagePref: "en",
+		IsAnonymous:  false,
+	}
+	if claims.Email != "" {
+		newUser.Email = &claims.Email
+	}
+	if claims.Name != "" {
+		newUser.Name = &claims.Name
+	}
+
+	created, err := s.repo.Create(ctx, newUser)
+	if err != nil {
+		return nil, nil, fmt.Errorf("auth: oauth create user: %w", err)
+	}
+
+	tokens, err := s.generateTokenPair(created.ID, created.IsAdmin)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return created, tokens, nil
 }
 
 // ValidateAccessToken validates an access token and returns the user ID.

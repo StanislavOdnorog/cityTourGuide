@@ -18,16 +18,47 @@ type AuthService interface {
 	Login(ctx context.Context, email, password string) (*domain.User, *service.TokenPair, error)
 	DeviceAuth(ctx context.Context, deviceID string, language string) (*domain.User, *service.TokenPair, error)
 	RefreshTokens(ctx context.Context, refreshToken string) (*service.TokenPair, error)
+	OAuthLogin(ctx context.Context, provider domain.AuthProvider, claims *service.OAuthClaims) (*domain.User, *service.TokenPair, error)
+}
+
+// GoogleVerifier verifies Google ID tokens.
+type GoogleVerifier interface {
+	Verify(idToken string) (*OAuthResult, error)
+}
+
+// AppleVerifier verifies Apple Sign-In authorization codes or ID tokens.
+type AppleVerifier interface {
+	Verify(authorizationCode string) (*OAuthResult, error)
+	VerifyIDToken(idToken string) (*OAuthResult, error)
+}
+
+// OAuthResult holds the result of an OAuth token verification.
+type OAuthResult struct {
+	Sub   string
+	Email string
+	Name  string
 }
 
 // AuthHandler handles authentication HTTP endpoints.
 type AuthHandler struct {
-	auth AuthService
+	auth   AuthService
+	google GoogleVerifier
+	apple  AppleVerifier
 }
 
 // NewAuthHandler creates a new AuthHandler.
 func NewAuthHandler(auth AuthService) *AuthHandler {
 	return &AuthHandler{auth: auth}
+}
+
+// SetGoogleVerifier sets the Google OAuth verifier.
+func (h *AuthHandler) SetGoogleVerifier(v GoogleVerifier) {
+	h.google = v
+}
+
+// SetAppleVerifier sets the Apple Sign-In verifier.
+func (h *AuthHandler) SetAppleVerifier(v AppleVerifier) {
+	h.apple = v
 }
 
 type registerRequest struct {
@@ -141,6 +172,98 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"tokens": tokens,
+	})
+}
+
+type googleAuthRequest struct {
+	IDToken string `json:"id_token" binding:"required"`
+}
+
+// GoogleAuth handles POST /api/v1/auth/google.
+func (h *AuthHandler) GoogleAuth(c *gin.Context) {
+	if h.google == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "google sign-in not configured"})
+		return
+	}
+
+	var req googleAuthRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	result, err := h.google.Verify(req.IDToken)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid google token"})
+		return
+	}
+
+	user, tokens, err := h.auth.OAuthLogin(c.Request.Context(), domain.AuthProviderGoogle, &service.OAuthClaims{
+		Sub:   result.Sub,
+		Email: result.Email,
+		Name:  result.Name,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":   user,
+		"tokens": tokens,
+	})
+}
+
+type appleAuthRequest struct {
+	Code    string `json:"code"`
+	IDToken string `json:"id_token"`
+}
+
+// AppleAuth handles POST /api/v1/auth/apple.
+func (h *AuthHandler) AppleAuth(c *gin.Context) {
+	if h.apple == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "apple sign-in not configured"})
+		return
+	}
+
+	var req appleAuthRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Code == "" && req.IDToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "either code or id_token is required"})
+		return
+	}
+
+	var result *OAuthResult
+	var err error
+
+	if req.IDToken != "" {
+		result, err = h.apple.VerifyIDToken(req.IDToken)
+	} else {
+		result, err = h.apple.Verify(req.Code)
+	}
+
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid apple token"})
+		return
+	}
+
+	user, tokens, err := h.auth.OAuthLogin(c.Request.Context(), domain.AuthProviderApple, &service.OAuthClaims{
+		Sub:   result.Sub,
+		Email: result.Email,
+		Name:  result.Name,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":   user,
 		"tokens": tokens,
 	})
 }

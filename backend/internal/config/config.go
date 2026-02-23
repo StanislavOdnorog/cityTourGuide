@@ -19,6 +19,7 @@ type Config struct {
 	Claude     ClaudeConfig
 	ElevenLabs ElevenLabsConfig
 	JWT        JWTConfig
+	OAuth      OAuthConfig
 }
 
 // ServerConfig holds HTTP server settings.
@@ -58,6 +59,15 @@ type JWTConfig struct {
 	RefreshTTL time.Duration
 }
 
+// OAuthConfig holds OAuth provider settings.
+type OAuthConfig struct {
+	GoogleClientID  string
+	AppleClientID   string // App bundle ID
+	AppleTeamID     string
+	AppleKeyID      string
+	ApplePrivateKey string // PEM-encoded ECDSA private key
+}
+
 // Load reads configuration from environment variables.
 // It attempts to load a .env file if present (for local development).
 func Load() (*Config, error) {
@@ -89,6 +99,13 @@ func Load() (*Config, error) {
 			Secret:     os.Getenv("JWT_SECRET"),
 			AccessTTL:  getDurationEnv("JWT_ACCESS_TTL", 15*time.Minute),
 			RefreshTTL: getDurationEnv("JWT_REFRESH_TTL", 7*24*time.Hour),
+		},
+		OAuth: OAuthConfig{
+			GoogleClientID:  os.Getenv("GOOGLE_CLIENT_ID"),
+			AppleClientID:   os.Getenv("APPLE_CLIENT_ID"),
+			AppleTeamID:     os.Getenv("APPLE_TEAM_ID"),
+			AppleKeyID:      os.Getenv("APPLE_KEY_ID"),
+			ApplePrivateKey: os.Getenv("APPLE_PRIVATE_KEY"),
 		},
 	}
 

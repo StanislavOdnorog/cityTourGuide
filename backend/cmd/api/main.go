@@ -13,6 +13,7 @@ import (
 	"github.com/saas/city-stories-guide/backend/internal/config"
 	"github.com/saas/city-stories-guide/backend/internal/handler"
 	"github.com/saas/city-stories-guide/backend/internal/middleware"
+	"github.com/saas/city-stories-guide/backend/internal/platform/oauth"
 	"github.com/saas/city-stories-guide/backend/internal/repository"
 	"github.com/saas/city-stories-guide/backend/internal/service"
 )
@@ -67,6 +68,24 @@ func run() error {
 	poiHandler := handler.NewPOIHandler(poiRepo)
 	storyHandler := handler.NewStoryHandler(storyRepo)
 	authHandler := handler.NewAuthHandler(authService)
+
+	// Set up OAuth verifiers (only if configured)
+	if cfg.OAuth.GoogleClientID != "" {
+		googleVerifier := oauth.NewGoogleVerifier(cfg.OAuth.GoogleClientID, nil)
+		authHandler.SetGoogleVerifier(oauth.NewGoogleHandlerAdapter(googleVerifier))
+		log.Println("Google Sign-In enabled")
+	}
+	if cfg.OAuth.AppleClientID != "" {
+		appleVerifier := oauth.NewAppleVerifier(oauth.AppleConfig{
+			ClientID:   cfg.OAuth.AppleClientID,
+			TeamID:     cfg.OAuth.AppleTeamID,
+			KeyID:      cfg.OAuth.AppleKeyID,
+			PrivateKey: cfg.OAuth.ApplePrivateKey,
+		}, nil)
+		authHandler.SetAppleVerifier(oauth.NewAppleHandlerAdapter(appleVerifier))
+		log.Println("Apple Sign-In enabled")
+	}
+
 	listeningHandler := handler.NewListeningHandler(listeningRepo)
 	reportHandler := handler.NewReportHandler(reportRepo)
 	inflationHandler := handler.NewInflationHandler(inflationRepo)
@@ -112,6 +131,8 @@ func run() error {
 	auth.POST("/login", authHandler.Login)
 	auth.POST("/device", authHandler.DeviceAuth)
 	auth.POST("/refresh", authHandler.Refresh)
+	auth.POST("/google", authHandler.GoogleAuth)
+	auth.POST("/apple", authHandler.AppleAuth)
 
 	// API v1 routes — admin (protected with JWT + admin claim)
 	admin := v1.Group("/admin")

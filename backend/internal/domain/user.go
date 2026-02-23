@@ -18,6 +18,7 @@ type User struct {
 	Name         *string      `json:"name"`
 	PasswordHash *string      `json:"-"` // never expose in JSON
 	AuthProvider AuthProvider `json:"auth_provider"`
+	ProviderID   *string      `json:"provider_id,omitempty"` // OAuth provider user ID (Google sub, Apple sub)
 	LanguagePref string       `json:"language_pref"`
 	IsAnonymous  bool         `json:"is_anonymous"`
 	IsAdmin      bool         `json:"is_admin"`

@@ -24,9 +24,9 @@ func NewUserRepo(pool *pgxpool.Pool) *UserRepo {
 // Create inserts a new user and returns it with generated fields.
 func (r *UserRepo) Create(ctx context.Context, user *domain.User) (*domain.User, error) {
 	query := `
-		INSERT INTO users (email, name, password_hash, auth_provider, language_pref, is_anonymous)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id, email, name, password_hash, auth_provider, language_pref, is_anonymous, is_admin, created_at, updated_at`
+		INSERT INTO users (email, name, password_hash, auth_provider, provider_id, language_pref, is_anonymous)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id, email, name, password_hash, auth_provider, provider_id, language_pref, is_anonymous, is_admin, created_at, updated_at`
 
 	var u domain.User
 	err := r.pool.QueryRow(ctx, query,
@@ -34,6 +34,7 @@ func (r *UserRepo) Create(ctx context.Context, user *domain.User) (*domain.User,
 		user.Name,
 		user.PasswordHash,
 		user.AuthProvider,
+		user.ProviderID,
 		user.LanguagePref,
 		user.IsAnonymous,
 	).Scan(
@@ -42,6 +43,7 @@ func (r *UserRepo) Create(ctx context.Context, user *domain.User) (*domain.User,
 		&u.Name,
 		&u.PasswordHash,
 		&u.AuthProvider,
+		&u.ProviderID,
 		&u.LanguagePref,
 		&u.IsAnonymous,
 		&u.IsAdmin,
@@ -58,7 +60,7 @@ func (r *UserRepo) Create(ctx context.Context, user *domain.User) (*domain.User,
 // GetByID returns a user by their UUID.
 func (r *UserRepo) GetByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
-		SELECT id, email, name, password_hash, auth_provider, language_pref, is_anonymous, is_admin, created_at, updated_at
+		SELECT id, email, name, password_hash, auth_provider, provider_id, language_pref, is_anonymous, is_admin, created_at, updated_at
 		FROM users
 		WHERE id = $1`
 
@@ -69,6 +71,7 @@ func (r *UserRepo) GetByID(ctx context.Context, id string) (*domain.User, error)
 		&u.Name,
 		&u.PasswordHash,
 		&u.AuthProvider,
+		&u.ProviderID,
 		&u.LanguagePref,
 		&u.IsAnonymous,
 		&u.IsAdmin,
@@ -88,7 +91,7 @@ func (r *UserRepo) GetByID(ctx context.Context, id string) (*domain.User, error)
 // GetByEmail returns a user by their email address.
 func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, email, name, password_hash, auth_provider, language_pref, is_anonymous, is_admin, created_at, updated_at
+		SELECT id, email, name, password_hash, auth_provider, provider_id, language_pref, is_anonymous, is_admin, created_at, updated_at
 		FROM users
 		WHERE email = $1`
 
@@ -99,6 +102,7 @@ func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*domain.User, 
 		&u.Name,
 		&u.PasswordHash,
 		&u.AuthProvider,
+		&u.ProviderID,
 		&u.LanguagePref,
 		&u.IsAnonymous,
 		&u.IsAdmin,
@@ -121,7 +125,7 @@ func (r *UserRepo) CreateAnonymous(ctx context.Context, deviceID, languagePref s
 		INSERT INTO users (id, auth_provider, language_pref, is_anonymous)
 		VALUES ($1, $2, $3, true)
 		ON CONFLICT (id) DO UPDATE SET updated_at = NOW()
-		RETURNING id, email, name, password_hash, auth_provider, language_pref, is_anonymous, is_admin, created_at, updated_at`
+		RETURNING id, email, name, password_hash, auth_provider, provider_id, language_pref, is_anonymous, is_admin, created_at, updated_at`
 
 	var u domain.User
 	err := r.pool.QueryRow(ctx, query,
@@ -134,6 +138,7 @@ func (r *UserRepo) CreateAnonymous(ctx context.Context, deviceID, languagePref s
 		&u.Name,
 		&u.PasswordHash,
 		&u.AuthProvider,
+		&u.ProviderID,
 		&u.LanguagePref,
 		&u.IsAnonymous,
 		&u.IsAdmin,
@@ -142,6 +147,37 @@ func (r *UserRepo) CreateAnonymous(ctx context.Context, deviceID, languagePref s
 	)
 	if err != nil {
 		return nil, fmt.Errorf("user_repo: create anonymous: %w", err)
+	}
+
+	return &u, nil
+}
+
+// GetByProviderID returns a user by their OAuth provider and provider-specific ID.
+func (r *UserRepo) GetByProviderID(ctx context.Context, provider domain.AuthProvider, providerID string) (*domain.User, error) {
+	query := `
+		SELECT id, email, name, password_hash, auth_provider, provider_id, language_pref, is_anonymous, is_admin, created_at, updated_at
+		FROM users
+		WHERE auth_provider = $1 AND provider_id = $2`
+
+	var u domain.User
+	err := r.pool.QueryRow(ctx, query, provider, providerID).Scan(
+		&u.ID,
+		&u.Email,
+		&u.Name,
+		&u.PasswordHash,
+		&u.AuthProvider,
+		&u.ProviderID,
+		&u.LanguagePref,
+		&u.IsAnonymous,
+		&u.IsAdmin,
+		&u.CreatedAt,
+		&u.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("user_repo: get by provider id: %w", err)
 	}
 
 	return &u, nil

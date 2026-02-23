@@ -1035,7 +1035,7 @@
         "Шаг 4: POST с невалидным token — 401"
       ],
       "dependencies": ["TASK-025"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-047",
