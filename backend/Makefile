@@ -1,4 +1,4 @@
-.PHONY: lint fmt test build clean migrate-up migrate-down migrate-create
+.PHONY: lint fmt test build clean migrate-up migrate-down migrate-create seed
 
 BINARY_DIR := bin
 GOPATH := $(shell go env GOPATH)
@@ -39,3 +39,6 @@ migrate-down:
 migrate-create:
 	@read -p "Migration name: " name; \
 	$(MIGRATE) create -ext sql -dir $(MIGRATIONS_DIR) -seq $$name
+
+seed:
+	go run ./scripts/seed/

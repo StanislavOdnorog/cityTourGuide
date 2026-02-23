@@ -1562,3 +1562,29 @@
   - `npm run lint` — 0 ошибок ESLint (pass)
   - useSettingsStore: geoNotifications toggle, contentNotifications toggle, persistence across state changes (pass)
   - Все acceptance criteria выполнены: язык переключается и сохраняется, уведомления вкл/выкл по типам, кэш отображается и очищается с подтверждением, статус покупок показывается
+
+### TASK-059: Seed данные и dev-окружение: автоматическая подготовка для разработки
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создан `backend/scripts/seed/main.go` — Go-скрипт для вставки тестовых данных в БД
+  - **Город Тбилиси**: center 41.7151, 44.8271, radius 10km, idempotent (проверяет по name)
+  - **10 реальных POI Тбилиси**: Narikala Fortress, Abanotubani, Bridge of Peace, Rustaveli Avenue, Holy Trinity Cathedral (Sameba), Botanical Garden, Freedom Square, National Museum, Sioni Cathedral, Mtatsminda Park
+  - **20 историй** (10 EN + 10 RU): уникальные тексты для каждого POI, разные layer_type (atmosphere, human_story, hidden_detail, time_shift, general), реалистичные duration_sec (40-55 сек)
+  - **Идемпотентность**: проверка по name для POI, проверка по (poi_id, language) для stories — повторный запуск не создаёт дубликатов
+  - **Fake audio_url**: `https://example.com/audio/seed/{poi_id}_{lang}.mp3`
+  - Создан `scripts/setup-dev.sh` — one-command dev environment setup:
+    - Автоматическое определение docker compose vs docker-compose (v2 plugin vs v1)
+    - Docker Compose up (PostgreSQL + MinIO)
+    - Ожидание готовности PostgreSQL (pg_isready, до 30 попыток)
+    - Копирование .env.example → .env если не существует
+    - Миграции (make migrate-up)
+    - Seed данные (go run ./scripts/seed/)
+    - Вывод информации о портах и полезных команд
+  - Добавлена цель `seed` в backend/Makefile
+  - `make lint` — 0 ошибок
+- **Тесты**:
+  - `./scripts/setup-dev.sh` — всё запущено (pass)
+  - `curl /healthz` — 200 `{"status":"ok"}` (pass)
+  - `curl /api/v1/nearby-stories?lat=41.6941&lng=44.8015&language=en&radius=500` — данные есть (Freedom Square, National Museum) (pass)
+  - Повторный seed — 0 POIs created, 10 skipped, 0 stories created, 20 skipped (pass)

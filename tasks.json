@@ -1325,7 +1325,7 @@
         "Шаг 4: Повторный seed — нет дубликатов"
       ],
       "dependencies": ["TASK-011", "TASK-012", "TASK-013", "TASK-014"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-060",
