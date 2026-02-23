@@ -596,12 +596,13 @@ describe('WalkingPipeline', () => {
 
     it('resets player store on destroy', async () => {
       await pipeline.start();
-      usePlayerStore.getState().addListenedStory(10);
+      usePlayerStore.getState().addListenedStory(10, 1);
       usePlayerStore.getState().setIsPlaying(true);
 
       await pipeline.destroy();
 
       expect(usePlayerStore.getState().listenedStoryIds.size).toBe(0);
+      expect(usePlayerStore.getState().listenedPoiIds.size).toBe(0);
       expect(usePlayerStore.getState().isPlaying).toBe(false);
     });
   });

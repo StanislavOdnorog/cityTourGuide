@@ -1,8 +1,10 @@
+import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated, Easing } from 'react-native';
 import { useHomeScreen } from '@/hooks/useHomeScreen';
 
 const CITY_NAME = 'Tbilisi';
+const CITY_ID = 1;
 
 function PulseIndicator() {
   const scale = useRef(new Animated.Value(1)).current;
@@ -59,7 +61,15 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.cityName}>{CITY_NAME}</Text>
+        <Pressable
+          onPress={() =>
+            router.push({ pathname: '/(main)/city', params: { cityId: String(CITY_ID) } })
+          }
+          accessibilityRole="button"
+          accessibilityLabel="Open city map"
+        >
+          <Text style={styles.cityName}>{CITY_NAME}</Text>
+        </Pressable>
         <Text style={styles.storyStat}>
           {listenedCount} {listenedCount === 1 ? 'story' : 'stories'} listened
         </Text>

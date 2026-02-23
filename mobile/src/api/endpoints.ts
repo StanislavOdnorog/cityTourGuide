@@ -4,6 +4,8 @@ import type {
   TrackListeningRequest,
   ReportStoryRequest,
   City,
+  CityPOI,
+  CityPOIsResponse,
 } from '@/types';
 import apiClient from './client';
 
@@ -42,4 +44,17 @@ export async function fetchCities(): Promise<City[]> {
 export async function fetchCityById(id: number): Promise<City> {
   const response = await apiClient.get<{ data: City }>(`/api/v1/cities/${id}`);
   return response.data.data;
+}
+
+export async function fetchCityPOIs(
+  cityId: number,
+  language?: string,
+): Promise<{ pois: CityPOI[]; totalStories: number }> {
+  const response = await apiClient.get<CityPOIsResponse>(`/api/v1/cities/${cityId}/pois`, {
+    params: { language },
+  });
+  return {
+    pois: response.data.data,
+    totalStories: response.data.total_stories,
+  };
 }

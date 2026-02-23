@@ -1234,3 +1234,31 @@
   - All 211 tests pass, 11 suites (pass)
   - MiniPlayer скрыт когда currentStory === null (return null)
   - MiniPlayer показан с play/pause, progress bar, report при воспроизведении
+
+### TASK-040: Mobile: City Screen — карта с POI и статистика
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Установлен `react-native-maps` через Expo
+  - Создан `app/(main)/city.tsx` — City Screen с MapView и POI маркерами:
+    - MapView с initialRegion по координатам города
+    - Маркеры раскрашены: green (прослушан), blue (доступен), grey (freemium-заблокирован)
+    - Callout при нажатии на маркер: название POI + количество историй
+    - Заголовок: название города + счётчик "{N} stories / {M} listened"
+    - Кнопки: "Download for Offline" и "Buy City" (функционал в TASK-043/TASK-047)
+    - Поддержка loading/error состояний с retry
+    - showsUserLocation для отображения текущей позиции
+  - Создан `src/store/useCityStore.ts` — Zustand store для City/POI данных
+  - Создан `src/hooks/useCityScreen.ts` — hook с логикой загрузки и getMarkerColor()
+  - Добавлен `fetchCityPOIs` API endpoint в `src/api/endpoints.ts`
+  - Добавлены типы `CityPOI`, `CityPOIsResponse` в `src/types/index.ts`
+  - Расширен `usePlayerStore` — `listenedPoiIds: Set<number>` для отслеживания прослушанных POI
+  - `addListenedStory(storyId, poiId)` теперь отслеживает обе сущности
+  - Навигация: город в header HomeScreen стал кликабельным → переход на City Screen
+  - Обновлены barrel exports: store/index.ts, hooks/index.ts, api/index.ts
+- **Тесты**:
+  - `tsc --noEmit` — 0 ошибок типов (pass)
+  - `useCityStore.test.ts`: 8 тестов — initial state, CRUD, reset (pass)
+  - `useCityScreen.test.ts`: 7 тестов — getMarkerColor: grey/blue/green логика, edge cases (pass)
+  - Обновлены существующие тесты: usePlayerStore, useHomeScreen, WalkingPipeline (addListenedStory signature)
+  - All 226 tests pass, 13 suites (pass)

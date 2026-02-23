@@ -159,6 +159,16 @@ export interface ReportStoryRequest {
   lng?: number;
 }
 
+export interface CityPOI extends POI {
+  story_count: number;
+  distance_m?: number;
+}
+
+export interface CityPOIsResponse {
+  data: CityPOI[];
+  total_stories: number;
+}
+
 export interface ApiError {
   error: string;
 }

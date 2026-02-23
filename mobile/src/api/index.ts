@@ -6,5 +6,6 @@ export {
   reportStory,
   fetchCities,
   fetchCityById,
+  fetchCityPOIs,
 } from './endpoints';
 export type { FetchNearbyStoriesParams } from './endpoints';

@@ -30,6 +30,7 @@ describe('useHomeScreen – store integration', () => {
       isPlaying: false,
       progress: { position: 0, duration: 0 },
       listenedStoryIds: new Set<number>(),
+      listenedPoiIds: new Set<number>(),
     });
   });
 
@@ -96,22 +97,22 @@ describe('useHomeScreen – store integration', () => {
     });
 
     it('increments when stories are listened', () => {
-      usePlayerStore.getState().addListenedStory(10);
+      usePlayerStore.getState().addListenedStory(10, 1);
       expect(usePlayerStore.getState().listenedStoryIds.size).toBe(1);
 
-      usePlayerStore.getState().addListenedStory(20);
+      usePlayerStore.getState().addListenedStory(20, 2);
       expect(usePlayerStore.getState().listenedStoryIds.size).toBe(2);
     });
 
     it('does not count duplicates', () => {
-      usePlayerStore.getState().addListenedStory(10);
-      usePlayerStore.getState().addListenedStory(10);
+      usePlayerStore.getState().addListenedStory(10, 1);
+      usePlayerStore.getState().addListenedStory(10, 1);
       expect(usePlayerStore.getState().listenedStoryIds.size).toBe(1);
     });
 
     it('resets to 0 on reset', () => {
-      usePlayerStore.getState().addListenedStory(10);
-      usePlayerStore.getState().addListenedStory(20);
+      usePlayerStore.getState().addListenedStory(10, 1);
+      usePlayerStore.getState().addListenedStory(20, 2);
       usePlayerStore.getState().reset();
       expect(usePlayerStore.getState().listenedStoryIds.size).toBe(0);
     });

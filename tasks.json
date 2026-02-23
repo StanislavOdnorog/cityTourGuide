@@ -900,7 +900,7 @@
         "Шаг 4: Счётчик shows correct numbers"
       ],
       "dependencies": ["TASK-033"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-041",

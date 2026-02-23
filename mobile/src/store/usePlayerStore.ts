@@ -6,13 +6,14 @@ interface PlayerState {
   isPlaying: boolean;
   progress: { position: number; duration: number };
   listenedStoryIds: Set<number>;
+  listenedPoiIds: Set<number>;
 }
 
 interface PlayerActions {
   setCurrentStory: (story: ScoredCandidate | null) => void;
   setIsPlaying: (playing: boolean) => void;
   setProgress: (position: number, duration: number) => void;
-  addListenedStory: (storyId: number) => void;
+  addListenedStory: (storyId: number, poiId: number) => void;
   reset: () => void;
 }
 
@@ -21,6 +22,7 @@ const initialState: PlayerState = {
   isPlaying: false,
   progress: { position: 0, duration: 0 },
   listenedStoryIds: new Set<number>(),
+  listenedPoiIds: new Set<number>(),
 };
 
 export const usePlayerStore = create<PlayerState & PlayerActions>((set) => ({
@@ -29,9 +31,10 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set) => ({
   setCurrentStory: (story) => set({ currentStory: story }),
   setIsPlaying: (playing) => set({ isPlaying: playing }),
   setProgress: (position, duration) => set({ progress: { position, duration } }),
-  addListenedStory: (storyId) =>
+  addListenedStory: (storyId, poiId) =>
     set((state) => ({
       listenedStoryIds: new Set(state.listenedStoryIds).add(storyId),
+      listenedPoiIds: new Set(state.listenedPoiIds).add(poiId),
     })),
   reset: () =>
     set({
@@ -39,5 +42,6 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set) => ({
       isPlaying: false,
       progress: { position: 0, duration: 0 },
       listenedStoryIds: new Set<number>(),
+      listenedPoiIds: new Set<number>(),
     }),
 }));

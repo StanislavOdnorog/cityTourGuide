@@ -20,6 +20,7 @@ describe('usePlayerStore', () => {
       isPlaying: false,
       progress: { position: 0, duration: 0 },
       listenedStoryIds: new Set<number>(),
+      listenedPoiIds: new Set<number>(),
     });
   });
 
@@ -55,28 +56,34 @@ describe('usePlayerStore', () => {
     expect(usePlayerStore.getState().progress).toEqual({ position: 15.5, duration: 30 });
   });
 
-  it('addListenedStory adds to the set', () => {
-    usePlayerStore.getState().addListenedStory(10);
-    usePlayerStore.getState().addListenedStory(20);
+  it('addListenedStory adds to both story and POI sets', () => {
+    usePlayerStore.getState().addListenedStory(10, 1);
+    usePlayerStore.getState().addListenedStory(20, 2);
 
-    const ids = usePlayerStore.getState().listenedStoryIds;
-    expect(ids.has(10)).toBe(true);
-    expect(ids.has(20)).toBe(true);
-    expect(ids.size).toBe(2);
+    const storyIds = usePlayerStore.getState().listenedStoryIds;
+    expect(storyIds.has(10)).toBe(true);
+    expect(storyIds.has(20)).toBe(true);
+    expect(storyIds.size).toBe(2);
+
+    const poiIds = usePlayerStore.getState().listenedPoiIds;
+    expect(poiIds.has(1)).toBe(true);
+    expect(poiIds.has(2)).toBe(true);
+    expect(poiIds.size).toBe(2);
   });
 
   it('addListenedStory deduplicates', () => {
-    usePlayerStore.getState().addListenedStory(10);
-    usePlayerStore.getState().addListenedStory(10);
+    usePlayerStore.getState().addListenedStory(10, 1);
+    usePlayerStore.getState().addListenedStory(10, 1);
 
     expect(usePlayerStore.getState().listenedStoryIds.size).toBe(1);
+    expect(usePlayerStore.getState().listenedPoiIds.size).toBe(1);
   });
 
   it('reset clears all state', () => {
     usePlayerStore.getState().setCurrentStory(mockCandidate);
     usePlayerStore.getState().setIsPlaying(true);
     usePlayerStore.getState().setProgress(10, 30);
-    usePlayerStore.getState().addListenedStory(10);
+    usePlayerStore.getState().addListenedStory(10, 1);
 
     usePlayerStore.getState().reset();
 
@@ -85,5 +92,6 @@ describe('usePlayerStore', () => {
     expect(state.isPlaying).toBe(false);
     expect(state.progress).toEqual({ position: 0, duration: 0 });
     expect(state.listenedStoryIds.size).toBe(0);
+    expect(state.listenedPoiIds.size).toBe(0);
   });
 });
