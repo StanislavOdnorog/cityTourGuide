@@ -1288,3 +1288,43 @@
   - `tsc --noEmit` — 0 ошибок типов (pass)
   - `useSettingsStore.test.ts` — 8 тестов (6 existing + 2 new: deviceId generation, deviceId persistence) (pass)
   - All 228 tests pass, 13 suites (pass)
+
+### TASK-052: Admin Panel: модерация репортов
+- **Дата**: 2026-02-23
+- **Статус**: done
+- **Что сделано**:
+  - Создан `src/hooks/useReports.ts` — TanStack Query hooks:
+    - `useReports({ status, page, perPage })` — загрузка репортов с серверной пагинацией и фильтрацией по статусу
+    - `updateStatus` мутация — PUT /api/v1/admin/reports/:id с новым статусом
+    - `disableStory` мутация — GET + PUT /api/v1/admin/stories/:id (status: disabled)
+    - `useNewReportsCount()` — отдельный query для счётчика новых репортов (status=new)
+    - Автоматическая инвалидация кэша reports и reports-new-count после мутаций
+  - Создан `src/pages/ReportsPage.tsx` — полная страница модерации:
+    - Ant Design Table с колонками: ID, Story ID, Type, Comment, Status, Date, Actions
+    - Фильтр по статусу (Select dropdown: All / New / Reviewed / Resolved / Dismissed)
+    - Серверная пагинация (page, perPage) с showSizeChanger и showTotal
+    - Цветовые теги: тип репорта (orange/volcano/red), статус (red/blue/green/default)
+    - Sortable по ID и Date (default: descend by date)
+    - Filterable по Type (column filter)
+    - Tooltip на длинных комментариях
+    - Story ID — кликабельная ссылка на POI Detail page
+  - Действия модерации (3 кнопки для открытых репортов):
+    - **Dismiss** — закрывает репорт без действия (status → dismissed)
+    - **Disable Story** — деактивирует историю (story.status → disabled) И автоматически резолвит репорт (status → resolved)
+    - **Resolve** — помечает как решённый (status → resolved)
+    - Закрытые репорты (resolved/dismissed) показывают "Closed" вместо кнопок
+    - Loading state на кнопках во время мутаций
+    - Success/error toast-уведомления через App.useApp().message
+  - Обновлён `src/App.tsx`:
+    - Добавлен маршрут `/reports` → ReportsPage
+    - Добавлен пункт меню "Reports" с иконкой WarningOutlined
+    - Badge с количеством new репортов в sidebar (красный кружок с числом)
+    - Badge обновляется через useNewReportsCount() hook
+  - Обновлён `src/hooks/useDashboardStats.ts`:
+    - Добавлен `fetchReportsCount()` — запрос реального количества репортов через API
+    - `reportsCount` в Dashboard теперь показывает реальные данные вместо hardcoded 0
+  - Обновлён `src/hooks/index.ts` — экспорт useReports, useNewReportsCount
+- **Тесты**:
+  - `npx tsc --noEmit` — 0 ошибок типов (pass)
+  - `npm run lint` — 0 ошибок ESLint (pass)
+  - `npm run build` — production билд создаётся без ошибок (pass)

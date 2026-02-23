@@ -1170,7 +1170,7 @@
         "Шаг 5: Badge обновляется"
       ],
       "dependencies": ["TASK-050", "TASK-044"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-053",

@@ -1,13 +1,20 @@
-import { DashboardOutlined, EnvironmentOutlined, LogoutOutlined } from '@ant-design/icons';
+import {
+  DashboardOutlined,
+  EnvironmentOutlined,
+  LogoutOutlined,
+  WarningOutlined,
+} from '@ant-design/icons';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ConfigProvider, App as AntApp, Layout, Menu, Button, theme } from 'antd';
+import { Badge, ConfigProvider, App as AntApp, Layout, Menu, Button, theme } from 'antd';
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { useNewReportsCount } from './hooks/useReports';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
 import POIDetailPage from './pages/POIDetailPage';
 import POIMapPage from './pages/POIMapPage';
+import ReportsPage from './pages/ReportsPage';
 import { useAuthStore } from './store/authStore';
 
 const { Header, Content, Sider } = Layout;
@@ -21,15 +28,25 @@ const queryClient = new QueryClient({
   },
 });
 
-const menuItems = [
-  { key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
-  { key: '/poi-map', icon: <EnvironmentOutlined />, label: 'POI Map' },
-];
-
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuthStore();
+  const { data: newReportsCount = 0 } = useNewReportsCount();
+
+  const menuItems = [
+    { key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
+    { key: '/poi-map', icon: <EnvironmentOutlined />, label: 'POI Map' },
+    {
+      key: '/reports',
+      icon: <WarningOutlined />,
+      label: (
+        <Badge count={newReportsCount} offset={[16, 0]} size="small">
+          Reports
+        </Badge>
+      ),
+    },
+  ];
 
   const handleLogout = () => {
     logout();
@@ -72,6 +89,7 @@ function AppLayout() {
             <Route path="/" element={<DashboardPage />} />
             <Route path="/poi-map" element={<POIMapPage />} />
             <Route path="/pois/:id" element={<POIDetailPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Content>

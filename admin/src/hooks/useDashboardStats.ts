@@ -1,12 +1,19 @@
 import { useQueries } from '@tanstack/react-query';
 import apiClient from '../api/client';
-import type { City, PaginatedResponse } from '../types';
+import type { City, PaginatedResponse, Report } from '../types';
 
 interface DashboardStats {
   citiesCount: number;
   poisCount: number;
   storiesCount: number;
   reportsCount: number;
+}
+
+async function fetchReportsCount(): Promise<number> {
+  const { data } = await apiClient.get<PaginatedResponse<Report>>('/api/v1/admin/reports', {
+    params: { page: 1, per_page: 1 },
+  });
+  return data.meta.total;
 }
 
 async function fetchCitiesCount(): Promise<number> {
@@ -98,22 +105,28 @@ export function useDashboardStats() {
         enabled: citiesListResult.isSuccess && cityIds.length > 0,
         staleTime: 60_000,
       },
+      {
+        queryKey: ['reports', 'count'],
+        queryFn: fetchReportsCount,
+        staleTime: 60_000,
+      },
     ],
   });
 
-  const [poisCountResult, storiesCountResult] = dependentResults;
+  const [poisCountResult, storiesCountResult, reportsCountResult] = dependentResults;
 
   const isLoading =
     citiesCountResult.isLoading ||
     citiesListResult.isLoading ||
     poisCountResult.isLoading ||
-    storiesCountResult.isLoading;
+    storiesCountResult.isLoading ||
+    reportsCountResult.isLoading;
 
   const stats: DashboardStats = {
     citiesCount: citiesCountResult.data ?? 0,
     poisCount: poisCountResult.data ?? 0,
     storiesCount: storiesCountResult.data ?? 0,
-    reportsCount: 0, // Reports API not yet available
+    reportsCount: reportsCountResult.data ?? 0,
   };
 
   return { stats, isLoading, cities };
