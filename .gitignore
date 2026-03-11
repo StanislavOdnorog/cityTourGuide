@@ -74,3 +74,5 @@ tmp/
 temp/
 coverage/
 .nyc_output/
+# Ralph project data
+.ralph/
