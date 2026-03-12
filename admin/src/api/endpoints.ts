@@ -10,6 +10,10 @@ type UpdateReportStatusRequest =
 type UpdatePOIRequest = operations['adminUpdatePOI']['requestBody']['content']['application/json'];
 type UpdateStoryRequest =
   operations['adminUpdateStory']['requestBody']['content']['application/json'];
+type CreateCityRequest =
+  operations['adminCreateCity']['requestBody']['content']['application/json'];
+type UpdateCityRequest =
+  operations['adminUpdateCity']['requestBody']['content']['application/json'];
 
 function getApiErrorMessage(error: { error?: string } | undefined, fallback: string): string {
   return typeof error?.error === 'string' ? error.error : fallback;
@@ -167,6 +171,37 @@ export async function triggerInflation(id: number) {
   });
   if (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to trigger inflation'));
+  }
+  return data;
+}
+
+export async function createCity(body: CreateCityRequest) {
+  const { data, error } = await generatedApiClient.POST('/admin/cities', {
+    body,
+  });
+  if (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to create city'));
+  }
+  return data;
+}
+
+export async function updateCity(id: number, body: UpdateCityRequest) {
+  const { data, error } = await generatedApiClient.PUT('/admin/cities/{id}', {
+    params: { path: { id } },
+    body,
+  });
+  if (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to update city'));
+  }
+  return data;
+}
+
+export async function deleteCity(id: number) {
+  const { data, error } = await generatedApiClient.DELETE('/admin/cities/{id}', {
+    params: { path: { id } },
+  });
+  if (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to delete city'));
   }
   return data;
 }

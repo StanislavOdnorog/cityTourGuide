@@ -1,6 +1,7 @@
 import {
   DashboardOutlined,
   EnvironmentOutlined,
+  GlobalOutlined,
   LogoutOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
@@ -9,6 +10,7 @@ import { Badge, ConfigProvider, App as AntApp, Layout, Menu, Button, theme } fro
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useNewReportsCount } from './hooks/useReports';
+import CitiesPage from './pages/CitiesPage';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
@@ -36,6 +38,7 @@ function AppLayout() {
 
   const menuItems = [
     { key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
+    { key: '/cities', icon: <GlobalOutlined />, label: 'Cities' },
     { key: '/poi-map', icon: <EnvironmentOutlined />, label: 'POI Map' },
     {
       key: '/reports',
@@ -87,6 +90,7 @@ function AppLayout() {
         <Content style={{ margin: 24 }}>
           <Routes>
             <Route path="/" element={<DashboardPage />} />
+            <Route path="/cities" element={<CitiesPage />} />
             <Route path="/poi-map" element={<POIMapPage />} />
             <Route path="/pois/:id" element={<POIDetailPage />} />
             <Route path="/reports" element={<ReportsPage />} />

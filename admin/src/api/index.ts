@@ -12,4 +12,7 @@ export {
   updatePOI,
   updateStory,
   triggerInflation,
+  createCity,
+  updateCity,
+  deleteCity,
 } from './endpoints';
