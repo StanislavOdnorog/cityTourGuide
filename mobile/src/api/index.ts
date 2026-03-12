@@ -7,6 +7,11 @@ export {
   fetchCities,
   fetchCityById,
   fetchCityPOIs,
+  fetchCityDownloadManifest,
+  registerDeviceToken,
+  unregisterDeviceToken,
+  deleteAccount,
+  restoreAccount,
   verifyPurchase,
   fetchPurchaseStatus,
 } from './endpoints';

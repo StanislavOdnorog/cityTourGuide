@@ -1,17 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import type { Purchase, PurchaseType } from '@/types';
-
-export interface PurchaseStatus {
-  has_full_access: boolean;
-  is_lifetime: boolean;
-  active_subscription: Purchase | null;
-  city_packs: Purchase[];
-  free_stories_used: number;
-  free_stories_limit: number;
-  free_stories_left: number;
-}
+import type { PurchaseStatus, PurchaseType } from '@/types';
 
 interface PurchaseState {
   status: PurchaseStatus | null;

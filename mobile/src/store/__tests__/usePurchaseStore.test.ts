@@ -1,4 +1,5 @@
-import { usePurchaseStore, type PurchaseStatus } from '../usePurchaseStore';
+import type { PurchaseStatus } from '@/types';
+import { usePurchaseStore } from '../usePurchaseStore';
 
 // Mock AsyncStorage
 jest.mock('@react-native-async-storage/async-storage', () => ({

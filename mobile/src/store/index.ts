@@ -9,6 +9,6 @@ export {
   usePurchaseStore,
   IAP_PRODUCTS,
   PRODUCT_CATALOG,
-  type PurchaseStatus,
   type ProductInfo,
 } from './usePurchaseStore';
+export type { PurchaseStatus } from '@/types';

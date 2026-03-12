@@ -1,14 +1,23 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../constants';
+import type { operations } from './generated';
+import { createGeneratedApiClient } from './generated/runtime';
 import { useAuthStore } from '../store/authStore';
 import type { LoginResponse, TokenPair } from '../types';
 
+type RefreshTokenRequest =
+  operations['refreshToken']['requestBody']['content']['application/json'];
+type RefreshTokenResponse =
+  operations['refreshToken']['responses']['200']['content']['application/json'];
+
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: `${API_BASE_URL}/api/v1`,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+export const generatedApiClient = createGeneratedApiClient(apiClient);
 
 // Request interceptor: attach JWT token
 apiClient.interceptors.request.use((config) => {
@@ -40,7 +49,7 @@ apiClient.interceptors.response.use(
       }
 
       try {
-        const { data } = await axios.post<{ tokens: TokenPair }>(
+        const { data } = await axios.post<RefreshTokenResponse, { data: RefreshTokenResponse }, RefreshTokenRequest>(
           `${API_BASE_URL}/api/v1/auth/refresh`,
           { refresh_token: refreshToken },
         );
@@ -67,10 +76,12 @@ apiClient.interceptors.response.use(
 );
 
 export async function login(email: string, password: string): Promise<LoginResponse> {
-  const { data } = await apiClient.post<LoginResponse>('/api/v1/auth/login', {
-    email,
-    password,
+  const { data, error } = await generatedApiClient.POST('/auth/login', {
+    body: { email, password },
   });
+  if (error) {
+    throw new Error(error.error);
+  }
   return data;
 }
 

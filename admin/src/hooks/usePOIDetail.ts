@@ -1,9 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import apiClient from '../api/client';
+import {
+  getPOI,
+  getStory,
+  listInflationJobsByPOI,
+  listReportsByPOI,
+  listStories,
+  triggerInflation,
+  updatePOI,
+  updateStory,
+} from '../api';
 import type {
   InflationJob,
   POI,
-  PaginatedResponse,
   Report,
   Story,
   StoryStatus,
@@ -15,8 +23,8 @@ export function usePOIDetail(poiId: number | null) {
   const poi = useQuery({
     queryKey: ['poi', poiId],
     queryFn: async () => {
-      const { data } = await apiClient.get<{ data: POI }>(`/api/v1/pois/${poiId}`);
-      return data.data;
+      const response = await getPOI(poiId as number);
+      return response.data as POI;
     },
     enabled: poiId !== null,
     staleTime: 30_000,
@@ -28,10 +36,12 @@ export function usePOIDetail(poiId: number | null) {
       // Fetch stories for all languages by not specifying language filter
       const allStories: Story[] = [];
       for (const lang of ['en', 'ru']) {
-        const { data } = await apiClient.get<PaginatedResponse<Story>>('/api/v1/stories', {
-          params: { poi_id: poiId, language: lang, per_page: 100 },
+        const response = await listStories({
+          poi_id: poiId as number,
+          language: lang,
+          per_page: 100,
         });
-        allStories.push(...data.data);
+        allStories.push(...(response.data as Story[]));
       }
       return allStories;
     },
@@ -42,10 +52,8 @@ export function usePOIDetail(poiId: number | null) {
   const reports = useQuery({
     queryKey: ['poi-reports', poiId],
     queryFn: async () => {
-      const { data } = await apiClient.get<{ data: Report[] }>(
-        `/api/v1/admin/pois/${poiId}/reports`,
-      );
-      return data.data;
+      const response = await listReportsByPOI(poiId as number);
+      return response.data as Report[];
     },
     enabled: poiId !== null,
     staleTime: 30_000,
@@ -54,10 +62,8 @@ export function usePOIDetail(poiId: number | null) {
   const inflationJobs = useQuery({
     queryKey: ['poi-inflation-jobs', poiId],
     queryFn: async () => {
-      const { data } = await apiClient.get<{ data: InflationJob[] }>(
-        `/api/v1/admin/pois/${poiId}/inflation-jobs`,
-      );
-      return data.data;
+      const response = await listInflationJobsByPOI(poiId as number);
+      return response.data as InflationJob[];
     },
     enabled: poiId !== null,
     staleTime: 30_000,
@@ -67,11 +73,8 @@ export function usePOIDetail(poiId: number | null) {
     mutationFn: async (updates: Partial<POI>) => {
       const current = poi.data;
       if (!current) throw new Error('POI not loaded');
-      const { data } = await apiClient.put<{ data: POI }>(`/api/v1/admin/pois/${poiId}`, {
-        ...current,
-        ...updates,
-      });
-      return data.data;
+      const response = await updatePOI(poiId as number, current, updates);
+      return response.data as POI;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['poi', poiId] });
@@ -80,16 +83,9 @@ export function usePOIDetail(poiId: number | null) {
 
   const updateStory = useMutation({
     mutationFn: async ({ storyId, updates }: { storyId: number; updates: Partial<Story> }) => {
-      // Fetch current story to merge updates
-      const { data: currentData } = await apiClient.get<{ data: Story }>(
-        `/api/v1/stories/${storyId}`,
-      );
-      const current = currentData.data;
-      const { data } = await apiClient.put<{ data: Story }>(`/api/v1/admin/stories/${storyId}`, {
-        ...current,
-        ...updates,
-      });
-      return data.data;
+      const currentResponse = await getStory(storyId);
+      const response = await updateStory(storyId, currentResponse.data as Story, updates);
+      return response.data as Story;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['poi-stories', poiId] });
@@ -105,15 +101,11 @@ export function usePOIDetail(poiId: number | null) {
       currentStatus: StoryStatus;
     }) => {
       const newStatus: StoryStatus = currentStatus === 'active' ? 'disabled' : 'active';
-      const { data: currentData } = await apiClient.get<{ data: Story }>(
-        `/api/v1/stories/${storyId}`,
-      );
-      const current = currentData.data;
-      const { data } = await apiClient.put<{ data: Story }>(`/api/v1/admin/stories/${storyId}`, {
-        ...current,
+      const currentResponse = await getStory(storyId);
+      const response = await updateStory(storyId, currentResponse.data as Story, {
         status: newStatus,
       });
-      return data.data;
+      return response.data as Story;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['poi-stories', poiId] });
@@ -122,10 +114,8 @@ export function usePOIDetail(poiId: number | null) {
 
   const triggerInflation = useMutation({
     mutationFn: async () => {
-      const { data } = await apiClient.post<{ data: InflationJob }>(
-        `/api/v1/admin/pois/${poiId}/inflate`,
-      );
-      return data.data;
+      const response = await triggerInflation(poiId as number);
+      return response.data as InflationJob;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['poi-inflation-jobs', poiId] });

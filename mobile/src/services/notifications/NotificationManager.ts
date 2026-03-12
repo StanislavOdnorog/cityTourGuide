@@ -87,7 +87,7 @@ export class NotificationManager {
       const token = tokenData.data;
       const platform = Platform.OS === 'ios' ? 'ios' : 'android';
 
-      await registerDeviceToken(userId, token, platform);
+      await registerDeviceToken({ user_id: userId, token, platform });
       this.currentToken = token;
 
       // Set up Android notification channel

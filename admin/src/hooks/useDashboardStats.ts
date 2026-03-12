@@ -1,6 +1,5 @@
 import { useQueries } from '@tanstack/react-query';
-import apiClient from '../api/client';
-import type { City, PaginatedResponse, Report } from '../types';
+import { listCities, listPOIs, listReports, listStories } from '../api';
 
 interface DashboardStats {
   citiesCount: number;
@@ -10,27 +9,21 @@ interface DashboardStats {
 }
 
 async function fetchReportsCount(): Promise<number> {
-  const { data } = await apiClient.get<PaginatedResponse<Report>>('/api/v1/admin/reports', {
-    params: { page: 1, per_page: 1 },
-  });
-  return data.meta.total;
+  const response = await listReports({ page: 1, per_page: 1 });
+  return response.meta.total;
 }
 
 async function fetchCitiesCount(): Promise<number> {
-  const { data } = await apiClient.get<PaginatedResponse<City>>('/api/v1/cities', {
-    params: { page: 1, per_page: 1 },
-  });
-  return data.meta.total;
+  const response = await listCities({ page: 1, per_page: 1 });
+  return response.meta.total;
 }
 
 async function fetchPOIsCount(cityIds: number[]): Promise<number> {
   if (cityIds.length === 0) return 0;
   let total = 0;
   for (const cityId of cityIds) {
-    const { data } = await apiClient.get<PaginatedResponse<unknown>>('/api/v1/pois', {
-      params: { city_id: cityId, page: 1, per_page: 1 },
-    });
-    total += data.meta.total;
+    const response = await listPOIs({ city_id: cityId, page: 1, per_page: 1 });
+    total += response.meta.total;
   }
   return total;
 }
@@ -40,17 +33,12 @@ async function fetchStoriesCountForCities(cityIds: number[]): Promise<number> {
   // First get all POI IDs across all cities
   let allPOIIds: number[] = [];
   for (const cityId of cityIds) {
-    const { data } = await apiClient.get<PaginatedResponse<{ id: number }>>('/api/v1/pois', {
-      params: { city_id: cityId, page: 1, per_page: 100 },
-    });
-    allPOIIds = allPOIIds.concat(data.data.map((p) => p.id));
+    const response = await listPOIs({ city_id: cityId, page: 1, per_page: 100 });
+    allPOIIds = allPOIIds.concat(response.data.map((p) => p.id));
     // If there are more pages, fetch them
-    const totalPages = Math.ceil(data.meta.total / 100);
+    const totalPages = Math.ceil(response.meta.total / 100);
     for (let page = 2; page <= totalPages; page++) {
-      const { data: pageData } = await apiClient.get<PaginatedResponse<{ id: number }>>(
-        '/api/v1/pois',
-        { params: { city_id: cityId, page, per_page: 100 } },
-      );
+      const pageData = await listPOIs({ city_id: cityId, page, per_page: 100 });
       allPOIIds = allPOIIds.concat(pageData.data.map((p) => p.id));
     }
   }
@@ -58,10 +46,8 @@ async function fetchStoriesCountForCities(cityIds: number[]): Promise<number> {
   // Get story count for each POI (sample first few to get total)
   let totalStories = 0;
   for (const poiId of allPOIIds) {
-    const { data } = await apiClient.get<PaginatedResponse<unknown>>('/api/v1/stories', {
-      params: { poi_id: poiId, page: 1, per_page: 1 },
-    });
-    totalStories += data.meta.total;
+    const response = await listStories({ poi_id: poiId, page: 1, per_page: 1 });
+    totalStories += response.meta.total;
   }
   return totalStories;
 }
@@ -77,10 +63,8 @@ export function useDashboardStats() {
       {
         queryKey: ['cities', 'list-for-stats'],
         queryFn: async () => {
-          const { data } = await apiClient.get<PaginatedResponse<City>>('/api/v1/cities', {
-            params: { page: 1, per_page: 100 },
-          });
-          return data.data;
+          const response = await listCities({ page: 1, per_page: 100 });
+          return response.data;
         },
         staleTime: 60_000,
       },

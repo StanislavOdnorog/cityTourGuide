@@ -1,5 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { API_BASE_URL } from '@/constants';
+import { createGeneratedApiClient } from './generated/runtime';
 
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
@@ -15,7 +16,7 @@ export function setRefreshHandler(handler: (token: string) => Promise<string | n
 }
 
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: `${API_BASE_URL}/api/v1`,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
@@ -99,5 +100,7 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+export const generatedApiClient = createGeneratedApiClient(apiClient);
 
 export default apiClient;

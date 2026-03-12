@@ -12,6 +12,7 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,json,css}\"",
     "typecheck": "tsc -b",
     "preview": "vite preview",
+    "generate-api": "openapi-typescript ../backend/api/openapi.yaml -o src/api/generated/schema.ts",
     "prepare": "cd .. && husky admin/.husky"
   },
   "lint-staged": {
@@ -30,6 +31,7 @@
     "antd": "^6.3.0",
     "axios": "^1.13.5",
     "leaflet": "^1.9.4",
+    "openapi-fetch": "^0.14.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-leaflet": "^5.0.0",
@@ -52,6 +54,7 @@
     "globals": "^16.5.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
+    "openapi-typescript": "^7.13.0",
     "prettier": "^3.8.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",

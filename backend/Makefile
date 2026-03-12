@@ -1,4 +1,4 @@
-.PHONY: lint fmt test build clean migrate-up migrate-down migrate-create seed
+.PHONY: lint fmt test build clean migrate-up migrate-down migrate-create seed generate-api
 
 BINARY_DIR := bin
 GOPATH := $(shell go env GOPATH)
@@ -42,3 +42,6 @@ migrate-create:
 
 seed:
 	go run ./scripts/seed/
+
+generate-api:
+	bash scripts/generate-clients.sh

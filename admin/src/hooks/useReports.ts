@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import apiClient from '../api/client';
-import type { PaginatedResponse, Report, ReportStatus, Story } from '../types';
+import { getStory, listReports, updateReportStatus, updateStory } from '../api';
+import type { Report, ReportStatus, Story } from '../types';
 
 interface UseReportsOptions {
   status?: ReportStatus | '';
@@ -14,25 +14,19 @@ export function useReports({ status = '', page = 1, perPage = 20 }: UseReportsOp
   const reports = useQuery({
     queryKey: ['reports', status, page, perPage],
     queryFn: async () => {
-      const params: Record<string, unknown> = { page, per_page: perPage };
-      if (status) {
-        params.status = status;
-      }
-      const { data } = await apiClient.get<PaginatedResponse<Report>>('/api/v1/admin/reports', {
-        params,
+      return listReports({
+        page,
+        per_page: perPage,
+        ...(status ? { status } : {}),
       });
-      return data;
     },
     staleTime: 15_000,
   });
 
   const updateStatus = useMutation({
     mutationFn: async ({ reportId, newStatus }: { reportId: number; newStatus: ReportStatus }) => {
-      const { data } = await apiClient.put<{ data: Report }>(
-        `/api/v1/admin/reports/${reportId}`,
-        { status: newStatus },
-      );
-      return data.data;
+      const response = await updateReportStatus(reportId, { status: newStatus });
+      return response.data as Report;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reports'] });
@@ -42,15 +36,11 @@ export function useReports({ status = '', page = 1, perPage = 20 }: UseReportsOp
 
   const disableStory = useMutation({
     mutationFn: async (storyId: number) => {
-      const { data: currentData } = await apiClient.get<{ data: Story }>(
-        `/api/v1/stories/${storyId}`,
-      );
-      const current = currentData.data;
-      const { data } = await apiClient.put<{ data: Story }>(`/api/v1/admin/stories/${storyId}`, {
-        ...current,
+      const currentResponse = await getStory(storyId);
+      const response = await updateStory(storyId, currentResponse.data as Story, {
         status: 'disabled',
       });
-      return data.data;
+      return response.data as Story;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reports'] });
@@ -65,10 +55,8 @@ export function useNewReportsCount() {
   return useQuery({
     queryKey: ['reports-new-count'],
     queryFn: async () => {
-      const { data } = await apiClient.get<PaginatedResponse<Report>>('/api/v1/admin/reports', {
-        params: { status: 'new', page: 1, per_page: 1 },
-      });
-      return data.meta.total;
+      const response = await listReports({ status: 'new', page: 1, per_page: 1 });
+      return response.meta.total;
     },
     staleTime: 30_000,
   });

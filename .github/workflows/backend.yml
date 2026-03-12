@@ -88,3 +88,32 @@ jobs:
 
       - name: Build Worker binary
         run: go build -o bin/worker ./cmd/worker
+
+  api-types:
+    name: Verify API Types
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: |
+          cd mobile && npm ci
+          cd ../admin && npm ci
+
+      - name: Generate API types
+        run: make generate-api
+
+      - name: Check for uncommitted changes
+        run: |
+          if [ -n "$(git diff --name-only)" ]; then
+            echo "::error::Generated API types are out of date. Run 'make generate-api' from the repository root and commit the changes."
+            git diff --name-only
+            exit 1
+          fi

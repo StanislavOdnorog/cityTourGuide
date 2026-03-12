@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import apiClient from '../api/client';
-import type { POI, POIStatus, POIType, PaginatedResponse } from '../types';
+import { listPOIs } from '../api';
+import type { POI, POIStatus, POIType } from '../types';
 
 interface UsePOIsParams {
   cityId: number | null;
@@ -18,17 +18,15 @@ export function usePOIs({ cityId, status, type }: UsePOIsParams) {
 
       let hasMore = true;
       while (hasMore) {
-        const { data } = await apiClient.get<PaginatedResponse<POI>>('/api/v1/pois', {
-          params: {
-            city_id: cityId,
-            page,
-            per_page: perPage,
-            ...(status && { status }),
-            ...(type && { type }),
-          },
+        const response = await listPOIs({
+          city_id: cityId,
+          page,
+          per_page: perPage,
+          ...(status ? { status } : {}),
+          ...(type ? { type } : {}),
         });
-        allPOIs.push(...data.data);
-        hasMore = allPOIs.length < data.meta.total;
+        allPOIs.push(...(response.data as POI[]));
+        hasMore = allPOIs.length < response.meta.total;
         page++;
       }
 

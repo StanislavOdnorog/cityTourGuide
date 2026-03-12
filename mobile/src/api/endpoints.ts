@@ -1,6 +1,6 @@
 import type {
   NearbyStoryCandidate,
-  NearbyStoriesResponse,
+  NearbyStoriesParams,
   TrackListeningRequest,
   ReportStoryRequest,
   City,
@@ -10,62 +10,81 @@ import type {
   Purchase,
   VerifyPurchaseRequest,
   PurchaseStatusResponse,
+  RegisterDeviceTokenRequest,
 } from '@/types';
-import apiClient from './client';
+import apiClient, { generatedApiClient } from './client';
 
-export interface FetchNearbyStoriesParams {
-  lat: number;
-  lng: number;
-  radius?: number;
-  heading?: number;
-  speed?: number;
-  language?: string;
-  user_id?: string;
-}
+export type FetchNearbyStoriesParams = NearbyStoriesParams;
 
 export async function fetchNearbyStories(
   params: FetchNearbyStoriesParams,
 ): Promise<NearbyStoryCandidate[]> {
-  const response = await apiClient.get<NearbyStoriesResponse>('/api/v1/nearby-stories', {
-    params,
+  const { data, error } = await generatedApiClient.GET('/nearby-stories', {
+    params: { query: params },
   });
-  return response.data.data;
+  if (error) {
+    throw new Error(error.error);
+  }
+  return data.data ?? [];
 }
 
 export async function trackListening(request: TrackListeningRequest): Promise<void> {
-  await apiClient.post('/api/v1/listenings', request);
+  const { error } = await generatedApiClient.POST('/listenings', {
+    body: request,
+  });
+  if (error) {
+    throw new Error(error.error);
+  }
 }
 
 export async function reportStory(request: ReportStoryRequest): Promise<void> {
-  await apiClient.post('/api/v1/reports', request);
+  const { error } = await generatedApiClient.POST('/reports', {
+    body: request,
+  });
+  if (error) {
+    throw new Error(error.error);
+  }
 }
 
 export async function fetchCities(): Promise<City[]> {
-  const response = await apiClient.get<{ data: City[] }>('/api/v1/cities');
-  return response.data.data;
+  const { data, error } = await generatedApiClient.GET('/cities');
+  if (error) {
+    throw new Error(error.error);
+  }
+  return data.data;
 }
 
 export async function fetchCityById(id: number): Promise<City> {
-  const response = await apiClient.get<{ data: City }>(`/api/v1/cities/${id}`);
-  return response.data.data;
+  const { data, error } = await generatedApiClient.GET('/cities/{id}', {
+    params: { path: { id } },
+  });
+  if (error) {
+    throw new Error(error.error);
+  }
+  return data.data;
 }
 
 export async function fetchCityDownloadManifest(
   cityId: number,
   language?: string,
 ): Promise<CityDownloadManifest> {
-  const response = await apiClient.get<CityDownloadManifest>(
-    `/api/v1/cities/${cityId}/download-manifest`,
-    { params: { language } },
-  );
-  return response.data;
+  const { data, error } = await generatedApiClient.GET('/cities/{id}/download-manifest', {
+    params: {
+      path: { id: cityId },
+      query: { language },
+    },
+  });
+  if (error) {
+    throw new Error(error.error);
+  }
+  return data;
 }
 
 export async function fetchCityPOIs(
   cityId: number,
   language?: string,
 ): Promise<{ pois: CityPOI[]; totalStories: number }> {
-  const response = await apiClient.get<CityPOIsResponse>(`/api/v1/cities/${cityId}/pois`, {
+  const response = await apiClient.get<CityPOIsResponse>(`/cities/${cityId}/pois`, {
     params: { language },
   });
   return {
@@ -76,44 +95,56 @@ export async function fetchCityPOIs(
 
 // Device token endpoints
 
-export async function registerDeviceToken(
-  userId: string,
-  token: string,
-  platform: 'ios' | 'android',
-): Promise<void> {
-  await apiClient.post('/api/v1/device-tokens', {
-    user_id: userId,
-    token,
-    platform,
+export async function registerDeviceToken(request: RegisterDeviceTokenRequest): Promise<void> {
+  const { error } = await generatedApiClient.POST('/device-tokens', {
+    body: request,
   });
+  if (error) {
+    throw new Error(error.error);
+  }
 }
 
 export async function unregisterDeviceToken(token: string): Promise<void> {
-  await apiClient.delete('/api/v1/device-tokens', {
-    data: { token },
+  const { error } = await generatedApiClient.DELETE('/device-tokens', {
+    body: { token },
   });
+  if (error) {
+    throw new Error(error.error);
+  }
 }
 
 // User account endpoints
 
 export async function deleteAccount(): Promise<void> {
-  await apiClient.delete('/api/v1/users/me');
+  const { error } = await generatedApiClient.DELETE('/users/me');
+  if (error) {
+    throw new Error(error.error);
+  }
 }
 
 export async function restoreAccount(): Promise<void> {
-  await apiClient.post('/api/v1/users/me/restore');
+  const { error } = await generatedApiClient.POST('/users/me/restore');
+  if (error) {
+    throw new Error(error.error);
+  }
 }
 
 // Purchase endpoints
 
 export async function verifyPurchase(request: VerifyPurchaseRequest): Promise<Purchase> {
-  const response = await apiClient.post<{ data: Purchase }>('/api/v1/purchases/verify', request);
-  return response.data.data;
+  const { data, error } = await generatedApiClient.POST('/purchases/verify', {
+    body: request,
+  });
+  if (error) {
+    throw new Error(error.error);
+  }
+  return data.data;
 }
 
 export async function fetchPurchaseStatus(): Promise<PurchaseStatusResponse> {
-  const response = await apiClient.get<{ data: PurchaseStatusResponse }>(
-    '/api/v1/purchases/status',
-  );
-  return response.data.data;
+  const { data, error } = await generatedApiClient.GET('/purchases/status');
+  if (error) {
+    throw new Error(error.error);
+  }
+  return data.data;
 }
