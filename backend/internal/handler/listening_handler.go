@@ -38,29 +38,29 @@ type trackListeningRequest struct {
 func (h *ListeningHandler) TrackListening(c *gin.Context) {
 	var req trackListeningRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if req.StoryID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "story_id must be a positive integer"})
+		errorJSON(c, http.StatusBadRequest, "story_id must be a positive integer")
 		return
 	}
 
 	// Validate that lat/lng come in pairs
 	if (req.Lat == nil) != (req.Lng == nil) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "lat and lng must both be provided or both omitted"})
+		errorJSON(c, http.StatusBadRequest, "lat and lng must both be provided or both omitted")
 		return
 	}
 
 	// Validate coordinate ranges if provided
 	if req.Lat != nil && req.Lng != nil {
 		if *req.Lat < -90 || *req.Lat > 90 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "lat must be between -90 and 90"})
+			errorJSON(c, http.StatusBadRequest, "lat must be between -90 and 90")
 			return
 		}
 		if *req.Lng < -180 || *req.Lng > 180 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "lng must be between -180 and 180"})
+			errorJSON(c, http.StatusBadRequest, "lng must be between -180 and 180")
 			return
 		}
 	}
@@ -71,7 +71,7 @@ func (h *ListeningHandler) TrackListening(c *gin.Context) {
 		req.Lat, req.Lng,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to track listening"})
+		errorJSON(c, http.StatusInternalServerError, "failed to track listening")
 		return
 	}
 
@@ -83,7 +83,7 @@ func (h *ListeningHandler) TrackListening(c *gin.Context) {
 func (h *ListeningHandler) ListListenings(c *gin.Context) {
 	userID := c.Query("user_id")
 	if userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required"})
+		errorJSON(c, http.StatusBadRequest, "user_id is required")
 		return
 	}
 
@@ -95,10 +95,10 @@ func (h *ListeningHandler) ListListenings(c *gin.Context) {
 	result, err := h.repo.ListByUserID(c.Request.Context(), userID, pageReq)
 	if err != nil {
 		if isCursorError(err) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			errorJSON(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch listenings"})
+		errorJSON(c, http.StatusInternalServerError, "failed to fetch listenings")
 		return
 	}
 

@@ -36,12 +36,12 @@ func (h *InflationHandler) TriggerInflation(c *gin.Context) {
 	// Check if POI already has too many active jobs
 	count, err := h.repo.CountActiveByPOIID(c.Request.Context(), poiID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check existing jobs"})
+		errorJSON(c, http.StatusInternalServerError, "failed to check existing jobs")
 		return
 	}
 
 	if count >= 3 {
-		c.JSON(http.StatusConflict, gin.H{"error": "POI already has maximum inflation segments (3)"})
+		errorJSON(c, http.StatusConflict, "POI already has maximum inflation segments (3)")
 		return
 	}
 
@@ -55,7 +55,7 @@ func (h *InflationHandler) TriggerInflation(c *gin.Context) {
 
 	created, err := h.repo.Create(c.Request.Context(), job)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create inflation job"})
+		errorJSON(c, http.StatusInternalServerError, "failed to create inflation job")
 		return
 	}
 
@@ -71,7 +71,7 @@ func (h *InflationHandler) ListByPOI(c *gin.Context) {
 
 	jobs, err := h.repo.GetByPOIID(c.Request.Context(), poiID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch inflation jobs"})
+		errorJSON(c, http.StatusInternalServerError, "failed to fetch inflation jobs")
 		return
 	}
 

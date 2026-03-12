@@ -38,13 +38,14 @@ func RequestLogger() gin.HandlerFunc {
 		}
 
 		status := c.Writer.Status()
+		logger := LoggerFromContext(c.Request.Context())
 		switch {
 		case status >= 500:
-			slog.Error("request completed", args...)
+			logger.Error("request completed", args...)
 		case status >= 400:
-			slog.Warn("request completed", args...)
+			logger.Warn("request completed", args...)
 		default:
-			slog.Info("request completed", args...)
+			logger.Info("request completed", args...)
 		}
 	}
 }

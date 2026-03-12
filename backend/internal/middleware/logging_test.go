@@ -158,3 +158,28 @@ func TestRequestLogger_IncludesUserID(t *testing.T) {
 		t.Errorf("expected user_id user-abc, got %q", entry["user_id"])
 	}
 }
+
+func TestRequestLogger_IncludesTraceID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(TraceIDMiddleware())
+	r.Use(RequestLogger())
+	r.GET("/trace", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	output := captureSlog(func() {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(http.MethodGet, "/trace", nil)
+		req.Header.Set(requestIDHeader, "trace-abc-123")
+		r.ServeHTTP(w, req)
+	})
+
+	var entry map[string]any
+	if err := json.Unmarshal([]byte(output), &entry); err != nil {
+		t.Fatalf("invalid JSON: %s", output)
+	}
+	if entry["trace_id"] != "trace-abc-123" {
+		t.Errorf("expected trace_id trace-abc-123, got %q", entry["trace_id"])
+	}
+}

@@ -7,9 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 
+	"github.com/saas/city-stories-guide/backend/internal/middleware"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
@@ -159,7 +159,7 @@ func (c *Client) Send(ctx context.Context, msg *Message) error {
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		slog.Error("fcm: send failed", "status", resp.StatusCode, "body", string(respBody))
+		middleware.LoggerFromContext(ctx).Error("fcm: send failed", "status", resp.StatusCode, "body", string(respBody))
 		return fmt.Errorf("fcm: unexpected status %d: %s", resp.StatusCode, string(respBody))
 	}
 

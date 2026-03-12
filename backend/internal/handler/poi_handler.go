@@ -65,7 +65,7 @@ type updatePOIRequest struct {
 func (h *POIHandler) ListPOIs(c *gin.Context) {
 	cityIDStr := c.Query("city_id")
 	if cityIDStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "city_id is required"})
+		errorJSON(c, http.StatusBadRequest, "city_id is required")
 		return
 	}
 
@@ -94,10 +94,10 @@ func (h *POIHandler) ListPOIs(c *gin.Context) {
 	result, err := h.repo.ListByCityID(c.Request.Context(), cityID, statusFilter, typeFilter, pageReq)
 	if err != nil {
 		if isCursorError(err) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			errorJSON(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch POIs"})
+		errorJSON(c, http.StatusInternalServerError, "failed to fetch POIs")
 		return
 	}
 
@@ -122,10 +122,10 @@ func (h *POIHandler) GetPOI(c *gin.Context) {
 	poi, err := h.repo.GetByID(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "POI not found"})
+			errorJSON(c, http.StatusNotFound, "POI not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch POI"})
+		errorJSON(c, http.StatusInternalServerError, "failed to fetch POI")
 		return
 	}
 
@@ -136,7 +136,7 @@ func (h *POIHandler) GetPOI(c *gin.Context) {
 func (h *POIHandler) CreatePOI(c *gin.Context) {
 	var req createPOIRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -170,7 +170,7 @@ func (h *POIHandler) CreatePOI(c *gin.Context) {
 
 	created, err := h.repo.Create(c.Request.Context(), poi)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create POI"})
+		errorJSON(c, http.StatusInternalServerError, "failed to create POI")
 		return
 	}
 
@@ -186,7 +186,7 @@ func (h *POIHandler) UpdatePOI(c *gin.Context) {
 
 	var req updatePOIRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -222,10 +222,10 @@ func (h *POIHandler) UpdatePOI(c *gin.Context) {
 	updated, err := h.repo.Update(c.Request.Context(), poi)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "POI not found"})
+			errorJSON(c, http.StatusNotFound, "POI not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update POI"})
+		errorJSON(c, http.StatusInternalServerError, "failed to update POI")
 		return
 	}
 
@@ -242,10 +242,10 @@ func (h *POIHandler) DeletePOI(c *gin.Context) {
 	err := h.repo.Delete(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "POI not found"})
+			errorJSON(c, http.StatusNotFound, "POI not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete POI"})
+		errorJSON(c, http.StatusInternalServerError, "failed to delete POI")
 		return
 	}
 
@@ -256,7 +256,7 @@ func (h *POIHandler) DeletePOI(c *gin.Context) {
 func parseQueryInt(c *gin.Context, name, value string) (int, bool) {
 	v, err := strconv.Atoi(value)
 	if err != nil || v <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": name + " must be a positive integer"})
+		errorJSON(c, http.StatusBadRequest, name+" must be a positive integer")
 		return 0, false
 	}
 	return v, true

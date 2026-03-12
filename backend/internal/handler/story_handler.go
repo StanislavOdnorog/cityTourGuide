@@ -66,7 +66,7 @@ type updateStoryRequest struct {
 func (h *StoryHandler) ListStories(c *gin.Context) {
 	poiIDStr := c.Query("poi_id")
 	if poiIDStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "poi_id is required"})
+		errorJSON(c, http.StatusBadRequest, "poi_id is required")
 		return
 	}
 
@@ -91,10 +91,10 @@ func (h *StoryHandler) ListStories(c *gin.Context) {
 	result, err := h.repo.ListByPOIID(c.Request.Context(), poiID, language, statusFilter, pageReq)
 	if err != nil {
 		if isCursorError(err) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			errorJSON(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch stories"})
+		errorJSON(c, http.StatusInternalServerError, "failed to fetch stories")
 		return
 	}
 
@@ -119,10 +119,10 @@ func (h *StoryHandler) GetStory(c *gin.Context) {
 	story, err := h.repo.GetByID(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "story not found"})
+			errorJSON(c, http.StatusNotFound, "story not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch story"})
+		errorJSON(c, http.StatusInternalServerError, "failed to fetch story")
 		return
 	}
 
@@ -133,7 +133,7 @@ func (h *StoryHandler) GetStory(c *gin.Context) {
 func (h *StoryHandler) CreateStory(c *gin.Context) {
 	var req createStoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -178,7 +178,7 @@ func (h *StoryHandler) CreateStory(c *gin.Context) {
 
 	created, err := h.repo.Create(c.Request.Context(), story)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create story"})
+		errorJSON(c, http.StatusInternalServerError, "failed to create story")
 		return
 	}
 
@@ -194,7 +194,7 @@ func (h *StoryHandler) UpdateStory(c *gin.Context) {
 
 	var req updateStoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -241,10 +241,10 @@ func (h *StoryHandler) UpdateStory(c *gin.Context) {
 	updated, err := h.repo.Update(c.Request.Context(), story)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "story not found"})
+			errorJSON(c, http.StatusNotFound, "story not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update story"})
+		errorJSON(c, http.StatusInternalServerError, "failed to update story")
 		return
 	}
 
@@ -261,10 +261,10 @@ func (h *StoryHandler) DeleteStory(c *gin.Context) {
 	err := h.repo.Delete(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "story not found"})
+			errorJSON(c, http.StatusNotFound, "story not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete story"})
+		errorJSON(c, http.StatusInternalServerError, "failed to delete story")
 		return
 	}
 

@@ -44,12 +44,12 @@ type createReportRequest struct {
 func (h *ReportHandler) CreateReport(c *gin.Context) {
 	var req createReportRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if req.StoryID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "story_id must be a positive integer"})
+		errorJSON(c, http.StatusBadRequest, "story_id must be a positive integer")
 		return
 	}
 
@@ -58,24 +58,24 @@ func (h *ReportHandler) CreateReport(c *gin.Context) {
 	case domain.ReportTypeWrongLocation, domain.ReportTypeWrongFact, domain.ReportTypeInappropriateContent:
 		// valid
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "type must be one of: wrong_location, wrong_fact, inappropriate_content"})
+		errorJSON(c, http.StatusBadRequest, "type must be one of: wrong_location, wrong_fact, inappropriate_content")
 		return
 	}
 
 	// Validate lat/lng come in pairs
 	if (req.Lat == nil) != (req.Lng == nil) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "lat and lng must both be provided or both omitted"})
+		errorJSON(c, http.StatusBadRequest, "lat and lng must both be provided or both omitted")
 		return
 	}
 
 	// Validate coordinate ranges if provided
 	if req.Lat != nil && req.Lng != nil {
 		if *req.Lat < -90 || *req.Lat > 90 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "lat must be between -90 and 90"})
+			errorJSON(c, http.StatusBadRequest, "lat must be between -90 and 90")
 			return
 		}
 		if *req.Lng < -180 || *req.Lng > 180 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "lng must be between -180 and 180"})
+			errorJSON(c, http.StatusBadRequest, "lng must be between -180 and 180")
 			return
 		}
 	}
@@ -86,7 +86,7 @@ func (h *ReportHandler) CreateReport(c *gin.Context) {
 		req.Lat, req.Lng,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create report"})
+		errorJSON(c, http.StatusInternalServerError, "failed to create report")
 		return
 	}
 
@@ -105,10 +105,10 @@ func (h *ReportHandler) ListReports(c *gin.Context) {
 	result, err := h.repo.List(c.Request.Context(), status, pageReq)
 	if err != nil {
 		if isCursorError(err) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			errorJSON(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch reports"})
+		errorJSON(c, http.StatusInternalServerError, "failed to fetch reports")
 		return
 	}
 
@@ -136,7 +136,7 @@ func (h *ReportHandler) UpdateReportStatus(c *gin.Context) {
 
 	var req updateReportStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -145,17 +145,17 @@ func (h *ReportHandler) UpdateReportStatus(c *gin.Context) {
 	case domain.ReportStatusNew, domain.ReportStatusReviewed, domain.ReportStatusResolved, domain.ReportStatusDismissed:
 		// valid
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "status must be one of: new, reviewed, resolved, dismissed"})
+		errorJSON(c, http.StatusBadRequest, "status must be one of: new, reviewed, resolved, dismissed")
 		return
 	}
 
 	report, err := h.repo.UpdateStatus(c.Request.Context(), id, req.Status)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "report not found"})
+			errorJSON(c, http.StatusNotFound, "report not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update report"})
+		errorJSON(c, http.StatusInternalServerError, "failed to update report")
 		return
 	}
 
@@ -171,7 +171,7 @@ func (h *ReportHandler) ListByPOI(c *gin.Context) {
 
 	reports, err := h.repo.GetByPOIID(c.Request.Context(), poiID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch reports"})
+		errorJSON(c, http.StatusInternalServerError, "failed to fetch reports")
 		return
 	}
 

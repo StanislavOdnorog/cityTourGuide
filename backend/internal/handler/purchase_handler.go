@@ -41,13 +41,13 @@ type verifyPurchaseRequest struct {
 func (h *PurchaseHandler) VerifyPurchase(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user_id not found in context"})
+		errorJSON(c, http.StatusUnauthorized, "user_id not found in context")
 		return
 	}
 
 	var req verifyPurchaseRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -64,14 +64,14 @@ func (h *PurchaseHandler) VerifyPurchase(c *gin.Context) {
 	purchase, err := h.svc.VerifyAndCreate(c.Request.Context(), svcReq)
 	if err != nil {
 		if errors.Is(err, service.ErrDuplicateTransaction) {
-			c.JSON(http.StatusConflict, gin.H{"error": "transaction already processed"})
+			errorJSON(c, http.StatusConflict, "transaction already processed")
 			return
 		}
 		if errors.Is(err, service.ErrInvalidReceipt) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid receipt data"})
+			errorJSON(c, http.StatusBadRequest, "invalid receipt data")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify purchase"})
+		errorJSON(c, http.StatusInternalServerError, "failed to verify purchase")
 		return
 	}
 
@@ -83,13 +83,13 @@ func (h *PurchaseHandler) VerifyPurchase(c *gin.Context) {
 func (h *PurchaseHandler) GetStatus(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user_id not found in context"})
+		errorJSON(c, http.StatusUnauthorized, "user_id not found in context")
 		return
 	}
 
 	status, err := h.svc.GetStatus(c.Request.Context(), userID.(string))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get purchase status"})
+		errorJSON(c, http.StatusInternalServerError, "failed to get purchase status")
 		return
 	}
 

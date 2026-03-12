@@ -15,15 +15,11 @@ func ValidateGPSParams() gin.HandlerFunc {
 		if latStr := c.Query("lat"); latStr != "" {
 			lat, err := strconv.ParseFloat(latStr, 64)
 			if err != nil {
-				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-					"error": "lat must be a valid number",
-				})
+				abortErrorJSON(c, http.StatusBadRequest, "lat must be a valid number")
 				return
 			}
 			if lat < -90 || lat > 90 {
-				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-					"error": "lat must be between -90 and 90",
-				})
+				abortErrorJSON(c, http.StatusBadRequest, "lat must be between -90 and 90")
 				return
 			}
 		}
@@ -31,15 +27,11 @@ func ValidateGPSParams() gin.HandlerFunc {
 		if lngStr := c.Query("lng"); lngStr != "" {
 			lng, err := strconv.ParseFloat(lngStr, 64)
 			if err != nil {
-				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-					"error": "lng must be a valid number",
-				})
+				abortErrorJSON(c, http.StatusBadRequest, "lng must be a valid number")
 				return
 			}
 			if lng < -180 || lng > 180 {
-				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-					"error": "lng must be between -180 and 180",
-				})
+				abortErrorJSON(c, http.StatusBadRequest, "lng must be between -180 and 180")
 				return
 			}
 		}

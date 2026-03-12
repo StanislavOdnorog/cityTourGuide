@@ -24,7 +24,7 @@ func RegisterSwagger(r *gin.Engine) {
 func serveSpec(c *gin.Context) {
 	data, err := api.SpecFS.ReadFile("openapi.yaml")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load spec"})
+		errorJSON(c, http.StatusInternalServerError, "failed to load spec")
 		return
 	}
 	c.Data(http.StatusOK, "application/yaml", data)

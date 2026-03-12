@@ -13,9 +13,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/saas/city-stories-guide/backend/internal/config"
-	_ "github.com/saas/city-stories-guide/backend/internal/metrics" // register business metrics
 	"github.com/saas/city-stories-guide/backend/internal/handler"
 	"github.com/saas/city-stories-guide/backend/internal/logger"
+	_ "github.com/saas/city-stories-guide/backend/internal/metrics" // register business metrics
 	"github.com/saas/city-stories-guide/backend/internal/middleware"
 	"github.com/saas/city-stories-guide/backend/internal/platform/fcm"
 	"github.com/saas/city-stories-guide/backend/internal/platform/oauth"
@@ -136,6 +136,7 @@ func run() error {
 	// Global middleware — metrics must be first so all requests are counted.
 	r.Use(middleware.Metrics())
 	r.Use(gin.Recovery())
+	r.Use(middleware.TraceIDMiddleware())
 	r.Use(middleware.RequestLogger())
 	r.Use(middleware.CORS(middleware.CORSConfig{
 		AllowedOrigins: cfg.Server.AllowedOrigins,

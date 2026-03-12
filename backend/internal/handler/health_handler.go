@@ -34,9 +34,8 @@ func (h *HealthHandler) Readyz(c *gin.Context) {
 	defer cancel()
 
 	if err := h.db.Ping(ctx); err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
+		errorJSONWithFields(c, http.StatusServiceUnavailable, "database unreachable", gin.H{
 			"status": "unavailable",
-			"error":  "database unreachable",
 		})
 		return
 	}

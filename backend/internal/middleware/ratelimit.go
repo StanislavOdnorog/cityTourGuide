@@ -57,9 +57,7 @@ func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 		entry.count++
 		if entry.count > rl.limit {
 			rl.mu.Unlock()
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-				"error": "rate limit exceeded, try again later",
-			})
+			abortErrorJSON(c, http.StatusTooManyRequests, "rate limit exceeded, try again later")
 			return
 		}
 

@@ -74,10 +74,10 @@ func (h *CityHandler) ListCities(c *gin.Context) {
 	result, err := h.repo.List(c.Request.Context(), pageReq)
 	if err != nil {
 		if isCursorError(err) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			errorJSON(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch cities"})
+		errorJSON(c, http.StatusInternalServerError, "failed to fetch cities")
 		return
 	}
 
@@ -102,10 +102,10 @@ func (h *CityHandler) GetCity(c *gin.Context) {
 	city, err := h.repo.GetByID(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "city not found"})
+			errorJSON(c, http.StatusNotFound, "city not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch city"})
+		errorJSON(c, http.StatusInternalServerError, "failed to fetch city")
 		return
 	}
 
@@ -116,7 +116,7 @@ func (h *CityHandler) GetCity(c *gin.Context) {
 func (h *CityHandler) CreateCity(c *gin.Context) {
 	var req createCityRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -138,7 +138,7 @@ func (h *CityHandler) CreateCity(c *gin.Context) {
 
 	created, err := h.repo.Create(c.Request.Context(), city)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create city"})
+		errorJSON(c, http.StatusInternalServerError, "failed to create city")
 		return
 	}
 
@@ -154,7 +154,7 @@ func (h *CityHandler) UpdateCity(c *gin.Context) {
 
 	var req updateCityRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -178,10 +178,10 @@ func (h *CityHandler) UpdateCity(c *gin.Context) {
 	updated, err := h.repo.Update(c.Request.Context(), city)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "city not found"})
+			errorJSON(c, http.StatusNotFound, "city not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update city"})
+		errorJSON(c, http.StatusInternalServerError, "failed to update city")
 		return
 	}
 
@@ -198,10 +198,10 @@ func (h *CityHandler) DeleteCity(c *gin.Context) {
 	err := h.repo.Delete(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "city not found"})
+			errorJSON(c, http.StatusNotFound, "city not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete city"})
+		errorJSON(c, http.StatusInternalServerError, "failed to delete city")
 		return
 	}
 
@@ -219,10 +219,10 @@ func (h *CityHandler) GetDownloadManifest(c *gin.Context) {
 	city, err := h.repo.GetByID(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "city not found"})
+			errorJSON(c, http.StatusNotFound, "city not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch city"})
+		errorJSON(c, http.StatusInternalServerError, "failed to fetch city")
 		return
 	}
 
@@ -230,7 +230,7 @@ func (h *CityHandler) GetDownloadManifest(c *gin.Context) {
 
 	items, err := h.manifestRepo.GetDownloadManifest(c.Request.Context(), id, language)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch download manifest"})
+		errorJSON(c, http.StatusInternalServerError, "failed to fetch download manifest")
 		return
 	}
 
@@ -257,7 +257,7 @@ func parseIDParam(c *gin.Context) (int, bool) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil || id <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id parameter"})
+		errorJSON(c, http.StatusBadRequest, "invalid id parameter")
 		return 0, false
 	}
 	return id, true
@@ -274,11 +274,11 @@ func parseCursorPagination(c *gin.Context) (domain.PageRequest, bool) {
 	if l := c.Query("limit"); l != "" {
 		v, err := strconv.Atoi(l)
 		if err != nil || v <= 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a positive integer"})
+			errorJSON(c, http.StatusBadRequest, "limit must be a positive integer")
 			return pr, false
 		}
 		if v > domain.MaxPageLimit {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must not exceed 100"})
+			errorJSON(c, http.StatusBadRequest, "limit must not exceed 100")
 			return pr, false
 		}
 		pr.Limit = v

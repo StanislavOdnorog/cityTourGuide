@@ -54,7 +54,7 @@ func (h *NearbyHandler) GetNearbyStories(c *gin.Context) {
 		q.UserID, q.Language,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch nearby stories"})
+		errorJSON(c, http.StatusInternalServerError, "failed to fetch nearby stories")
 		return
 	}
 
@@ -73,16 +73,16 @@ func parseNearbyQuery(c *gin.Context) (nearbyQuery, bool) {
 	// lat (required)
 	latStr := c.Query("lat")
 	if latStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "lat is required"})
+		errorJSON(c, http.StatusBadRequest, "lat is required")
 		return q, false
 	}
 	lat, err := strconv.ParseFloat(latStr, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "lat must be a valid number"})
+		errorJSON(c, http.StatusBadRequest, "lat must be a valid number")
 		return q, false
 	}
 	if lat < -90 || lat > 90 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "lat must be between -90 and 90"})
+		errorJSON(c, http.StatusBadRequest, "lat must be between -90 and 90")
 		return q, false
 	}
 	q.Lat = lat
@@ -90,16 +90,16 @@ func parseNearbyQuery(c *gin.Context) (nearbyQuery, bool) {
 	// lng (required)
 	lngStr := c.Query("lng")
 	if lngStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "lng is required"})
+		errorJSON(c, http.StatusBadRequest, "lng is required")
 		return q, false
 	}
 	lng, err := strconv.ParseFloat(lngStr, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "lng must be a valid number"})
+		errorJSON(c, http.StatusBadRequest, "lng must be a valid number")
 		return q, false
 	}
 	if lng < -180 || lng > 180 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "lng must be between -180 and 180"})
+		errorJSON(c, http.StatusBadRequest, "lng must be between -180 and 180")
 		return q, false
 	}
 	q.Lng = lng
@@ -108,11 +108,11 @@ func parseNearbyQuery(c *gin.Context) (nearbyQuery, bool) {
 	radiusStr := c.DefaultQuery("radius", "150")
 	radius, err := strconv.ParseFloat(radiusStr, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "radius must be a valid number"})
+		errorJSON(c, http.StatusBadRequest, "radius must be a valid number")
 		return q, false
 	}
 	if radius < 10 || radius > 500 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "radius must be between 10 and 500"})
+		errorJSON(c, http.StatusBadRequest, "radius must be between 10 and 500")
 		return q, false
 	}
 	q.Radius = radius
@@ -121,7 +121,7 @@ func parseNearbyQuery(c *gin.Context) (nearbyQuery, bool) {
 	headingStr := c.DefaultQuery("heading", "-1")
 	heading, err := strconv.ParseFloat(headingStr, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "heading must be a valid number"})
+		errorJSON(c, http.StatusBadRequest, "heading must be a valid number")
 		return q, false
 	}
 	q.Heading = heading
@@ -130,7 +130,7 @@ func parseNearbyQuery(c *gin.Context) (nearbyQuery, bool) {
 	speedStr := c.DefaultQuery("speed", "0")
 	speed, err := strconv.ParseFloat(speedStr, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "speed must be a valid number"})
+		errorJSON(c, http.StatusBadRequest, "speed must be a valid number")
 		return q, false
 	}
 	q.Speed = math.Max(0, speed)

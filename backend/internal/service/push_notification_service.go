@@ -3,11 +3,11 @@ package service
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/saas/city-stories-guide/backend/internal/domain"
 	"github.com/saas/city-stories-guide/backend/internal/metrics"
+	"github.com/saas/city-stories-guide/backend/internal/middleware"
 	"github.com/saas/city-stories-guide/backend/internal/platform/fcm"
 )
 
@@ -75,7 +75,7 @@ func (s *PushNotificationService) RegisterDeviceToken(ctx context.Context, userI
 		return nil, fmt.Errorf("push: register device token: %w", err)
 	}
 
-	slog.Info("device token registered", "user_id", userID, "platform", platform)
+	middleware.LoggerFromContext(ctx).Info("device token registered", "user_id", userID, "platform", platform)
 	return dt, nil
 }
 
@@ -91,7 +91,7 @@ func (s *PushNotificationService) UnregisterDeviceToken(ctx context.Context, tok
 // Returns true if the notification was sent, false if rate-limited or skipped.
 func (s *PushNotificationService) SendGeoNotification(ctx context.Context, userID, title, body string) (bool, error) {
 	if s.fcmClient == nil {
-		slog.Debug("fcm not configured, skipping geo notification", "user_id", userID)
+		middleware.LoggerFromContext(ctx).Debug("fcm not configured, skipping geo notification", "user_id", userID)
 		return false, nil
 	}
 
@@ -102,7 +102,7 @@ func (s *PushNotificationService) SendGeoNotification(ctx context.Context, userI
 		return false, fmt.Errorf("push: check geo rate limit: %w", err)
 	}
 	if count >= s.config.GeoMaxPerDay {
-		slog.Debug("geo notification rate limited", "user_id", userID, "count", count)
+		middleware.LoggerFromContext(ctx).Debug("geo notification rate limited", "user_id", userID, "count", count)
 		return false, nil
 	}
 
@@ -112,7 +112,7 @@ func (s *PushNotificationService) SendGeoNotification(ctx context.Context, userI
 // SendContentNotification sends a content-push notification to a user if rate limits allow.
 func (s *PushNotificationService) SendContentNotification(ctx context.Context, userID, title, body string) (bool, error) {
 	if s.fcmClient == nil {
-		slog.Debug("fcm not configured, skipping content notification", "user_id", userID)
+		middleware.LoggerFromContext(ctx).Debug("fcm not configured, skipping content notification", "user_id", userID)
 		return false, nil
 	}
 
@@ -123,7 +123,7 @@ func (s *PushNotificationService) SendContentNotification(ctx context.Context, u
 		return false, fmt.Errorf("push: check content rate limit: %w", err)
 	}
 	if count >= s.config.ContentMaxPerWeek {
-		slog.Debug("content notification rate limited", "user_id", userID, "count", count)
+		middleware.LoggerFromContext(ctx).Debug("content notification rate limited", "user_id", userID, "count", count)
 		return false, nil
 	}
 
@@ -152,7 +152,7 @@ func (s *PushNotificationService) sendToUser(ctx context.Context, userID string,
 			Data:  data,
 		})
 		if err != nil {
-			slog.Error("push: failed to send notification", "user_id", userID, "token_id", dt.ID, "error", err)
+			middleware.LoggerFromContext(ctx).Error("push: failed to send notification", "user_id", userID, "token_id", dt.ID, "error", err)
 			continue
 		}
 
@@ -167,7 +167,7 @@ func (s *PushNotificationService) sendToUser(ctx context.Context, userID string,
 			SentAt:        &now,
 		})
 		if recordErr != nil {
-			slog.Error("push: failed to record notification", "error", recordErr)
+			middleware.LoggerFromContext(ctx).Error("push: failed to record notification", "error", recordErr)
 		}
 
 		metrics.PushNotificationsSentTotal.Inc()

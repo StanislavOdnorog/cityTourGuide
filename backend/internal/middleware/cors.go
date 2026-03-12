@@ -30,9 +30,7 @@ func CORS(cfg CORSConfig) gin.HandlerFunc {
 		normalised := strings.TrimRight(origin, "/")
 
 		if !allowed[normalised] {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-				"error": "origin not allowed",
-			})
+			abortErrorJSON(c, http.StatusForbidden, "origin not allowed")
 			return
 		}
 

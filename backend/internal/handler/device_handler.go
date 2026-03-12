@@ -36,7 +36,7 @@ type registerDeviceTokenRequest struct {
 func (h *DeviceHandler) RegisterDeviceToken(c *gin.Context) {
 	var req registerDeviceTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -47,7 +47,7 @@ func (h *DeviceHandler) RegisterDeviceToken(c *gin.Context) {
 		domain.DevicePlatform(req.Platform),
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to register device token"})
+		errorJSON(c, http.StatusInternalServerError, "failed to register device token")
 		return
 	}
 
@@ -62,12 +62,12 @@ type unregisterDeviceTokenRequest struct {
 func (h *DeviceHandler) UnregisterDeviceToken(c *gin.Context) {
 	var req unregisterDeviceTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if err := h.pushService.UnregisterDeviceToken(c.Request.Context(), req.Token); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to unregister device token"})
+		errorJSON(c, http.StatusInternalServerError, "failed to unregister device token")
 		return
 	}
 
@@ -78,13 +78,13 @@ func (h *DeviceHandler) UnregisterDeviceToken(c *gin.Context) {
 func (h *DeviceHandler) ListDeviceTokens(c *gin.Context) {
 	userID := c.Query("user_id")
 	if userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required"})
+		errorJSON(c, http.StatusBadRequest, "user_id is required")
 		return
 	}
 
 	tokens, err := h.pushService.GetUserDeviceTokens(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get device tokens"})
+		errorJSON(c, http.StatusInternalServerError, "failed to get device tokens")
 		return
 	}
 

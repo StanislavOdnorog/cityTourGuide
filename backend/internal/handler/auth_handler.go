@@ -86,7 +86,7 @@ type refreshRequest struct {
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req registerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -95,10 +95,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	user, tokens, err := h.auth.Register(c.Request.Context(), req.Email, req.Password, req.Name)
 	if err != nil {
 		if errors.Is(err, service.ErrEmailAlreadyExists) {
-			c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
+			errorJSON(c, http.StatusConflict, "email already registered")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		errorJSON(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -113,7 +113,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -122,14 +122,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	user, tokens, err := h.auth.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
+			errorJSON(c, http.StatusUnauthorized, "invalid email or password")
 			return
 		}
 		if errors.Is(err, service.ErrAccountPendingDeletion) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Account scheduled for deletion"})
+			errorJSON(c, http.StatusForbidden, "Account scheduled for deletion")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		errorJSON(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -143,13 +143,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 func (h *AuthHandler) DeviceAuth(c *gin.Context) {
 	var req deviceAuthRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	user, tokens, err := h.auth.DeviceAuth(c.Request.Context(), req.DeviceID, req.Language)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		errorJSON(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -163,17 +163,17 @@ func (h *AuthHandler) DeviceAuth(c *gin.Context) {
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	var req refreshRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	tokens, err := h.auth.RefreshTokens(c.Request.Context(), req.RefreshToken)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidToken) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired refresh token"})
+			errorJSON(c, http.StatusUnauthorized, "invalid or expired refresh token")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		errorJSON(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -189,19 +189,19 @@ type googleAuthRequest struct {
 // GoogleAuth handles POST /api/v1/auth/google.
 func (h *AuthHandler) GoogleAuth(c *gin.Context) {
 	if h.google == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "google sign-in not configured"})
+		errorJSON(c, http.StatusServiceUnavailable, "google sign-in not configured")
 		return
 	}
 
 	var req googleAuthRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	result, err := h.google.Verify(req.IDToken)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid google token"})
+		errorJSON(c, http.StatusUnauthorized, "invalid google token")
 		return
 	}
 
@@ -212,10 +212,10 @@ func (h *AuthHandler) GoogleAuth(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, service.ErrAccountPendingDeletion) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Account scheduled for deletion"})
+			errorJSON(c, http.StatusForbidden, "Account scheduled for deletion")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		errorJSON(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -233,18 +233,18 @@ type appleAuthRequest struct {
 // AppleAuth handles POST /api/v1/auth/apple.
 func (h *AuthHandler) AppleAuth(c *gin.Context) {
 	if h.apple == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "apple sign-in not configured"})
+		errorJSON(c, http.StatusServiceUnavailable, "apple sign-in not configured")
 		return
 	}
 
 	var req appleAuthRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		errorJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if req.Code == "" && req.IDToken == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "either code or id_token is required"})
+		errorJSON(c, http.StatusBadRequest, "either code or id_token is required")
 		return
 	}
 
@@ -258,7 +258,7 @@ func (h *AuthHandler) AppleAuth(c *gin.Context) {
 	}
 
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid apple token"})
+		errorJSON(c, http.StatusUnauthorized, "invalid apple token")
 		return
 	}
 
@@ -269,10 +269,10 @@ func (h *AuthHandler) AppleAuth(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, service.ErrAccountPendingDeletion) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Account scheduled for deletion"})
+			errorJSON(c, http.StatusForbidden, "Account scheduled for deletion")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		errorJSON(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
