@@ -878,3 +878,111 @@ func TestAuthHandler_Register_EmailNormalization(t *testing.T) {
 		t.Errorf("expected normalized email, got %s", receivedEmail)
 	}
 }
+
+func TestAuthHandler_ValidationResponses_WithTraceID(t *testing.T) {
+	mock := &mockAuthService{}
+	h := NewAuthHandler(mock)
+	r := newRouterWithTrace("trace-auth-123", func(r *gin.Engine) {
+		auth := r.Group("/api/v1/auth")
+		auth.POST("/register", h.Register)
+		auth.POST("/login", h.Login)
+		auth.POST("/device", h.DeviceAuth)
+		auth.POST("/refresh", h.Refresh)
+		auth.POST("/google", h.GoogleAuth)
+		auth.POST("/apple", h.AppleAuth)
+	})
+
+	tests := []struct {
+		name     string
+		path     string
+		body     map[string]string
+		expected map[string]string
+	}{
+		{
+			name:     "register missing email",
+			path:     "/api/v1/auth/register",
+			body:     map[string]string{"password": "password123", "name": "Test User"},
+			expected: map[string]string{"email": "this field is required"},
+		},
+		{
+			name:     "login missing password",
+			path:     "/api/v1/auth/login",
+			body:     map[string]string{"email": "test@example.com"},
+			expected: map[string]string{"password": "this field is required"},
+		},
+		{
+			name:     "device invalid language",
+			path:     "/api/v1/auth/device",
+			body:     map[string]string{"device_id": "device-123", "language": "ENG"},
+			expected: map[string]string{"language": "must be a 2-letter ISO 639-1 language code"},
+		},
+		{
+			name:     "refresh missing token",
+			path:     "/api/v1/auth/refresh",
+			body:     map[string]string{},
+			expected: map[string]string{"refreshtoken": "this field is required"},
+		},
+		{
+			name:     "google missing token",
+			path:     "/api/v1/auth/google",
+			body:     map[string]string{},
+			expected: map[string]string{"idtoken": "this field is required"},
+		},
+	}
+
+	h.SetGoogleVerifier(&mockGoogleVerifier{})
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(tt.body)
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest(http.MethodPost, tt.path, bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+			}
+
+			assertValidationErrorResponse(t, w.Body.Bytes(), tt.expected, "trace-auth-123")
+		})
+	}
+}
+
+func TestAuthHandler_Register_InvalidJSON(t *testing.T) {
+	h := NewAuthHandler(&mockAuthService{})
+	r := setupAuthRouter(h)
+
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBufferString("not json"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	assertErrorResponseContains(t, w.Body.Bytes(), "invalid character")
+}
+
+func TestAuthHandler_Register_ValidationIncludesRequestID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewAuthHandler(&mockAuthService{})
+	r := gin.New()
+	addTraceIDMiddleware(r, "trace-auth-123")
+	auth := r.Group("/api/v1/auth")
+	auth.POST("/register", h.Register)
+
+	body, _ := json.Marshal(map[string]string{"password": "password123", "name": "Test User"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	assertValidationErrorResponse(t, w.Body.Bytes(), map[string]string{"email": "this field is required"}, "trace-auth-123")
+}

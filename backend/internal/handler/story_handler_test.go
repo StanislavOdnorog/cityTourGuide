@@ -617,3 +617,111 @@ func TestDeleteStory_NotFound(t *testing.T) {
 		t.Fatalf("expected 404, got %d", w.Code)
 	}
 }
+
+func TestStoryHandler_InvalidRequests(t *testing.T) {
+	mock := &mockStoryRepo{}
+	h := NewStoryHandler(mock)
+	r := setupStoryRouter(h)
+	addTraceIDMiddleware(r, "trace-story-123")
+
+	tests := []struct {
+		name          string
+		method        string
+		path          string
+		body          string
+		expectedCode  int
+		expectedError string
+		expectedField map[string]string
+	}{
+		{
+			name:          "list stories invalid poi id",
+			method:        http.MethodGet,
+			path:          "/api/v1/stories?poi_id=abc",
+			expectedCode:  http.StatusBadRequest,
+			expectedError: "poi_id must be a positive integer",
+		},
+		{
+			name:          "list stories invalid limit",
+			method:        http.MethodGet,
+			path:          "/api/v1/stories?poi_id=1&limit=0",
+			expectedCode:  http.StatusBadRequest,
+			expectedError: "limit must be a positive integer",
+		},
+		{
+			name:          "get story invalid path id",
+			method:        http.MethodGet,
+			path:          "/api/v1/stories/abc",
+			expectedCode:  http.StatusBadRequest,
+			expectedError: "invalid id parameter",
+		},
+		{
+			name:         "create story missing required fields",
+			method:       http.MethodPost,
+			path:         "/api/v1/admin/stories",
+			body:         `{"poi_id":1}`,
+			expectedCode: http.StatusBadRequest,
+			expectedField: map[string]string{
+				"language":  "this field is required",
+				"text":      "this field is required",
+				"layertype": "this field is required",
+			},
+		},
+		{
+			name:         "update story invalid language",
+			method:       http.MethodPut,
+			path:         "/api/v1/admin/stories/1",
+			body:         `{"poi_id":1,"language":"EN","text":"Story","layer_type":"general"}`,
+			expectedCode: http.StatusBadRequest,
+			expectedField: map[string]string{
+				"language": "must be a 2-letter ISO 639-1 language code",
+			},
+		},
+		{
+			name:          "delete story invalid path id",
+			method:        http.MethodDelete,
+			path:          "/api/v1/admin/stories/not-an-int",
+			expectedCode:  http.StatusBadRequest,
+			expectedError: "invalid id parameter",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var req *http.Request
+			if tt.body == "" {
+				req = httptest.NewRequest(tt.method, tt.path, nil)
+			} else {
+				req = httptest.NewRequest(tt.method, tt.path, bytes.NewBufferString(tt.body))
+				req.Header.Set("Content-Type", "application/json")
+			}
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			if w.Code != tt.expectedCode {
+				t.Fatalf("expected %d, got %d: %s", tt.expectedCode, w.Code, w.Body.String())
+			}
+
+			if tt.expectedField != nil {
+				assertValidationErrorResponse(t, w.Body.Bytes(), tt.expectedField, "")
+				return
+			}
+			assertErrorResponse(t, w.Body.Bytes(), tt.expectedError, "")
+		})
+	}
+}
+
+func TestCreateStory_InvalidJSON(t *testing.T) {
+	h := NewStoryHandler(&mockStoryRepo{})
+	r := setupStoryRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/stories", bytes.NewBufferString("not json"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	assertErrorResponseContains(t, w.Body.Bytes(), "invalid character")
+}

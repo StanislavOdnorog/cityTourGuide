@@ -541,3 +541,112 @@ func TestGetDownloadManifest_DefaultLanguage(t *testing.T) {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
 }
+
+func TestCityHandler_InvalidRequests(t *testing.T) {
+	mock := &mockCityRepo{}
+	h := NewCityHandler(mock, &mockManifestRepo{})
+	r := setupCityRouter(h)
+	addTraceIDMiddleware(r, "trace-city-123")
+
+	tests := []struct {
+		name          string
+		method        string
+		path          string
+		body          string
+		expectedCode  int
+		expectedError string
+		expectedField map[string]string
+	}{
+		{
+			name:          "list cities invalid limit",
+			method:        http.MethodGet,
+			path:          "/api/v1/cities?limit=-1",
+			expectedCode:  http.StatusBadRequest,
+			expectedError: "limit must be a positive integer",
+		},
+		{
+			name:          "get city invalid path id",
+			method:        http.MethodGet,
+			path:          "/api/v1/cities/abc",
+			expectedCode:  http.StatusBadRequest,
+			expectedError: "invalid id parameter",
+		},
+		{
+			name:         "create city missing required fields",
+			method:       http.MethodPost,
+			path:         "/api/v1/admin/cities",
+			body:         `{"name":"Tbilisi"}`,
+			expectedCode: http.StatusBadRequest,
+			expectedField: map[string]string{
+				"country":   "this field is required",
+				"centerlat": "this field is required",
+				"centerlng": "this field is required",
+				"radiuskm":  "this field is required",
+			},
+		},
+		{
+			name:         "update city missing name",
+			method:       http.MethodPut,
+			path:         "/api/v1/admin/cities/1",
+			body:         `{"country":"GE","center_lat":41.7,"center_lng":44.8,"radius_km":15}`,
+			expectedCode: http.StatusBadRequest,
+			expectedField: map[string]string{
+				"name": "this field is required",
+			},
+		},
+		{
+			name:          "delete city invalid path id",
+			method:        http.MethodDelete,
+			path:          "/api/v1/admin/cities/nope",
+			expectedCode:  http.StatusBadRequest,
+			expectedError: "invalid id parameter",
+		},
+		{
+			name:          "download manifest invalid path id",
+			method:        http.MethodGet,
+			path:          "/api/v1/cities/nope/download-manifest",
+			expectedCode:  http.StatusBadRequest,
+			expectedError: "invalid id parameter",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var req *http.Request
+			if tt.body == "" {
+				req = httptest.NewRequest(tt.method, tt.path, nil)
+			} else {
+				req = httptest.NewRequest(tt.method, tt.path, bytes.NewBufferString(tt.body))
+				req.Header.Set("Content-Type", "application/json")
+			}
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			if w.Code != tt.expectedCode {
+				t.Fatalf("expected %d, got %d: %s", tt.expectedCode, w.Code, w.Body.String())
+			}
+
+			if tt.expectedField != nil {
+				assertValidationErrorResponse(t, w.Body.Bytes(), tt.expectedField, "")
+				return
+			}
+			assertErrorResponse(t, w.Body.Bytes(), tt.expectedError, "")
+		})
+	}
+}
+
+func TestCreateCity_InvalidJSON(t *testing.T) {
+	h := NewCityHandler(&mockCityRepo{}, &mockManifestRepo{})
+	r := setupCityRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/cities", bytes.NewBufferString("not json"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	assertErrorResponseContains(t, w.Body.Bytes(), "invalid character")
+}

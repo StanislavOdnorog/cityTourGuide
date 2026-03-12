@@ -600,3 +600,81 @@ func TestTrackListening_InvalidJSON(t *testing.T) {
 		t.Errorf("expected status 400, got %d", w.Code)
 	}
 }
+
+func TestListeningHandler_ValidationResponses(t *testing.T) {
+	mock := &mockListeningRepo{}
+	h := NewListeningHandler(mock)
+	router := newRouterWithTrace("trace-listening-123", func(r *gin.Engine) {
+		r.GET("/api/v1/listenings", h.ListListenings)
+		r.POST("/api/v1/listenings", h.TrackListening)
+	})
+
+	tests := []struct {
+		name          string
+		method        string
+		path          string
+		body          string
+		expectedCode  int
+		expectedError string
+		expectedField map[string]string
+	}{
+		{
+			name:         "track listening missing user id",
+			method:       http.MethodPost,
+			path:         "/api/v1/listenings",
+			body:         `{"story_id":42}`,
+			expectedCode: http.StatusBadRequest,
+			expectedField: map[string]string{
+				"userid": "this field is required",
+			},
+		},
+		{
+			name:         "track listening missing story id",
+			method:       http.MethodPost,
+			path:         "/api/v1/listenings",
+			body:         `{"user_id":"550e8400-e29b-41d4-a716-446655440000"}`,
+			expectedCode: http.StatusBadRequest,
+			expectedField: map[string]string{
+				"storyid": "this field is required",
+			},
+		},
+		{
+			name:          "list listenings missing user id",
+			method:        http.MethodGet,
+			path:          "/api/v1/listenings",
+			expectedCode:  http.StatusBadRequest,
+			expectedError: "user_id is required",
+		},
+		{
+			name:          "list listenings invalid limit",
+			method:        http.MethodGet,
+			path:          "/api/v1/listenings?user_id=user-1&limit=0",
+			expectedCode:  http.StatusBadRequest,
+			expectedError: "limit must be a positive integer",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var req *http.Request
+			if tt.body == "" {
+				req = httptest.NewRequest(tt.method, tt.path, nil)
+			} else {
+				req = httptest.NewRequest(tt.method, tt.path, bytes.NewBufferString(tt.body))
+				req.Header.Set("Content-Type", "application/json")
+			}
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			if w.Code != tt.expectedCode {
+				t.Fatalf("expected status %d, got %d: %s", tt.expectedCode, w.Code, w.Body.String())
+			}
+
+			if tt.expectedField != nil {
+				assertValidationErrorResponse(t, w.Body.Bytes(), tt.expectedField, "trace-listening-123")
+				return
+			}
+			assertErrorResponse(t, w.Body.Bytes(), tt.expectedError, "trace-listening-123")
+		})
+	}
+}

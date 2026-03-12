@@ -553,3 +553,110 @@ func TestDeletePOI_NotFound(t *testing.T) {
 		t.Fatalf("expected 404, got %d", w.Code)
 	}
 }
+
+func TestPOIHandler_InvalidRequests(t *testing.T) {
+	mock := &mockPOIRepo{}
+	h := NewPOIHandler(mock)
+	r := setupPOIRouter(h)
+	addTraceIDMiddleware(r, "trace-poi-123")
+
+	tests := []struct {
+		name          string
+		method        string
+		path          string
+		body          string
+		expectedCode  int
+		expectedError string
+		expectedField map[string]string
+	}{
+		{
+			name:          "list pois invalid city id",
+			method:        http.MethodGet,
+			path:          "/api/v1/pois?city_id=bad",
+			expectedCode:  http.StatusBadRequest,
+			expectedError: "city_id must be a positive integer",
+		},
+		{
+			name:          "list pois invalid limit",
+			method:        http.MethodGet,
+			path:          "/api/v1/pois?city_id=1&limit=101",
+			expectedCode:  http.StatusBadRequest,
+			expectedError: "limit must not exceed 100",
+		},
+		{
+			name:          "get poi invalid path id",
+			method:        http.MethodGet,
+			path:          "/api/v1/pois/abc",
+			expectedCode:  http.StatusBadRequest,
+			expectedError: "invalid id parameter",
+		},
+		{
+			name:         "create poi missing required fields",
+			method:       http.MethodPost,
+			path:         "/api/v1/admin/pois",
+			body:         `{"name":"POI"}`,
+			expectedCode: http.StatusBadRequest,
+			expectedField: map[string]string{
+				"cityid": "this field is required",
+				"type":   "this field is required",
+			},
+		},
+		{
+			name:         "update poi invalid coordinates",
+			method:       http.MethodPut,
+			path:         "/api/v1/admin/pois/1",
+			body:         `{"city_id":1,"name":"POI","lat":91,"lng":44.8,"type":"monument"}`,
+			expectedCode: http.StatusBadRequest,
+			expectedField: map[string]string{
+				"lat": "must be at most 90",
+			},
+		},
+		{
+			name:          "delete poi invalid path id",
+			method:        http.MethodDelete,
+			path:          "/api/v1/admin/pois/zero",
+			expectedCode:  http.StatusBadRequest,
+			expectedError: "invalid id parameter",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var req *http.Request
+			if tt.body == "" {
+				req = httptest.NewRequest(tt.method, tt.path, nil)
+			} else {
+				req = httptest.NewRequest(tt.method, tt.path, bytes.NewBufferString(tt.body))
+				req.Header.Set("Content-Type", "application/json")
+			}
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			if w.Code != tt.expectedCode {
+				t.Fatalf("expected %d, got %d: %s", tt.expectedCode, w.Code, w.Body.String())
+			}
+
+			if tt.expectedField != nil {
+				assertValidationErrorResponse(t, w.Body.Bytes(), tt.expectedField, "")
+				return
+			}
+			assertErrorResponse(t, w.Body.Bytes(), tt.expectedError, "")
+		})
+	}
+}
+
+func TestCreatePOI_InvalidJSON(t *testing.T) {
+	h := NewPOIHandler(&mockPOIRepo{})
+	r := setupPOIRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/pois", bytes.NewBufferString("not json"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	assertErrorResponseContains(t, w.Body.Bytes(), "invalid character")
+}
