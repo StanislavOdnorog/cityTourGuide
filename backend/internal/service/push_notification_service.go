@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/saas/city-stories-guide/backend/internal/domain"
+	"github.com/saas/city-stories-guide/backend/internal/metrics"
 	"github.com/saas/city-stories-guide/backend/internal/platform/fcm"
 )
 
@@ -169,6 +170,7 @@ func (s *PushNotificationService) sendToUser(ctx context.Context, userID string,
 			slog.Error("push: failed to record notification", "error", recordErr)
 		}
 
+		metrics.PushNotificationsSentTotal.Inc()
 		sent = true
 	}
 

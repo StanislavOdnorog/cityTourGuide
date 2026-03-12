@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/saas/city-stories-guide/backend/internal/domain"
+	"github.com/saas/city-stories-guide/backend/internal/metrics"
 	"github.com/saas/city-stories-guide/backend/internal/repository"
 )
 
@@ -246,6 +247,7 @@ func (h *CityHandler) GetDownloadManifest(c *gin.Context) {
 		totalSizeBytes += items[i].FileSizeBytes
 	}
 
+	metrics.CitiesDownloadedTotal.Inc()
 	c.JSON(http.StatusOK, gin.H{
 		"data":             items,
 		"total_size_bytes": totalSizeBytes,

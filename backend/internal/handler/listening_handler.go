@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/saas/city-stories-guide/backend/internal/domain"
+	"github.com/saas/city-stories-guide/backend/internal/metrics"
 )
 
 // ListeningRepository defines the interface for listening database operations.
@@ -73,5 +74,6 @@ func (h *ListeningHandler) TrackListening(c *gin.Context) {
 		return
 	}
 
+	metrics.StoriesPlayedTotal.Inc()
 	c.JSON(http.StatusCreated, gin.H{"data": listening})
 }

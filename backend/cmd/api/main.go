@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/saas/city-stories-guide/backend/internal/config"
+	_ "github.com/saas/city-stories-guide/backend/internal/metrics" // register business metrics
 	"github.com/saas/city-stories-guide/backend/internal/handler"
 	"github.com/saas/city-stories-guide/backend/internal/logger"
 	"github.com/saas/city-stories-guide/backend/internal/middleware"
@@ -131,13 +133,17 @@ func run() error {
 	gin.SetMode(cfg.Server.Mode)
 	r := gin.New() // use gin.New() instead of gin.Default() to control middleware
 
-	// Global middleware
+	// Global middleware — metrics must be first so all requests are counted.
+	r.Use(middleware.Metrics())
 	r.Use(gin.Recovery())
 	r.Use(middleware.RequestLogger())
 	r.Use(middleware.CORS(middleware.CORSConfig{
 		AllowedOrigins: cfg.Server.AllowedOrigins,
 	}))
 	r.Use(middleware.ValidateGPSParams())
+
+	// Prometheus metrics endpoint
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Health & readiness
 	r.GET("/healthz", healthHandler.Healthz)

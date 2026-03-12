@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/saas/city-stories-guide/backend/internal/domain"
+	"github.com/saas/city-stories-guide/backend/internal/metrics"
 	"github.com/saas/city-stories-guide/backend/internal/service"
 )
 
@@ -101,6 +102,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
+	metrics.AccountsCreatedTotal.Inc()
 	c.JSON(http.StatusCreated, gin.H{
 		"data":   user,
 		"tokens": tokens,
