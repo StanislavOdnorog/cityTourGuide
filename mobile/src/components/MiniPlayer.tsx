@@ -1,15 +1,22 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import TrackPlayer, { useProgress, useIsPlaying } from 'react-native-track-player';
 import { ReportSheet } from '@/components/ReportSheet';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import { formatTime } from '@/utils/formatTime';
 
+let TrackPlayer: typeof import('react-native-track-player').default | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  TrackPlayer = require('react-native-track-player').default;
+} catch {
+  // Native module unavailable (e.g. Expo Go)
+}
+
 export function MiniPlayer() {
   const currentStory = usePlayerStore((s) => s.currentStory);
-  const { playing } = useIsPlaying();
-  const { position, duration } = useProgress(500);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const { position, duration } = usePlayerStore((s) => s.progress);
   const insets = useSafeAreaInsets();
   const [reportVisible, setReportVisible] = useState(false);
 
@@ -18,7 +25,8 @@ export function MiniPlayer() {
   const progress = duration > 0 ? Math.min(position / duration, 1) : 0;
 
   const handlePlayPause = async () => {
-    if (playing) {
+    if (!TrackPlayer) return;
+    if (isPlaying) {
       await TrackPlayer.pause();
     } else {
       await TrackPlayer.play();
@@ -37,10 +45,10 @@ export function MiniPlayer() {
           onPress={() => void handlePlayPause()}
           style={styles.playPauseButton}
           accessibilityRole="button"
-          accessibilityLabel={playing ? 'Pause' : 'Resume'}
+          accessibilityLabel={isPlaying ? 'Pause' : 'Resume'}
           hitSlop={8}
         >
-          <Text style={styles.playPauseIcon}>{playing ? '\u275A\u275A' : '\u25B6'}</Text>
+          <Text style={styles.playPauseIcon}>{isPlaying ? '\u275A\u275A' : '\u25B6'}</Text>
         </Pressable>
 
         <View style={styles.info}>

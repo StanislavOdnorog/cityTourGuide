@@ -65,7 +65,12 @@ export function useHomeScreen(): HomeScreenState & HomeScreenActions {
       } else {
         pipelineRef.current.updateConfig({ language, userId });
       }
-      await pipelineRef.current.start();
+      try {
+        await pipelineRef.current.start();
+      } catch (err) {
+        console.warn('Failed to start walking pipeline:', err);
+        pipelineRef.current = null;
+      }
     }
   }, [isWalking, language]);
 
