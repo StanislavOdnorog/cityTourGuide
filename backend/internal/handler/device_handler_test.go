@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/saas/city-stories-guide/backend/internal/domain"
+	"github.com/saas/city-stories-guide/backend/internal/repository"
 )
 
 type mockPushNotificationService struct {
@@ -108,6 +109,16 @@ func TestDeviceHandler_InvalidRequests(t *testing.T) {
 			},
 		},
 		{
+			name:         "register invalid user_id not uuid",
+			method:       http.MethodPost,
+			path:         "/api/v1/device-tokens",
+			body:         `{"user_id":"not-a-uuid","token":"abc","platform":"ios"}`,
+			expectedCode: http.StatusBadRequest,
+			expectedField: map[string]string{
+				"userid": "must be a valid UUID",
+			},
+		},
+		{
 			name:         "unregister missing token",
 			method:       http.MethodDelete,
 			path:         "/api/v1/device-tokens",
@@ -123,6 +134,13 @@ func TestDeviceHandler_InvalidRequests(t *testing.T) {
 			path:          "/api/v1/device-tokens",
 			expectedCode:  http.StatusBadRequest,
 			expectedError: "user_id is required",
+		},
+		{
+			name:          "list invalid user_id not uuid",
+			method:        http.MethodGet,
+			path:          "/api/v1/device-tokens?user_id=not-a-uuid",
+			expectedCode:  http.StatusBadRequest,
+			expectedError: "user_id must be a valid UUID",
 		},
 	}
 
@@ -173,6 +191,50 @@ func TestRegisterDeviceToken_InvalidJSON(t *testing.T) {
 	assertErrorResponseContains(t, w.Body.Bytes(), "unexpected EOF")
 }
 
+func TestRegisterDeviceToken_Conflict(t *testing.T) {
+	h := NewDeviceHandler(&mockPushNotificationService{
+		registerFn: func(context.Context, string, string, domain.DevicePlatform) (*domain.DeviceToken, error) {
+			return nil, repository.ErrConflict
+		},
+		unregisterFn: func(context.Context, string) error { return nil },
+		listFn:       func(context.Context, string) ([]domain.DeviceToken, error) { return nil, nil },
+	})
+	r := setupDeviceRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/device-tokens", bytes.NewBufferString(`{"user_id":"550e8400-e29b-41d4-a716-446655440000","token":"abc","platform":"ios"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
+	}
+	assertErrorResponse(t, w.Body.Bytes(), "device token already exists", "")
+}
+
+func TestUnregisterDeviceToken_NotFound(t *testing.T) {
+	h := NewDeviceHandler(&mockPushNotificationService{
+		registerFn: func(context.Context, string, string, domain.DevicePlatform) (*domain.DeviceToken, error) {
+			return nil, nil
+		},
+		unregisterFn: func(context.Context, string) error {
+			return repository.ErrNotFound
+		},
+		listFn: func(context.Context, string) ([]domain.DeviceToken, error) { return nil, nil },
+	})
+	r := setupDeviceRouter(h)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/device-tokens", bytes.NewBufferString(`{"token":"unknown"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+	assertErrorResponse(t, w.Body.Bytes(), "device token not found", "")
+}
+
 func TestListDeviceTokens_Success(t *testing.T) {
 	h := NewDeviceHandler(&mockPushNotificationService{
 		registerFn: func(context.Context, string, string, domain.DevicePlatform) (*domain.DeviceToken, error) {
@@ -186,7 +248,7 @@ func TestListDeviceTokens_Success(t *testing.T) {
 	})
 	r := setupDeviceRouter(h)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/device-tokens?user_id=user-1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/device-tokens?user_id=550e8400-e29b-41d4-a716-446655440000", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

@@ -17,19 +17,32 @@ type StoryRepository interface {
 	Create(ctx context.Context, story *domain.Story) (*domain.Story, error)
 	GetByID(ctx context.Context, id int) (*domain.Story, error)
 	GetByPOIID(ctx context.Context, poiID int, language string, status *domain.StoryStatus) ([]domain.Story, error)
-	ListByPOIID(ctx context.Context, poiID int, language string, status *domain.StoryStatus, page domain.PageRequest) (*domain.PageResponse[domain.Story], error)
+	ListByPOIID(ctx context.Context, poiID int, language string, status *domain.StoryStatus, page domain.PageRequest, sort repository.ListSort) (*domain.PageResponse[domain.Story], error)
 	Update(ctx context.Context, story *domain.Story) (*domain.Story, error)
 	Delete(ctx context.Context, id int) error
 }
 
+// StoryCleanupService schedules orphaned audio cleanup on story mutations.
+type StoryCleanupService interface {
+	UpdateStory(ctx context.Context, story *domain.Story) (*domain.Story, error)
+	DeleteStory(ctx context.Context, id int) error
+	ScheduleReplacedAudio(ctx context.Context, oldAudioURL string)
+}
+
 // StoryHandler handles CRUD operations for stories.
 type StoryHandler struct {
-	repo StoryRepository
+	repo    StoryRepository
+	audit   AuditLogger
+	cleanup StoryCleanupService
 }
 
 // NewStoryHandler creates a new StoryHandler.
-func NewStoryHandler(repo StoryRepository) *StoryHandler {
-	return &StoryHandler{repo: repo}
+func NewStoryHandler(repo StoryRepository, audit AuditLogger, cleanup ...StoryCleanupService) *StoryHandler {
+	h := &StoryHandler{repo: repo, audit: audit}
+	if len(cleanup) > 0 {
+		h.cleanup = cleanup[0]
+	}
+	return h
 }
 
 // createStoryRequest represents the request body for creating a story.
@@ -62,15 +75,35 @@ type updateStoryRequest struct {
 	Status      *domain.StoryStatus   `json:"status" binding:"omitempty,oneof=active disabled reported pending_review"`
 }
 
+var adminStorySortColumns = map[string]repository.SortColumn{
+	"id":          {Key: "id", Column: "id", Type: repository.SortValueInt},
+	"poi_id":      {Key: "poi_id", Column: "poi_id", Type: repository.SortValueInt},
+	"language":    {Key: "language", Column: "language", Type: repository.SortValueString},
+	"status":      {Key: "status", Column: "status", Type: repository.SortValueString},
+	"layer_type":  {Key: "layer_type", Column: "layer_type", Type: repository.SortValueString},
+	"order_index": {Key: "order_index", Column: "order_index", Type: repository.SortValueInt16},
+	"confidence":  {Key: "confidence", Column: "confidence", Type: repository.SortValueInt16},
+	"created_at":  {Key: "created_at", Column: "created_at", Type: repository.SortValueTime},
+	"updated_at":  {Key: "updated_at", Column: "updated_at", Type: repository.SortValueTime},
+}
+
 // ListStories handles GET /api/v1/stories?poi_id=&language=&status=.
 func (h *StoryHandler) ListStories(c *gin.Context) {
-	poiIDStr := c.Query("poi_id")
-	if poiIDStr == "" {
-		errorJSON(c, http.StatusBadRequest, "poi_id is required")
+	h.listStories(c, repository.ListSort{By: "id", Dir: repository.SortDirAsc})
+}
+
+// ListAdminStories handles GET /api/v1/admin/stories?poi_id=&language=&status=.
+func (h *StoryHandler) ListAdminStories(c *gin.Context) {
+	sortReq, ok := parseListSort(c, adminStorySortColumns, "id", repository.SortDirAsc)
+	if !ok {
 		return
 	}
 
-	poiID, ok := parseQueryInt(c, "poi_id", poiIDStr)
+	h.listStories(c, sortReq)
+}
+
+func (h *StoryHandler) listStories(c *gin.Context, sortReq repository.ListSort) {
+	poiID, ok := parseRequiredQueryInt(c, "poi_id")
 	if !ok {
 		return
 	}
@@ -97,7 +130,7 @@ func (h *StoryHandler) ListStories(c *gin.Context) {
 		return
 	}
 
-	result, err := h.repo.ListByPOIID(c.Request.Context(), poiID, language, statusFilter, pageReq)
+	result, err := h.repo.ListByPOIID(c.Request.Context(), poiID, language, statusFilter, pageReq, sortReq)
 	if err != nil {
 		if isCursorError(err) {
 			errorJSON(c, http.StatusBadRequest, err.Error())
@@ -107,15 +140,7 @@ func (h *StoryHandler) ListStories(c *gin.Context) {
 		return
 	}
 
-	if result.Items == nil {
-		result.Items = []domain.Story{}
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"items":       result.Items,
-		"next_cursor": result.NextCursor,
-		"has_more":    result.HasMore,
-	})
+	writeCursorPage(c, result)
 }
 
 // GetStory handles GET /api/v1/stories/:id.
@@ -191,10 +216,14 @@ func (h *StoryHandler) CreateStory(c *gin.Context) {
 
 	created, err := h.repo.Create(c.Request.Context(), story)
 	if err != nil {
+		if handleDBError(c, repository.ClassifyError(err), "story") {
+			return
+		}
 		errorJSON(c, http.StatusInternalServerError, "failed to create story")
 		return
 	}
 
+	auditEntry(c, h.audit, "create", "story", resourceID(created.ID), storyAuditPayload(req.POIID, req.Language, string(req.LayerType)))
 	c.JSON(http.StatusCreated, gin.H{"data": created})
 }
 
@@ -255,16 +284,24 @@ func (h *StoryHandler) UpdateStory(c *gin.Context) {
 		Status:      status,
 	}
 
-	updated, err := h.repo.Update(c.Request.Context(), story)
+	var (
+		updated *domain.Story
+		err     error
+	)
+	if h.cleanup != nil {
+		updated, err = h.cleanup.UpdateStory(c.Request.Context(), story)
+	} else {
+		updated, err = h.repo.Update(c.Request.Context(), story)
+	}
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			errorJSON(c, http.StatusNotFound, "story not found")
+		if handleDBError(c, repository.ClassifyError(err), "story") {
 			return
 		}
 		errorJSON(c, http.StatusInternalServerError, "failed to update story")
 		return
 	}
 
+	auditEntry(c, h.audit, "update", "story", resourceID(id), storyAuditPayload(req.POIID, req.Language, string(req.LayerType)))
 	c.JSON(http.StatusOK, gin.H{"data": updated})
 }
 
@@ -275,16 +312,21 @@ func (h *StoryHandler) DeleteStory(c *gin.Context) {
 		return
 	}
 
-	err := h.repo.Delete(c.Request.Context(), id)
+	var err error
+	if h.cleanup != nil {
+		err = h.cleanup.DeleteStory(c.Request.Context(), id)
+	} else {
+		err = h.repo.Delete(c.Request.Context(), id)
+	}
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			errorJSON(c, http.StatusNotFound, "story not found")
+		if handleDBError(c, repository.ClassifyError(err), "story") {
 			return
 		}
 		errorJSON(c, http.StatusInternalServerError, "failed to delete story")
 		return
 	}
 
+	auditEntry(c, h.audit, "delete", "story", resourceID(id), nil)
 	c.JSON(http.StatusOK, gin.H{"message": "story deleted"})
 }
 

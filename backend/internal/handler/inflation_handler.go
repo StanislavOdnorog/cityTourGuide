@@ -18,12 +18,13 @@ type InflationRepository interface {
 
 // InflationHandler handles inflation job operations for admin panel.
 type InflationHandler struct {
-	repo InflationRepository
+	repo  InflationRepository
+	audit AuditLogger
 }
 
 // NewInflationHandler creates a new InflationHandler.
-func NewInflationHandler(repo InflationRepository) *InflationHandler {
-	return &InflationHandler{repo: repo}
+func NewInflationHandler(repo InflationRepository, audit AuditLogger) *InflationHandler {
+	return &InflationHandler{repo: repo, audit: audit}
 }
 
 // TriggerInflation handles POST /api/v1/admin/pois/:id/inflate.
@@ -59,6 +60,7 @@ func (h *InflationHandler) TriggerInflation(c *gin.Context) {
 		return
 	}
 
+	auditEntry(c, h.audit, "trigger", "inflation_job", resourceID(created.ID), map[string]any{"poi_id": poiID})
 	c.JSON(http.StatusCreated, gin.H{"data": created})
 }
 

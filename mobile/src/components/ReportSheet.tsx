@@ -10,7 +10,8 @@ import {
   Alert,
 } from 'react-native';
 import { reportStory } from '@/api';
-import { useSettingsStore } from '@/store/useSettingsStore';
+import { getAuthenticatedUserId } from '@/store/authBootstrap';
+import { useAuthStore } from '@/store/useAuthStore';
 import { useWalkStore } from '@/store/useWalkStore';
 import type { ReportType } from '@/types';
 
@@ -31,7 +32,9 @@ export function ReportSheet({ visible, storyId, onClose }: ReportSheetProps) {
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const deviceId = useSettingsStore((s) => s.deviceId);
+  const hasHydrated = useAuthStore((s) => s._hasHydrated);
+  const bootstrapStatus = useAuthStore((s) => s.bootstrapStatus);
+  const authReady = hasHydrated && bootstrapStatus !== 'loading' && bootstrapStatus !== 'idle';
   const currentLocation = useWalkStore((s) => s.currentLocation);
 
   const handleSubmit = async () => {
@@ -39,9 +42,15 @@ export function ReportSheet({ visible, storyId, onClose }: ReportSheetProps) {
 
     setSubmitting(true);
     try {
+      const userId = await getAuthenticatedUserId();
+      if (!userId) {
+        Alert.alert('Unavailable', 'Please wait for account setup to finish and try again.');
+        return;
+      }
+
       await reportStory({
         story_id: storyId,
-        user_id: deviceId,
+        user_id: userId,
         type: selectedType,
         comment: comment.trim() || undefined,
         lat: currentLocation?.lat,
@@ -99,8 +108,11 @@ export function ReportSheet({ visible, storyId, onClose }: ReportSheetProps) {
 
           <Pressable
             onPress={() => void handleSubmit()}
-            disabled={!selectedType || submitting}
-            style={[styles.submitButton, (!selectedType || submitting) && styles.submitDisabled]}
+            disabled={!selectedType || submitting || !authReady}
+            style={[
+              styles.submitButton,
+              (!selectedType || submitting || !authReady) && styles.submitDisabled,
+            ]}
             accessibilityRole="button"
             accessibilityLabel="Submit report"
           >

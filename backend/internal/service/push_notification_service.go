@@ -23,6 +23,7 @@ type DeviceTokenRepository interface {
 	Deactivate(ctx context.Context, token string) error
 	GetByUserID(ctx context.Context, userID string) ([]domain.DeviceToken, error)
 	GetAllActive(ctx context.Context) ([]domain.DeviceToken, error)
+	GetAllActivePage(ctx context.Context, page domain.PageRequest) (*domain.PageResponse[domain.DeviceToken], error)
 	GetByID(ctx context.Context, id int) (*domain.DeviceToken, error)
 }
 
@@ -36,7 +37,7 @@ type PushNotificationRepository interface {
 type PushNotificationService struct {
 	deviceTokenRepo DeviceTokenRepository
 	pushNotifRepo   PushNotificationRepository
-	fcmClient       *fcm.Client // nil if FCM is not configured
+	fcmClient       fcm.Sender // nil if FCM is not configured
 	config          PushNotificationConfig
 }
 
@@ -44,7 +45,7 @@ type PushNotificationService struct {
 func NewPushNotificationService(
 	deviceTokenRepo DeviceTokenRepository,
 	pushNotifRepo PushNotificationRepository,
-	fcmClient *fcm.Client,
+	fcmClient fcm.Sender,
 	cfg PushNotificationConfig,
 ) *PushNotificationService {
 	if cfg.GeoMaxPerDay <= 0 {
@@ -152,11 +153,21 @@ func (s *PushNotificationService) sendToUser(ctx context.Context, userID string,
 			Data:  data,
 		})
 		if err != nil {
-			middleware.LoggerFromContext(ctx).Error("push: failed to send notification", "user_id", userID, "token_id", dt.ID, "error", err)
+			logger := middleware.LoggerFromContext(ctx)
+			if fcm.IsPermanentSendError(err) {
+				logger.Warn("push: deactivating permanently invalid token",
+					"user_id", userID, "token_id", dt.ID, "error", err)
+				if deactErr := s.deviceTokenRepo.Deactivate(ctx, dt.Token); deactErr != nil {
+					logger.Error("push: failed to deactivate token", "token_id", dt.ID, "error", deactErr)
+				}
+			} else {
+				logger.Error("push: transient send failure, keeping token active",
+					"user_id", userID, "token_id", dt.ID, "error", err)
+			}
 			continue
 		}
 
-		// Record the sent notification
+		// Record the sent notification only for successful sends.
 		_, recordErr := s.pushNotifRepo.Create(ctx, &domain.PushNotification{
 			UserID:        userID,
 			DeviceTokenID: dt.ID,
@@ -180,6 +191,11 @@ func (s *PushNotificationService) sendToUser(ctx context.Context, userID string,
 // GetUserDeviceTokens returns all active device tokens for a user.
 func (s *PushNotificationService) GetUserDeviceTokens(ctx context.Context, userID string) ([]domain.DeviceToken, error) {
 	return s.deviceTokenRepo.GetByUserID(ctx, userID)
+}
+
+// GetActiveDeviceTokenPage returns active device tokens for broadcast iteration.
+func (s *PushNotificationService) GetActiveDeviceTokenPage(ctx context.Context, page domain.PageRequest) (*domain.PageResponse[domain.DeviceToken], error) {
+	return s.deviceTokenRepo.GetAllActivePage(ctx, page)
 }
 
 func convertData(data map[string]string) map[string]any {

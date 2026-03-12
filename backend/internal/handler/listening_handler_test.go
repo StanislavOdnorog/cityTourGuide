@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -139,7 +140,7 @@ func TestListListenings_Success(t *testing.T) {
 	h := NewListeningHandler(mock)
 	router := setupListeningRouter(h)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/listenings?user_id=user-1&limit=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/listenings?user_id=550e8400-e29b-41d4-a716-446655440000&limit=1", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -163,11 +164,41 @@ func TestListListenings_Success(t *testing.T) {
 	}
 }
 
+func TestListListenings_NilListeningsReturnsEmptyArray(t *testing.T) {
+	mock := &mockListeningRepo{
+		listenings: nil,
+	}
+	h := NewListeningHandler(mock)
+	router := setupListeningRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/listenings?user_id=550e8400-e29b-41d4-a716-446655440000", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Items   json.RawMessage `json:"items"`
+		HasMore bool            `json:"has_more"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if string(resp.Items) != "[]" {
+		t.Fatalf("expected items to be [], got %s", string(resp.Items))
+	}
+	if resp.HasMore {
+		t.Fatal("expected has_more=false")
+	}
+}
+
 func TestListListenings_InvalidLimit(t *testing.T) {
 	h := NewListeningHandler(&mockListeningRepo{})
 	router := setupListeningRouter(h)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/listenings?user_id=user-1&limit=101", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/listenings?user_id=550e8400-e29b-41d4-a716-446655440000&limit=101", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -185,10 +216,10 @@ func TestListListenings_InvalidLimit(t *testing.T) {
 }
 
 func TestListListenings_InvalidCursor(t *testing.T) {
-	h := NewListeningHandler(&mockListeningRepo{listErr: errors.New("invalid cursor: malformed encoding")})
+	h := NewListeningHandler(&mockListeningRepo{listErr: fmt.Errorf("malformed encoding: %w", domain.ErrInvalidCursor)})
 	router := setupListeningRouter(h)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/listenings?user_id=user-1&cursor=bad", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/listenings?user_id=550e8400-e29b-41d4-a716-446655440000&cursor=bad", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -639,6 +670,16 @@ func TestListeningHandler_ValidationResponses(t *testing.T) {
 			},
 		},
 		{
+			name:         "track listening invalid user_id not uuid",
+			method:       http.MethodPost,
+			path:         "/api/v1/listenings",
+			body:         `{"user_id":"not-a-uuid","story_id":42}`,
+			expectedCode: http.StatusBadRequest,
+			expectedField: map[string]string{
+				"userid": "must be a valid UUID",
+			},
+		},
+		{
 			name:          "list listenings missing user id",
 			method:        http.MethodGet,
 			path:          "/api/v1/listenings",
@@ -646,9 +687,16 @@ func TestListeningHandler_ValidationResponses(t *testing.T) {
 			expectedError: "user_id is required",
 		},
 		{
+			name:          "list listenings invalid user_id",
+			method:        http.MethodGet,
+			path:          "/api/v1/listenings?user_id=not-a-uuid",
+			expectedCode:  http.StatusBadRequest,
+			expectedError: "user_id must be a valid UUID",
+		},
+		{
 			name:          "list listenings invalid limit",
 			method:        http.MethodGet,
-			path:          "/api/v1/listenings?user_id=user-1&limit=0",
+			path:          "/api/v1/listenings?user_id=550e8400-e29b-41d4-a716-446655440000&limit=0",
 			expectedCode:  http.StatusBadRequest,
 			expectedError: "limit must be a positive integer",
 		},

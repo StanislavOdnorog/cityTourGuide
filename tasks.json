@@ -1,0 +1,365 @@
+{
+  "schema_version": 1,
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "title": "Инициализация Git-репозитория и корневых конфигурационных файлов",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-002",
+      "title": "Инициализация Go-бэкенда: модуль, структура директорий, точка входа",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-003",
+      "title": "Docker Compose для локальной разработки: PostgreSQL+PostGIS и MinIO",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-004",
+      "title": "Настройка линтинга и форматирования для Go-бэкенда",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-005",
+      "title": "Инициализация React Native (Expo) проекта для мобильного приложения",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-006",
+      "title": "Настройка ESLint + Prettier + lint-staged для мобильного приложения",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-007",
+      "title": "Инициализация React Admin Panel: Vite + React + TypeScript + Ant Design",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-008",
+      "title": "Настройка ESLint + Prettier для Admin Panel",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-009",
+      "title": "CI/CD: GitHub Actions для бэкенда (lint, test, build)",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-010",
+      "title": "CI/CD: GitHub Actions для мобильного приложения и админ-панели",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-011",
+      "title": "Настройка golang-migrate и миграция: PostGIS extension + таблица cities",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-012",
+      "title": "Миграция: таблица POI (Point of Interest) с PostGIS geography",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-013",
+      "title": "Миграция: таблица stories",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-014",
+      "title": "Миграции: users, user_listening, reports, purchases, inflation_jobs",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-015",
+      "title": "Конфигурация бэкенда: загрузка ENV переменных и структура Config",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-016",
+      "title": "Domain-модели Go: структуры всех сущностей",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-017",
+      "title": "Repository: подключение к PostgreSQL (pgx) и город CRUD",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-018",
+      "title": "Repository: POI CRUD с PostGIS пространственными запросами",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-019",
+      "title": "Repository: Story CRUD и UserListening tracking",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-020",
+      "title": "Service: NearbyService — ядро выбора историй",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-021",
+      "title": "Handler: GET /api/v1/nearby-stories — главный API endpoint",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-022",
+      "title": "Handlers: CRUD API для cities, POIs, stories (admin endpoints)",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-023",
+      "title": "S3-клиент: загрузка/скачивание аудиофайлов, presigned URLs",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-024",
+      "title": "Handler: POST /api/v1/listenings — трекинг прослушиваний",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-025",
+      "title": "JWT-аутентификация: middleware, анонимные пользователи, регистрация",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-026",
+      "title": "Middleware: CORS, rate limiting, request logging, input validation",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-027",
+      "title": "Контент-пайплайн: импорт POI из OpenStreetMap (Overpass API) для Тбилиси",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-028",
+      "title": "Интеграция Claude API: генерация историй по POI данным",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-029",
+      "title": "Интеграция ElevenLabs API: Text-to-Speech генерация аудио",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-030",
+      "title": "End-to-end пайплайн: POI → Claude story → ElevenLabs audio → S3 → DB",
+      "status": "done",
+      "priority": "high"
+    },
+    {
+      "id": "TASK-031",
+      "title": "Массовая генерация: первые 50+ историй для Тбилиси",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-032",
+      "title": "Mobile: Background Location Tracking (expo-location)",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-033",
+      "title": "Mobile: API-клиент и типы данных",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-034",
+      "title": "Mobile: Story Engine — scoring-алгоритм и pacing manager",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-035",
+      "title": "Mobile: Audio Player (react-native-track-player) с фоновым воспроизведением",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-036",
+      "title": "Mobile: Интеграция Location → StoryEngine → AudioPlayer (core pipeline)",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-037",
+      "title": "Mobile: Home Screen — Start/Stop Walking, статус прослушивания",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-038",
+      "title": "Mobile: Now Playing notification и мини-плеер",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-039",
+      "title": "Mobile: Onboarding Flow (3 экрана)",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-040",
+      "title": "Mobile: City Screen — карта с POI и статистика",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-041",
+      "title": "Mobile: Settings Screen (язык, уведомления, кэш, аккаунт)",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-042",
+      "title": "Mobile: Smart Cache — предзагрузка ближайших историй",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-043",
+      "title": "Mobile: Download City — офлайн-пакет всех историй города",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-044",
+      "title": "Mobile + Backend: Report System — жалобы на истории",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-045",
+      "title": "Backend: Inflation Worker — AI-расширение контента для POI",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-046",
+      "title": "Backend: OAuth 2.0 — Google и Apple Sign-In",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-047",
+      "title": "Backend + Mobile: In-App Purchases (IAP) и Freemium",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-048",
+      "title": "Backend + Mobile: Push Notifications (FCM + APNs)",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-049",
+      "title": "Admin Panel: Login page и авторизация",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-050",
+      "title": "Admin Panel: Dashboard и карта POI (Leaflet)",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-051",
+      "title": "Admin Panel: POI Detail — истории, статус, аудио-превью",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-052",
+      "title": "Admin Panel: модерация репортов",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-053",
+      "title": "Docker: production docker-compose + Caddy reverse proxy",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-054",
+      "title": "CI/CD: Deploy workflow — автодеплой на VPS",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-055",
+      "title": "Database backup: автоматические ежедневные бэкапы PostgreSQL",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-056",
+      "title": "GDPR compliance: удаление аккаунта и данных пользователя",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-057",
+      "title": "Мониторинг: health checks, structured logging, базовые метрики",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-058",
+      "title": "Mobile: Expo Application Services (EAS) — конфигурация сборок",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-059",
+      "title": "Seed данные и dev-окружение: автоматическая подготовка для разработки",
+      "status": "done",
+      "priority": "medium"
+    },
+    {
+      "id": "TASK-060",
+      "title": "OpenAPI/Swagger спецификация для REST API",
+      "status": "done",
+      "priority": "medium"
+    }
+  ]
+}

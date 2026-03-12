@@ -1,4 +1,5 @@
 import { File, Directory, Paths } from 'expo-file-system';
+import { createDownloadResumable, type DownloadResumable } from 'expo-file-system/legacy';
 import * as SQLite from 'expo-sqlite';
 import { bearing, angleDiff } from '@/services/story-engine/ScoringAlgorithm';
 import type { NearbyStoryCandidate } from '@/types';
@@ -13,6 +14,16 @@ export interface CacheStats {
   totalSizeBytes: number;
   cachedFileCount: number;
   maxSizeBytes: number;
+}
+
+export interface FileDownloadProgress {
+  bytesWritten: number;
+  contentLength: number;
+}
+
+export interface CancelableDownload {
+  promise: Promise<string | null>;
+  cancel: () => Promise<void>;
 }
 
 export interface CachedStoryMeta {
@@ -94,6 +105,114 @@ export class StoryCacheManager {
   }
 
   /**
+   * Download audio with byte-level progress reporting and cancellation support.
+   * Returns a CancelableDownload with a promise that resolves to the local URI
+   * and a cancel() method to abort the download.
+   */
+  downloadAudioWithProgress(
+    candidate: NearbyStoryCandidate,
+    onProgress?: (progress: FileDownloadProgress) => void,
+  ): CancelableDownload {
+    this.ensureInit();
+
+    if (!candidate.audio_url || !this.cacheDir) {
+      return { promise: Promise.resolve(null), cancel: async () => {} };
+    }
+
+    let downloadResumable: DownloadResumable | null = null;
+    let cancelled = false;
+
+    const cancel = async () => {
+      cancelled = true;
+      if (downloadResumable) {
+        try {
+          await downloadResumable.cancelAsync();
+        } catch {
+          // Ignore cancel errors
+        }
+      }
+    };
+
+    const promise = (async (): Promise<string | null> => {
+      // Check cache first
+      const existing = await this.getCachedMeta(candidate.story_id);
+      if (existing) {
+        const file = new File(existing.localPath);
+        if (file.exists) {
+          await this.touchEntry(candidate.story_id);
+          return existing.localPath;
+        }
+        await this.removeDbEntry(candidate.story_id);
+      }
+
+      if (cancelled) return null;
+
+      const fileName = this.getFileName(candidate.story_id, candidate.audio_url!);
+      const destination = new File(this.cacheDir!, fileName);
+      const now = Date.now();
+
+      try {
+        downloadResumable = createDownloadResumable(
+          candidate.audio_url!,
+          destination.uri,
+          {},
+          (data) => {
+            if (!cancelled && onProgress) {
+              onProgress({
+                bytesWritten: data.totalBytesWritten,
+                contentLength: data.totalBytesExpectedToWrite,
+              });
+            }
+          },
+        );
+
+        const result = await downloadResumable.downloadAsync();
+        downloadResumable = null;
+
+        if (cancelled || !result) {
+          try {
+            if (destination.exists) destination.delete();
+          } catch {
+            // Ignore cleanup errors
+          }
+          return null;
+        }
+
+        const downloadedFile = new File(result.uri);
+        const fileSize = downloadedFile.size;
+
+        await this.db!.runAsync(
+          `INSERT OR REPLACE INTO cached_stories
+           (story_id, poi_id, audio_url, local_path, file_size_bytes, last_accessed_at, cached_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          candidate.story_id,
+          candidate.poi_id,
+          candidate.audio_url!,
+          result.uri,
+          fileSize,
+          now,
+          now,
+        );
+
+        await this.evictIfNeeded();
+        return result.uri;
+      } catch {
+        downloadResumable = null;
+        // Download failed — clean up partial file
+        try {
+          if (destination.exists) destination.delete();
+        } catch {
+          // Ignore cleanup errors
+        }
+        // Don't insert into DB on failure
+        return null;
+      }
+    })();
+
+    return { promise, cancel };
+  }
+
+  /**
    * Check if a story's audio is already cached locally.
    */
   async isCached(storyId: number): Promise<boolean> {
@@ -128,12 +247,10 @@ export class StoryCacheManager {
 
       // Only prefetch stories ahead (within direction cone)
       if (heading >= 0) {
-        const poiLat = userLat + (c.distance_m / 111320) * Math.cos(heading * (Math.PI / 180));
-        const poiLng =
-          userLng +
-          (c.distance_m / (111320 * Math.cos(userLat * (Math.PI / 180)))) *
-            Math.sin(heading * (Math.PI / 180));
-        const brng = bearing(userLat, userLng, poiLat, poiLng);
+        // Skip direction filter if candidate is missing real coordinates
+        if (c.poi_lat == null || c.poi_lng == null) return true;
+
+        const brng = bearing(userLat, userLng, c.poi_lat, c.poi_lng);
         const diff = angleDiff(heading, brng);
         if (diff > PREFETCH_DIRECTION_ANGLE) return false;
       }
@@ -163,6 +280,34 @@ export class StoryCacheManager {
       cachedFileCount: result?.count ?? 0,
       maxSizeBytes: this.maxCacheBytes,
     };
+  }
+
+  /**
+   * Remove cached audio files for specific story IDs (e.g. for a single city).
+   */
+  async clearStories(storyIds: number[]): Promise<void> {
+    this.ensureInit();
+    if (storyIds.length === 0) return;
+    const db = this.db!;
+
+    const rows = await db.getAllAsync<{ story_id: number; local_path: string }>(
+      `SELECT story_id, local_path FROM cached_stories WHERE story_id IN (${storyIds.map(() => '?').join(',')})`,
+      ...storyIds,
+    );
+
+    for (const row of rows) {
+      try {
+        const file = new File(row.local_path);
+        if (file.exists) file.delete();
+      } catch {
+        // Ignore file deletion errors
+      }
+    }
+
+    await db.runAsync(
+      `DELETE FROM cached_stories WHERE story_id IN (${storyIds.map(() => '?').join(',')})`,
+      ...storyIds,
+    );
   }
 
   /**
@@ -221,6 +366,61 @@ export class StoryCacheManager {
     }
 
     return evictedCount;
+  }
+
+  /**
+   * Reconcile cache: remove stale DB rows for missing files and delete
+   * orphaned files on disk that are not referenced in SQLite.
+   * Safe to call multiple times (idempotent).
+   */
+  async reconcile(): Promise<{ removedRows: number; deletedFiles: number }> {
+    this.ensureInit();
+    const db = this.db!;
+
+    let removedRows = 0;
+    let deletedFiles = 0;
+
+    // 1. Remove DB rows whose local_path file no longer exists on disk
+    const rows = await db.getAllAsync<{ story_id: number; local_path: string }>(
+      'SELECT story_id, local_path FROM cached_stories',
+    );
+
+    for (const row of rows) {
+      try {
+        const file = new File(row.local_path);
+        if (!file.exists) {
+          await this.removeDbEntry(row.story_id);
+          removedRows++;
+        }
+      } catch {
+        // If we can't check, remove the row to be safe
+        await this.removeDbEntry(row.story_id);
+        removedRows++;
+      }
+    }
+
+    // 2. Delete orphaned files in the cache directory not referenced in SQLite
+    if (this.cacheDir && this.cacheDir.exists) {
+      // Re-query DB after cleanup to get current set of referenced paths
+      const validRows = await db.getAllAsync<{ local_path: string }>(
+        'SELECT local_path FROM cached_stories',
+      );
+      const referencedPaths = new Set(validRows.map((r) => r.local_path));
+
+      const entries = this.cacheDir.list();
+      for (const entry of entries) {
+        if (entry instanceof File && !referencedPaths.has(entry.uri)) {
+          try {
+            entry.delete();
+            deletedFiles++;
+          } catch {
+            // Ignore deletion errors for individual files
+          }
+        }
+      }
+    }
+
+    return { removedRows, deletedFiles };
   }
 
   /**

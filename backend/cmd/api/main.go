@@ -11,14 +11,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/saas/city-stories-guide/backend/internal/config"
 	"github.com/saas/city-stories-guide/backend/internal/handler"
 	"github.com/saas/city-stories-guide/backend/internal/logger"
 	_ "github.com/saas/city-stories-guide/backend/internal/metrics" // register business metrics
-	"github.com/saas/city-stories-guide/backend/internal/middleware"
+	"github.com/saas/city-stories-guide/backend/internal/migrations"
 	"github.com/saas/city-stories-guide/backend/internal/platform/fcm"
 	"github.com/saas/city-stories-guide/backend/internal/platform/oauth"
 	"github.com/saas/city-stories-guide/backend/internal/repository"
@@ -38,7 +37,7 @@ func run() error {
 	// Initialize structured JSON logging before anything else.
 	logger.Setup()
 
-	cfg, err := config.Load()
+	cfg, err := config.LoadFor(config.RuntimeAPI)
 	if err != nil {
 		return err
 	}
@@ -48,8 +47,19 @@ func run() error {
 	ctx := context.Background()
 
 	// Initialize database connection pool
-	pool, err := repository.NewPool(ctx, cfg.Database.URL)
+	pool, err := repository.NewPool(ctx, cfg.Database.URL, repository.PoolConfig{
+		MaxConns:          cfg.Database.MaxConns,
+		MinConns:          cfg.Database.MinConns,
+		MaxConnLifetime:   cfg.Database.MaxConnLifetime,
+		MaxConnIdleTime:   cfg.Database.MaxConnIdleTime,
+		HealthCheckPeriod: cfg.Database.HealthCheckPeriod,
+	})
 	if err != nil {
+		return err
+	}
+
+	if err := verifyDatabaseSchema(ctx, pool); err != nil {
+		pool.Close()
 		return err
 	}
 
@@ -62,17 +72,27 @@ func run() error {
 	listeningRepo := repository.NewListeningRepo(pool)
 	userRepo := repository.NewUserRepo(pool)
 	reportRepo := repository.NewReportRepo(pool)
+	adminStatsRepo := repository.NewCachedAdminStatsRepo(
+		repository.NewAdminStatsRepo(pool),
+		30*time.Second,
+	)
 	inflationRepo := repository.NewInflationRepo(pool)
 	purchaseRepo := repository.NewPurchaseRepo(pool)
+	auditLogRepo := repository.NewAuditLogRepo(pool)
+
+	orphanCleanupRepo := repository.NewOrphanCleanupRepo(pool)
 
 	deviceTokenRepo := repository.NewDeviceTokenRepo(pool)
 	pushNotifRepo := repository.NewPushNotificationRepo(pool)
 
 	// Initialize FCM client (optional — nil if not configured)
+	var fcmReadinessErr error
 	fcmClient, err := fcm.NewClient(ctx, &fcm.Config{
 		CredentialsJSON: cfg.FCM.CredentialsJSON,
+		HTTPClient:      newExternalHTTPClient(cfg.FCM.Timeout),
 	})
 	if err != nil {
+		fcmReadinessErr = err
 		slog.Error("failed to initialize FCM client", "error", err)
 		// Non-fatal: push notifications will be disabled
 	}
@@ -81,7 +101,7 @@ func run() error {
 	}
 
 	// Initialize services
-	nearbyService := service.NewNearbyService(poiRepo, storyRepo, listeningRepo)
+	nearbyService := service.NewNearbyService(poiRepo, storyRepo)
 	authService := service.NewAuthService(userRepo, service.AuthConfig{
 		Secret:     cfg.JWT.Secret,
 		AccessTTL:  cfg.JWT.AccessTTL,
@@ -89,19 +109,34 @@ func run() error {
 	})
 	purchaseService := service.NewPurchaseService(purchaseRepo)
 	userService := service.NewUserService(userRepo)
+	var fcmSender fcm.Sender
+	if fcmClient != nil {
+		fcmSender = fcmClient
+	}
 	pushNotifService := service.NewPushNotificationService(
-		deviceTokenRepo, pushNotifRepo, fcmClient,
+		deviceTokenRepo, pushNotifRepo, fcmSender,
 		service.PushNotificationConfig{GeoMaxPerDay: 2, ContentMaxPerWeek: 1},
+	)
+	reportModerationService := service.NewReportModerationService(reportRepo)
+	audioURLCollector := service.NewAudioURLCollector(pool)
+	audioCleanupService := service.NewAudioCleanupService(
+		pool, storyRepo, poiRepo, cityRepo, audioURLCollector, orphanCleanupRepo,
 	)
 
 	// Initialize handlers
 	nearbyHandler := handler.NewNearbyHandler(nearbyService)
-	cityHandler := handler.NewCityHandler(cityRepo, storyRepo)
-	poiHandler := handler.NewPOIHandler(poiRepo)
-	storyHandler := handler.NewStoryHandler(storyRepo)
+	cityHandler := handler.NewCityHandler(cityRepo, storyRepo, auditLogRepo, audioCleanupService)
+	poiHandler := handler.NewPOIHandler(poiRepo, auditLogRepo, audioCleanupService)
+	storyHandler := handler.NewStoryHandler(storyRepo, auditLogRepo, audioCleanupService)
 	authHandler := handler.NewAuthHandler(authService)
 	purchaseHandler := handler.NewPurchaseHandler(purchaseService)
-	healthHandler := handler.NewHealthHandler(pool)
+	healthHandler := handler.NewHealthHandler(pool, handler.ReadinessCheck{
+		Name:     "fcm",
+		Required: false,
+		Check: func(context.Context) error {
+			return fcmReadinessErr
+		},
+	})
 
 	// Set up OAuth verifiers (only if configured)
 	if cfg.OAuth.GoogleClientID != "" {
@@ -122,100 +157,39 @@ func run() error {
 
 	userHandler := handler.NewUserHandler(userService)
 	listeningHandler := handler.NewListeningHandler(listeningRepo)
-	reportHandler := handler.NewReportHandler(reportRepo)
-	inflationHandler := handler.NewInflationHandler(inflationRepo)
+	reportHandler := handler.NewReportHandler(reportRepo, reportModerationService, auditLogRepo)
+	adminStatsHandler := handler.NewAdminStatsHandler(adminStatsRepo)
+	inflationHandler := handler.NewInflationHandler(inflationRepo, auditLogRepo)
+	auditLogHandler := handler.NewAuditLogHandler(auditLogRepo)
 	deviceHandler := handler.NewDeviceHandler(pushNotifService)
 
-	// Rate limiters
-	authRateLimiter := middleware.NewRateLimiter(5, time.Minute)    // 5 req/min for auth
-	apiRateLimiter := middleware.NewRateLimiter(60, time.Minute)    // 60 req/min general
-	nearbyRateLimiter := middleware.NewRateLimiter(10, time.Minute) // 10 req/min for AI-dependent
-
-	gin.SetMode(cfg.Server.Mode)
-	r := gin.New() // use gin.New() instead of gin.Default() to control middleware
-
-	// Global middleware — metrics must be first so all requests are counted.
-	r.Use(middleware.Metrics())
-	r.Use(gin.Recovery())
-	r.Use(limitRequestBodySize(maxRequestBodySize))
-	r.Use(middleware.TraceIDMiddleware())
-	r.Use(middleware.RequestLogger())
-	r.Use(middleware.CORS(middleware.CORSConfig{
-		AllowedOrigins: cfg.Server.AllowedOrigins,
-	}))
-	r.Use(middleware.ValidateGPSParams())
-
-	// Prometheus metrics endpoint
-	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
-
-	// Health & readiness
-	r.GET("/healthz", healthHandler.Healthz)
-	r.GET("/readyz", healthHandler.Readyz)
-
-	// Swagger UI & OpenAPI spec
-	handler.RegisterSwagger(r)
-
-	// API v1 routes — public
-	v1 := r.Group("/api/v1")
-	v1.Use(apiRateLimiter.Middleware())
-	v1.GET("/nearby-stories", nearbyRateLimiter.Middleware(), nearbyHandler.GetNearbyStories)
-	v1.GET("/cities", cityHandler.ListCities)
-	v1.GET("/cities/:id", cityHandler.GetCity)
-	v1.GET("/cities/:id/download-manifest", cityHandler.GetDownloadManifest)
-	v1.GET("/pois", poiHandler.ListPOIs)
-	v1.GET("/pois/:id", poiHandler.GetPOI)
-	v1.GET("/stories", storyHandler.ListStories)
-	v1.GET("/stories/:id", storyHandler.GetStory)
-	v1.GET("/listenings", listeningHandler.ListListenings)
-	v1.POST("/listenings", listeningHandler.TrackListening)
-	v1.POST("/reports", reportHandler.CreateReport)
-	v1.POST("/device-tokens", deviceHandler.RegisterDeviceToken)
-	v1.DELETE("/device-tokens", deviceHandler.UnregisterDeviceToken)
-
-	// User account routes (protected with JWT)
-	users := v1.Group("/users")
-	users.Use(middleware.JWTAuth(authService))
-	users.GET("/me", userHandler.GetMe)
-	users.DELETE("/me", userHandler.DeleteAccount)
-	users.POST("/me/restore", userHandler.RestoreAccount)
-
-	// Purchase routes (protected with JWT)
-	purchases := v1.Group("/purchases")
-	purchases.Use(middleware.JWTAuth(authService))
-	purchases.POST("/verify", purchaseHandler.VerifyPurchase)
-	purchases.GET("/status", purchaseHandler.GetStatus)
-
-	// Auth routes with stricter rate limiting
-	auth := v1.Group("/auth")
-	auth.Use(authRateLimiter.Middleware())
-	auth.POST("/register", authHandler.Register)
-	auth.POST("/login", authHandler.Login)
-	auth.POST("/device", authHandler.DeviceAuth)
-	auth.POST("/refresh", authHandler.Refresh)
-	auth.POST("/google", authHandler.GoogleAuth)
-	auth.POST("/apple", authHandler.AppleAuth)
-
-	// API v1 routes — admin (protected with JWT + admin claim)
-	admin := v1.Group("/admin")
-	admin.Use(middleware.AdminAuth(authService))
-	admin.POST("/cities", cityHandler.CreateCity)
-	admin.PUT("/cities/:id", cityHandler.UpdateCity)
-	admin.DELETE("/cities/:id", cityHandler.DeleteCity)
-	admin.POST("/pois", poiHandler.CreatePOI)
-	admin.PUT("/pois/:id", poiHandler.UpdatePOI)
-	admin.DELETE("/pois/:id", poiHandler.DeletePOI)
-	admin.POST("/stories", storyHandler.CreateStory)
-	admin.PUT("/stories/:id", storyHandler.UpdateStory)
-	admin.DELETE("/stories/:id", storyHandler.DeleteStory)
-	admin.GET("/reports", reportHandler.ListReports)
-	admin.PUT("/reports/:id", reportHandler.UpdateReportStatus)
-	admin.GET("/pois/:id/reports", reportHandler.ListByPOI)
-	admin.POST("/pois/:id/inflate", inflationHandler.TriggerInflation)
-	admin.GET("/pois/:id/inflation-jobs", inflationHandler.ListByPOI)
+	r := buildRouter(routerOptions{
+		Mode:              cfg.Server.Mode,
+		AllowedOrigins:    cfg.Server.AllowedOrigins,
+		HealthHandler:     healthHandler,
+		NearbyHandler:     nearbyHandler,
+		CityHandler:       cityHandler,
+		POIHandler:        poiHandler,
+		StoryHandler:      storyHandler,
+		ListeningHandler:  listeningHandler,
+		ReportHandler:     reportHandler,
+		DeviceHandler:     deviceHandler,
+		UserHandler:       userHandler,
+		PurchaseHandler:   purchaseHandler,
+		AuthHandler:       authHandler,
+		AdminStatsHandler: adminStatsHandler,
+		InflationHandler:  inflationHandler,
+		AuditLogHandler:   auditLogHandler,
+		JWTValidator:      authService,
+		AdminValidator:    authService,
+	})
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Server.Port,
 		Handler:           r,
+		ReadTimeout:       cfg.Server.ReadTimeout,
+		WriteTimeout:      cfg.Server.WriteTimeout,
+		IdleTimeout:       cfg.Server.IdleTimeout,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -241,10 +215,14 @@ func run() error {
 		listener,
 		sigCh,
 		healthHandler.SetShuttingDown,
-		30*time.Second,
+		cfg.Server.ShutdownTimeout,
 		os.Exit,
 		cleanup...,
 	)
+}
+
+func newExternalHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{Timeout: timeout}
 }
 
 func serveWithGracefulShutdown(
@@ -310,11 +288,13 @@ func serveWithGracefulShutdown(
 	}
 }
 
-func limitRequestBodySize(limit int64) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if c.Request.Body != nil {
-			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
-		}
-		c.Next()
+func verifyDatabaseSchema(ctx context.Context, pool interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}) error {
+	migrationsDir, err := migrations.ResolveDir()
+	if err != nil {
+		return err
 	}
+
+	return migrations.Verify(ctx, pool, migrationsDir)
 }

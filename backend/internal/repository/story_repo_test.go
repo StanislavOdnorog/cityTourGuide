@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/saas/city-stories-guide/backend/internal/domain"
 	"github.com/saas/city-stories-guide/backend/internal/repository"
@@ -117,6 +118,53 @@ func TestStoryRepo_GetByID(t *testing.T) {
 	}
 	if got.POIID != poi.ID {
 		t.Errorf("expected poi_id %d, got %d", poi.ID, got.POIID)
+	}
+}
+
+func TestStoryRepo_ListByPOIID_SortsByOrderIndexDesc(t *testing.T) {
+	tp := setupTestPool(t)
+	defer tp.Close()
+
+	cityRepo := repository.NewCityRepo(tp.Pool)
+	poiRepo := repository.NewPOIRepo(tp.Pool)
+	storyRepo := repository.NewStoryRepo(tp.Pool)
+	ctx := context.Background()
+
+	city := createTestCity(t, cityRepo, ctx)
+	defer func() { _ = cityRepo.Delete(ctx, city.ID) }()
+
+	poi := createTestPOI(t, poiRepo, ctx, city.ID, "Ordered POI", 41.69, 44.80)
+
+	first := createTestStory(t, storyRepo, ctx, poi.ID, "en", "first")
+	second := createTestStory(t, storyRepo, ctx, poi.ID, "en", "second")
+	third := createTestStory(t, storyRepo, ctx, poi.ID, "en", "third")
+
+	_, err := tp.Pool.Exec(ctx, `UPDATE story SET order_index = 1, updated_at = $2 WHERE id = $1`, first.ID, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("update first order: %v", err)
+	}
+	_, err = tp.Pool.Exec(ctx, `UPDATE story SET order_index = 2, updated_at = $2 WHERE id = $1`, second.ID, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("update second order: %v", err)
+	}
+	_, err = tp.Pool.Exec(ctx, `UPDATE story SET order_index = 3, updated_at = $2 WHERE id = $1`, third.ID, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("update third order: %v", err)
+	}
+
+	result, err := storyRepo.ListByPOIID(ctx, poi.ID, "en", nil, domain.PageRequest{Limit: 10}, repository.ListSort{
+		By:  "order_index",
+		Dir: repository.SortDirDesc,
+	})
+	if err != nil {
+		t.Fatalf("ListByPOIID failed: %v", err)
+	}
+
+	if len(result.Items) != 3 {
+		t.Fatalf("expected 3 stories, got %d", len(result.Items))
+	}
+	if result.Items[0].Text != "third" || result.Items[1].Text != "second" || result.Items[2].Text != "first" {
+		t.Fatalf("unexpected order: %q, %q, %q", result.Items[0].Text, result.Items[1].Text, result.Items[2].Text)
 	}
 }
 

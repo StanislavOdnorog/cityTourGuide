@@ -15,12 +15,16 @@ export type User = components['schemas']['User'];
 export type TokenPair = components['schemas']['TokenPair'];
 export type UserListening = components['schemas']['UserListening'];
 export type Report = components['schemas']['Report'];
+export type AdminReportListItem = components['schemas']['AdminReportListItem'];
+export type AuditLogItem = components['schemas']['AuditLogItem'];
 export type DeviceToken = components['schemas']['DeviceToken'];
 export type Purchase = components['schemas']['Purchase'];
 export type PurchaseStatus = components['schemas']['PurchaseStatus'];
 export type InflationJob = components['schemas']['InflationJob'];
 export type DownloadManifestItem = components['schemas']['DownloadManifestItem'];
 export type ApiError = components['schemas']['Error'];
+export type ValidationError = components['schemas']['ValidationError'];
+export type ValidationDetail = components['schemas']['ValidationDetail'];
 
 // Enum-like types extracted from schemas
 export type POIType = POI['type'];

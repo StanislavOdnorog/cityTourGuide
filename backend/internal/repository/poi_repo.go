@@ -139,8 +139,21 @@ func (r *POIRepo) GetByCityID(ctx context.Context, cityID int, status *domain.PO
 }
 
 // ListByCityID returns POIs with cursor-based pagination, ordered by id ASC.
-func (r *POIRepo) ListByCityID(ctx context.Context, cityID int, status *domain.POIStatus, poiType *domain.POIType, page domain.PageRequest) (*domain.PageResponse[domain.POI], error) {
+func (r *POIRepo) ListByCityID(ctx context.Context, cityID int, status *domain.POIStatus, poiType *domain.POIType, page domain.PageRequest, sort ListSort) (*domain.PageResponse[domain.POI], error) {
 	if err := page.NormalizeLimit(); err != nil {
+		return nil, fmt.Errorf("poi_repo: list: %w", err)
+	}
+
+	resolvedSort, err := ResolveSort(sort, map[string]SortColumn{
+		"id":             {Key: "id", Column: "id", Type: SortValueInt},
+		"name":           {Key: "name", Column: "name", Type: SortValueString},
+		"type":           {Key: "type", Column: "type", Type: SortValueString},
+		"status":         {Key: "status", Column: "status", Type: SortValueString},
+		"interest_score": {Key: "interest_score", Column: "interest_score", Type: SortValueInt16},
+		"created_at":     {Key: "created_at", Column: "created_at", Type: SortValueTime},
+		"updated_at":     {Key: "updated_at", Column: "updated_at", Type: SortValueTime},
+	}, "id", SortDirAsc)
+	if err != nil {
 		return nil, fmt.Errorf("poi_repo: list: %w", err)
 	}
 
@@ -165,17 +178,17 @@ func (r *POIRepo) ListByCityID(ctx context.Context, cityID int, status *domain.P
 		argIdx++
 	}
 
-	if page.Cursor != "" {
-		cursorID, err := domain.DecodeCursor(page.Cursor)
-		if err != nil {
-			return nil, fmt.Errorf("poi_repo: list: %w", err)
-		}
-		query += fmt.Sprintf(" AND id > $%d", argIdx)
-		args = append(args, cursorID)
-		argIdx++
+	cursorCondition, cursorArgs, err := resolvedSort.CursorCondition(page.Cursor, argIdx)
+	if err != nil {
+		return nil, fmt.Errorf("poi_repo: list: %w", err)
+	}
+	if cursorCondition != "" {
+		query += " AND " + cursorCondition
+		args = append(args, cursorArgs...)
+		argIdx += len(cursorArgs)
 	}
 
-	query += fmt.Sprintf(" ORDER BY id ASC LIMIT $%d", argIdx)
+	query += fmt.Sprintf(" ORDER BY %s LIMIT $%d", resolvedSort.OrderBy(), argIdx)
 	args = append(args, page.Limit+1)
 
 	rows, err := r.pool.Query(ctx, query, args...)
@@ -209,7 +222,10 @@ func (r *POIRepo) ListByCityID(ctx context.Context, cityID int, status *domain.P
 
 	var nextCursor string
 	if hasMore && len(pois) > 0 {
-		nextCursor = domain.EncodeCursor(pois[len(pois)-1].ID)
+		nextCursor, err = EncodeOrderedCursor(resolvedSort, poiSortValue(pois[len(pois)-1], resolvedSort.Key), pois[len(pois)-1].ID)
+		if err != nil {
+			return nil, fmt.Errorf("poi_repo: list: %w", err)
+		}
 	}
 
 	return &domain.PageResponse[domain.POI]{
@@ -217,6 +233,25 @@ func (r *POIRepo) ListByCityID(ctx context.Context, cityID int, status *domain.P
 		NextCursor: nextCursor,
 		HasMore:    hasMore,
 	}, nil
+}
+
+func poiSortValue(poi domain.POI, key string) interface{} {
+	switch key {
+	case "name":
+		return poi.Name
+	case "type":
+		return string(poi.Type)
+	case "status":
+		return string(poi.Status)
+	case "interest_score":
+		return poi.InterestScore
+	case "created_at":
+		return poi.CreatedAt
+	case "updated_at":
+		return poi.UpdatedAt
+	default:
+		return poi.ID
+	}
 }
 
 // Update modifies an existing POI and returns the updated record.

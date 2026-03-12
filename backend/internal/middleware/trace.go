@@ -122,7 +122,7 @@ func newTraceID() string {
 func errorBody(c *gin.Context, message string) gin.H {
 	body := gin.H{"error": message}
 	if traceID := TraceID(c); traceID != "" {
-		body["request_id"] = traceID
+		body["trace_id"] = traceID
 	}
 	return body
 }

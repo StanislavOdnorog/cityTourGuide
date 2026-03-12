@@ -1,36 +1,10 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { registerDeviceToken, unregisterDeviceToken } from '@/api/endpoints';
+import { getAuthenticatedUserId } from '@/store/authBootstrap';
+import { useAuthStore } from '@/store/useAuthStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { useWalkStore } from '@/store/useWalkStore';
-
-// Configure notification handler for foreground notifications
-Notifications.setNotificationHandler({
-  handleNotification: async () => {
-    const isWalking = getWalkingState();
-    // Suppress notifications during active walking session
-    if (isWalking) {
-      return {
-        shouldShowAlert: false,
-        shouldShowBanner: false,
-        shouldShowList: false,
-        shouldPlaySound: false,
-        shouldSetBadge: false,
-      };
-    }
-    return {
-      shouldShowAlert: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    };
-  },
-});
-
-function getWalkingState(): boolean {
-  return useWalkStore.getState().isWalking;
-}
 
 export type NotificationData = {
   type: 'geo' | 'content';
@@ -49,6 +23,49 @@ export class NotificationManager {
   private notificationListener: Notifications.EventSubscription | null = null;
   private responseListener: Notifications.EventSubscription | null = null;
   private currentToken: string | null = null;
+
+  constructor() {
+    this.configureForegroundNotificationHandler();
+  }
+
+  private configureForegroundNotificationHandler(): void {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => this.getForegroundNotificationBehavior(),
+    });
+  }
+
+  private getForegroundNotificationBehavior() {
+    if (useWalkStore.getState().isWalking) {
+      return {
+        shouldShowAlert: false,
+        shouldShowBanner: false,
+        shouldShowList: false,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+      };
+    }
+
+    return {
+      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    };
+  }
+
+  private async setupAndroidNotificationChannel(): Promise<void> {
+    if (Platform.OS !== 'android') {
+      return;
+    }
+
+    await Notifications.setNotificationChannelAsync('city-stories', {
+      name: 'City Stories',
+      importance: Notifications.AndroidImportance.HIGH,
+      sound: 'default',
+      vibrationPattern: [0, 250, 250, 250],
+    });
+  }
 
   /**
    * Request notification permissions from the user.
@@ -76,7 +93,12 @@ export class NotificationManager {
    * Register the device for push notifications with the backend.
    * Gets the Expo Push Token and sends it to the API.
    */
-  async registerForPushNotifications(userId: string): Promise<string | null> {
+  async registerForPushNotifications(): Promise<string | null> {
+    const userId = await getAuthenticatedUserId();
+    if (!userId) {
+      return null;
+    }
+
     const granted = await this.requestPermissions();
     if (!granted) {
       return null;
@@ -89,16 +111,8 @@ export class NotificationManager {
 
       await registerDeviceToken({ user_id: userId, token, platform });
       this.currentToken = token;
-
-      // Set up Android notification channel
-      if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('city-stories', {
-          name: 'City Stories',
-          importance: Notifications.AndroidImportance.HIGH,
-          sound: 'default',
-          vibrationPattern: [0, 250, 250, 250],
-        });
-      }
+      useSettingsStore.getState().setPushRegistration(token, userId);
+      await this.setupAndroidNotificationChannel();
 
       return token;
     } catch {
@@ -110,14 +124,64 @@ export class NotificationManager {
    * Unregister the device from push notifications.
    */
   async unregister(): Promise<void> {
-    if (this.currentToken) {
+    const token = this.currentToken ?? useSettingsStore.getState().pushToken;
+    if (token) {
       try {
-        await unregisterDeviceToken(this.currentToken);
+        await unregisterDeviceToken(token);
       } catch {
         // Best effort — token may already be invalid
       }
       this.currentToken = null;
+      useSettingsStore.getState().clearPushRegistration();
     }
+  }
+
+  /**
+   * Reconcile push notification registration state with the current
+   * authenticated user and notification preferences.
+   *
+   * Call after auth bootstrap completes and on notification setting changes.
+   * - Skips registration when the same token is already stored for the active user.
+   * - Unregisters on auth loss or when notifications are fully disabled.
+   * - Re-registers when a different user is present.
+   */
+  async reconcile(): Promise<void> {
+    const authUserId = useAuthStore.getState().userId;
+    const settings = useSettingsStore.getState();
+    const { pushToken: storedToken, registeredPushUserId } = settings;
+    const notificationsEnabled = settings.geoNotifications || settings.contentNotifications;
+
+    // No authenticated user → clear any stale registration
+    if (!authUserId) {
+      if (storedToken) {
+        await this.unregister();
+      }
+      return;
+    }
+
+    // Notifications fully disabled → unregister if registered
+    if (!notificationsEnabled) {
+      if (storedToken) {
+        await this.unregister();
+      }
+      return;
+    }
+
+    // Different user than what's stored → unregister old, register new
+    if (storedToken && registeredPushUserId && registeredPushUserId !== authUserId) {
+      await this.unregister();
+      await this.registerForPushNotifications();
+      return;
+    }
+
+    // Same user + same token already stored → skip duplicate registration
+    if (storedToken && registeredPushUserId === authUserId) {
+      this.currentToken = storedToken;
+      return;
+    }
+
+    // No stored registration → register
+    await this.registerForPushNotifications();
   }
 
   /**
@@ -172,6 +236,10 @@ export class NotificationManager {
     if (type === 'geo') return settings.geoNotifications;
     if (type === 'content') return settings.contentNotifications;
     return false;
+  }
+
+  getRegisteredUserId(): string | null {
+    return useAuthStore.getState().userId;
   }
 }
 

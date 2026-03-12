@@ -1,10 +1,11 @@
 import {
+  AlertOutlined,
   EnvironmentOutlined,
   GlobalOutlined,
   ReadOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
-import { Card, Col, Row, Spin, Statistic, Table, Typography } from 'antd';
+import { Alert, Card, Col, Progress, Row, Skeleton, Statistic, Table, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useDashboardStats } from '../hooks';
 import type { City } from '../types';
@@ -31,57 +32,120 @@ const cityColumns: ColumnsType<City> = [
   },
 ];
 
+function StatCard({
+  testId,
+  title,
+  value,
+  prefix,
+  color,
+  isLoading,
+}: {
+  testId: string;
+  title: string;
+  value: number | string;
+  prefix: React.ReactNode;
+  color: string;
+  isLoading: boolean;
+}) {
+  return (
+    <Card data-testid={testId}>
+      {isLoading ? (
+        <Skeleton active paragraph={false} />
+      ) : (
+        <Statistic title={title} value={value} prefix={prefix} valueStyle={{ color }} />
+      )}
+    </Card>
+  );
+}
+
 export default function DashboardPage() {
-  const { stats, isLoading, cities } = useDashboardStats();
+  const { stats, isLoading, isError, error, cities } = useDashboardStats();
+
+  const totalReports = stats?.reportsCount ?? 0;
+  const newReports = stats?.newReportsCount ?? 0;
+  const resolvedReports = totalReports - newReports;
+  const reportResolvedPct = totalReports > 0 ? Math.round((resolvedReports / totalReports) * 100) : 100;
 
   return (
-    <div>
+    <div data-testid="dashboard-page">
       <Title level={2}>Dashboard</Title>
 
-      <Spin spinning={isLoading}>
-        <Row gutter={[16, 16]}>
-          <Col xs={24} sm={12} lg={6}>
-            <Card>
-              <Statistic
-                title="Cities"
-                value={stats.citiesCount}
-                prefix={<GlobalOutlined />}
-                valueStyle={{ color: '#1677ff' }}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card>
-              <Statistic
-                title="Points of Interest"
-                value={stats.poisCount}
-                prefix={<EnvironmentOutlined />}
-                valueStyle={{ color: '#52c41a' }}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card>
-              <Statistic
-                title="Stories"
-                value={stats.storiesCount}
-                prefix={<ReadOutlined />}
-                valueStyle={{ color: '#722ed1' }}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card>
-              <Statistic
-                title="Reports"
-                value={stats.reportsCount}
-                prefix={<WarningOutlined />}
-                valueStyle={{ color: stats.reportsCount > 0 ? '#fa541c' : '#8c8c8c' }}
+      {isError && (
+        <Alert
+          type="error"
+          message="Failed to load dashboard"
+          description={error?.message ?? 'An unexpected error occurred.'}
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={12} lg={6}>
+          <StatCard
+            testId="stat-cities"
+            title="Cities"
+            value={stats?.citiesCount ?? '-'}
+            prefix={<GlobalOutlined />}
+            color="#1677ff"
+            isLoading={isLoading}
+          />
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <StatCard
+            testId="stat-pois"
+            title="Points of Interest"
+            value={stats?.poisCount ?? '-'}
+            prefix={<EnvironmentOutlined />}
+            color="#52c41a"
+            isLoading={isLoading}
+          />
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <StatCard
+            testId="stat-stories"
+            title="Stories"
+            value={stats?.storiesCount ?? '-'}
+            prefix={<ReadOutlined />}
+            color="#722ed1"
+            isLoading={isLoading}
+          />
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <StatCard
+            testId="stat-reports"
+            title="Reports"
+            value={stats?.reportsCount ?? '-'}
+            prefix={<WarningOutlined />}
+            color={stats && stats.reportsCount > 0 ? '#fa541c' : '#8c8c8c'}
+            isLoading={isLoading}
+          />
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <StatCard
+            testId="stat-new-reports"
+            title="New Reports"
+            value={stats?.newReportsCount ?? '-'}
+            prefix={<AlertOutlined />}
+            color={stats && stats.newReportsCount > 0 ? '#fa8c16' : '#8c8c8c'}
+            isLoading={isLoading}
+          />
+        </Col>
+      </Row>
+
+      {!isLoading && stats && (
+        <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
+          <Col xs={24} sm={12}>
+            <Card title="Report Resolution" data-testid="report-resolution-card">
+              <Progress
+                percent={reportResolvedPct}
+                format={() => `${resolvedReports} / ${totalReports} resolved`}
+                status={reportResolvedPct === 100 ? 'success' : 'active'}
               />
             </Card>
           </Col>
         </Row>
-      </Spin>
+      )}
 
       <Title level={4} style={{ marginTop: 32 }}>
         Cities
@@ -93,6 +157,8 @@ export default function DashboardPage() {
         loading={isLoading}
         pagination={false}
         size="small"
+        locale={{ emptyText: isLoading ? ' ' : 'No cities found' }}
+        data-testid="cities-table"
       />
     </div>
   );

@@ -1,10 +1,11 @@
 import { CheckCircleOutlined, CloseCircleOutlined, StopOutlined } from '@ant-design/icons';
 import { App, Button, Card, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { useCursorTableState } from '../hooks/useCursorTableState';
 import { useReports } from '../hooks/useReports';
-import type { Report, ReportStatus, ReportType } from '../types';
+import type { AdminReportListItem, ReportStatus, ReportType } from '../types';
 
 const { Title, Text } = Typography;
 
@@ -29,74 +30,120 @@ const STATUS_OPTIONS = [
   { value: 'dismissed', label: 'Dismissed' },
 ];
 
+const FILTER_VALUES = ['new', 'reviewed', 'resolved', 'dismissed'] as const;
+const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+
 export default function ReportsPage() {
-  const navigate = useNavigate();
   const { message } = App.useApp();
 
-  const [filterStatus, setFilterStatus] = useState<ReportStatus | ''>('');
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(20);
+  const {
+    filter: filterStatus,
+    page,
+    pageSize: perPage,
+    cursor,
+    setFilter,
+    setPageAndSize,
+    recordNextCursor,
+  } = useCursorTableState<ReportStatus>({
+    filterKey: 'status',
+    filterValues: FILTER_VALUES,
+    defaultFilter: '',
+    defaultPageSize: 20,
+    pageSizeOptions: PAGE_SIZE_OPTIONS,
+  });
 
-  const { reports, updateStatus, disableStory } = useReports({ status: filterStatus });
+  const { reports, updateStatus, disableStory } = useReports({
+    status: filterStatus,
+    cursor,
+    limit: perPage,
+  });
 
-  const allReports = reports.data ?? [];
-  const total = allReports.length;
-  const reportData = allReports.slice((page - 1) * perPage, page * perPage);
+  const reportData = reports.data?.items ?? [];
+  const total = useMemo(() => {
+    if (!reports.data) {
+      return page * perPage;
+    }
+
+    if (reports.data.has_more) {
+      return page * perPage + 1;
+    }
+
+    return (page - 1) * perPage + reportData.length;
+  }, [page, perPage, reportData.length, reports.data]);
+
+  useEffect(() => {
+    if (reports.data?.has_more && reports.data.next_cursor) {
+      recordNextCursor(reports.data.next_cursor);
+    }
+  }, [reports.data, recordNextCursor]);
+
+  useEffect(() => {
+    if (page > 1 && !reports.isLoading && reportData.length === 0) {
+      setPageAndSize(Math.max(1, page - 1), perPage);
+    }
+  }, [page, reportData.length, reports.isLoading, setPageAndSize, perPage]);
 
   const handleUpdateStatus = (reportId: number, newStatus: ReportStatus) => {
     updateStatus.mutate(
       { reportId, newStatus },
       {
         onSuccess: () => message.success(`Report ${newStatus}`),
-        onError: () => message.error('Failed to update report status'),
       },
     );
   };
 
-  const handleDisableStory = (report: Report) => {
-    disableStory.mutate(report.story_id, {
+  const handleDisableStory = (report: AdminReportListItem) => {
+    disableStory.mutate(report.id, {
       onSuccess: () => {
-        message.success(`Story #${report.story_id} disabled`);
-        // Also resolve the report
-        updateStatus.mutate(
-          { reportId: report.id, newStatus: 'resolved' },
-          {
-            onSuccess: () => message.success(`Report #${report.id} resolved`),
-            onError: () => message.error('Failed to resolve report'),
-          },
-        );
+        message.success('Moderation completed');
       },
-      onError: () => message.error('Failed to disable story'),
     });
   };
 
-  const columns: ColumnsType<Report> = [
+  const columns: ColumnsType<AdminReportListItem> = [
     {
       title: 'ID',
       dataIndex: 'id',
       width: 60,
-      sorter: (a, b) => a.id - b.id,
+      render: (id: number) => <span data-testid={`report-row-${id}`}>{id}</span>,
     },
     {
-      title: 'Story ID',
-      dataIndex: 'story_id',
-      width: 90,
-      render: (storyId: number) => (
-        <Button type="link" size="small" onClick={() => navigate(`/pois/${storyId}`)}>
-          #{storyId}
-        </Button>
+      title: 'POI',
+      key: 'poi',
+      width: 180,
+      render: (_: unknown, record: AdminReportListItem) => {
+        if (record.poi_id != null && record.poi_name) {
+          return (
+            <Link to={`/pois/${record.poi_id}?storyId=${record.story_id}`}>
+              {record.poi_name}
+            </Link>
+          );
+        }
+        return <Text type="secondary">Unknown POI</Text>;
+      },
+    },
+    {
+      title: 'Story',
+      key: 'story_info',
+      width: 130,
+      render: (_: unknown, record: AdminReportListItem) => (
+        <Space direction="vertical" size={0}>
+          <Text type="secondary">#{record.story_id}</Text>
+          {record.story_language && (
+            <Tag>{record.story_language.toUpperCase()}</Tag>
+          )}
+          {record.story_status && record.story_status !== 'active' && (
+            <Tag color={record.story_status === 'disabled' ? 'red' : 'orange'}>
+              {record.story_status}
+            </Tag>
+          )}
+        </Space>
       ),
     },
     {
       title: 'Type',
       dataIndex: 'type',
       width: 170,
-      filters: [
-        { text: 'Wrong Location', value: 'wrong_location' },
-        { text: 'Wrong Fact', value: 'wrong_fact' },
-        { text: 'Inappropriate', value: 'inappropriate_content' },
-      ],
-      onFilter: (value, record) => record.type === value,
       render: (type: ReportType) => (
         <Tag color={REPORT_TYPE_COLORS[type]}>{type.replace(/_/g, ' ')}</Tag>
       ),
@@ -126,14 +173,12 @@ export default function ReportsPage() {
       title: 'Date',
       dataIndex: 'created_at',
       width: 140,
-      sorter: (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-      defaultSortOrder: 'descend',
       render: (date: string) => new Date(date).toLocaleDateString(),
     },
     {
       title: 'Actions',
       width: 240,
-      render: (_: unknown, record: Report) => {
+      render: (_: unknown, record: AdminReportListItem) => {
         if (record.status === 'resolved' || record.status === 'dismissed') {
           return <Text type="secondary">Closed</Text>;
         }
@@ -179,7 +224,7 @@ export default function ReportsPage() {
   ];
 
   return (
-    <div>
+    <div data-testid="reports-page">
       <Title level={2}>Reports</Title>
 
       <Card>
@@ -187,22 +232,21 @@ export default function ReportsPage() {
           <Text>Status:</Text>
           <Select
             value={filterStatus}
-            onChange={(value) => {
-              setFilterStatus(value);
-              setPage(1);
-            }}
+            onChange={(value) => setFilter(value)}
             options={STATUS_OPTIONS}
             style={{ width: 160 }}
+            data-testid="reports-status-filter"
           />
         </Space>
 
-        <Table<Report>
+        <Table<AdminReportListItem>
           columns={columns}
           dataSource={reportData}
           rowKey="id"
           loading={reports.isLoading}
           size="small"
           scroll={{ x: 900 }}
+          data-testid="reports-table"
           pagination={{
             current: page,
             pageSize: perPage,
@@ -211,8 +255,7 @@ export default function ReportsPage() {
             pageSizeOptions: ['10', '20', '50'],
             showTotal: (t) => `Total ${t} reports`,
             onChange: (p, ps) => {
-              setPage(p);
-              setPerPage(ps);
+              setPageAndSize(p, ps);
             },
           }}
         />

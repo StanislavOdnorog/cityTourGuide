@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/saas/city-stories-guide/backend/internal/domain"
+	"github.com/saas/city-stories-guide/backend/internal/repository"
 	"github.com/saas/city-stories-guide/backend/internal/service"
 )
 
@@ -28,10 +29,10 @@ func NewPurchaseHandler(svc PurchaseService) *PurchaseHandler {
 }
 
 type verifyPurchaseRequest struct {
-	Platform      string              `json:"platform" binding:"required"`
-	TransactionID string              `json:"transaction_id" binding:"required"`
-	Receipt       string              `json:"receipt" binding:"required"`
-	Type          domain.PurchaseType `json:"type" binding:"required"`
+	Platform      string              `json:"platform" binding:"required,oneof=ios android"`
+	TransactionID string              `json:"transaction_id" binding:"required,max=500"`
+	Receipt       string              `json:"receipt" binding:"required,max=50000"`
+	Type          domain.PurchaseType `json:"type" binding:"required,oneof=city_pack subscription lifetime"`
 	CityID        *int                `json:"city_id"`
 	Price         float64             `json:"price" binding:"required,gt=0"`
 }
@@ -69,6 +70,9 @@ func (h *PurchaseHandler) VerifyPurchase(c *gin.Context) {
 		}
 		if errors.Is(err, service.ErrInvalidReceipt) {
 			errorJSON(c, http.StatusBadRequest, "invalid receipt data")
+			return
+		}
+		if handleDBError(c, repository.ClassifyError(err), "purchase") {
 			return
 		}
 		errorJSON(c, http.StatusInternalServerError, "failed to verify purchase")

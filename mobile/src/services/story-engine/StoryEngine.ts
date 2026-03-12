@@ -127,7 +127,7 @@ export class StoryEngine {
       heading: location.heading,
       speed: location.speed,
       language: this.config.language,
-      user_id: this.config.userId,
+      ...(this.config.userId ? { user_id: this.config.userId } : {}),
     });
 
     // Trigger background pre-fetching for nearby stories ahead

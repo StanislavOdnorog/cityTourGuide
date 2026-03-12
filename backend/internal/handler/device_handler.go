@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/saas/city-stories-guide/backend/internal/domain"
+	"github.com/saas/city-stories-guide/backend/internal/repository"
 )
 
 // PushNotificationService defines the interface for push notification operations.
@@ -27,8 +28,8 @@ func NewDeviceHandler(pushService PushNotificationService) *DeviceHandler {
 }
 
 type registerDeviceTokenRequest struct {
-	UserID   string `json:"user_id" binding:"required"`
-	Token    string `json:"token" binding:"required"`
+	UserID   string `json:"user_id" binding:"required,uuid"`
+	Token    string `json:"token" binding:"required,max=500"`
 	Platform string `json:"platform" binding:"required,oneof=ios android"`
 }
 
@@ -47,6 +48,9 @@ func (h *DeviceHandler) RegisterDeviceToken(c *gin.Context) {
 		domain.DevicePlatform(req.Platform),
 	)
 	if err != nil {
+		if handleDBError(c, repository.ClassifyError(err), "device token") {
+			return
+		}
 		errorJSON(c, http.StatusInternalServerError, "failed to register device token")
 		return
 	}
@@ -67,6 +71,9 @@ func (h *DeviceHandler) UnregisterDeviceToken(c *gin.Context) {
 	}
 
 	if err := h.pushService.UnregisterDeviceToken(c.Request.Context(), req.Token); err != nil {
+		if handleDBError(c, repository.ClassifyError(err), "device token") {
+			return
+		}
 		errorJSON(c, http.StatusInternalServerError, "failed to unregister device token")
 		return
 	}
@@ -76,9 +83,8 @@ func (h *DeviceHandler) UnregisterDeviceToken(c *gin.Context) {
 
 // ListDeviceTokens handles GET /api/v1/device-tokens?user_id=xxx.
 func (h *DeviceHandler) ListDeviceTokens(c *gin.Context) {
-	userID := c.Query("user_id")
-	if userID == "" {
-		errorJSON(c, http.StatusBadRequest, "user_id is required")
+	userID, ok := parseUserIDQuery(c)
+	if !ok {
 		return
 	}
 

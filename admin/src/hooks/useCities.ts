@@ -1,11 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
-import { listAllCities } from '../api';
-import type { City } from '../types';
+import { listCities } from '../api';
+import { cityQueryKeys } from './cityQueryKeys';
 
-export function useCities() {
+interface UseCitiesOptions {
+  cursor?: string;
+  limit?: number;
+  includeDeleted?: boolean;
+}
+
+export function useCities({ cursor, limit = 20, includeDeleted = false }: UseCitiesOptions = {}) {
   return useQuery({
-    queryKey: ['cities', 'all'],
-    queryFn: () => listAllCities({ limit: 100 }) as Promise<City[]>,
+    queryKey: cityQueryKeys.list(cursor, limit, includeDeleted),
+    queryFn: () =>
+      listCities({
+        limit,
+        ...(cursor ? { cursor } : {}),
+        ...(includeDeleted ? { include_deleted: true } : {}),
+      }),
     staleTime: 60_000,
   });
 }

@@ -8,6 +8,7 @@ interface PurchaseState {
   isLoading: boolean;
   paywallVisible: boolean;
   _hasHydrated: boolean;
+  _rehydrationError: string | null;
 }
 
 interface PurchaseActions {
@@ -29,6 +30,7 @@ export const usePurchaseStore = create<PurchaseState & PurchaseActions>()(
       isLoading: false,
       paywallVisible: false,
       _hasHydrated: false,
+      _rehydrationError: null,
 
       setStatus: (status) => set({ status }),
       setLoading: (loading) => set({ isLoading: loading }),
@@ -44,7 +46,7 @@ export const usePurchaseStore = create<PurchaseState & PurchaseActions>()(
         const { status } = get();
         if (!status) return true; // No status loaded yet — allow
         if (status.has_full_access) return true;
-        return status.city_packs.some((p) => p.city_id === cityId);
+        return (status.city_packs ?? []).some((p) => p.city_id === cityId);
       },
 
       canListenFree: () => {
@@ -71,11 +73,27 @@ export const usePurchaseStore = create<PurchaseState & PurchaseActions>()(
     {
       name: 'city-stories-purchases',
       storage: createJSONStorage(() => AsyncStorage),
+      version: 1,
+      migrate: (persisted, version) => {
+        const state = (persisted ?? {}) as Partial<Pick<PurchaseState, 'status'>>;
+        if (version === 0) {
+          return {
+            status: state.status ?? null,
+          };
+        }
+        return state as Pick<PurchaseState, 'status'>;
+      },
       partialize: (state) => ({
         status: state.status,
       }),
-      onRehydrateStorage: () => () => {
-        usePurchaseStore.setState({ _hasHydrated: true });
+      onRehydrateStorage: () => (_state, error) => {
+        if (error) {
+          console.warn('usePurchaseStore: rehydration failed', error);
+        }
+        usePurchaseStore.setState({
+          _hasHydrated: true,
+          _rehydrationError: error ? 'Failed to restore purchase state.' : null,
+        });
       },
     },
   ),

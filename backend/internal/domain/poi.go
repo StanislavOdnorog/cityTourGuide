@@ -46,3 +46,12 @@ type POI struct {
 	CreatedAt     time.Time       `json:"created_at"`
 	UpdatedAt     time.Time       `json:"updated_at"`
 }
+
+// DisplayName returns the localized POI name for the given language.
+// For "ru", it returns NameRu if non-nil and non-empty, otherwise falls back to Name.
+func (p *POI) DisplayName(language string) string {
+	if language == "ru" && p.NameRu != nil && *p.NameRu != "" {
+		return *p.NameRu
+	}
+	return p.Name
+}

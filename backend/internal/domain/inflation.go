@@ -10,6 +10,7 @@ const (
 	InflationJobStatusRunning   InflationJobStatus = "running"
 	InflationJobStatusCompleted InflationJobStatus = "completed"
 	InflationJobStatusFailed    InflationJobStatus = "failed"
+	InflationJobStatusDead      InflationJobStatus = "dead"
 )
 
 // InflationTriggerType represents what triggered the inflation job.
@@ -32,4 +33,7 @@ type InflationJob struct {
 	CompletedAt   *time.Time           `json:"completed_at"`
 	ErrorLog      *string              `json:"error_log"`
 	CreatedAt     time.Time            `json:"created_at"`
+	HeartbeatAt   *time.Time           `json:"heartbeat_at"`
+	WorkerID      *string              `json:"worker_id"`
+	Attempts      int16                `json:"attempts"`
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"math"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -69,71 +68,38 @@ func (h *NearbyHandler) GetNearbyStories(c *gin.Context) {
 // Returns false if validation failed (error already written to response).
 func parseNearbyQuery(c *gin.Context) (nearbyQuery, bool) {
 	var q nearbyQuery
+	var ok bool
 
-	// lat (required)
-	latStr := c.Query("lat")
-	if latStr == "" {
-		errorJSON(c, http.StatusBadRequest, "lat is required")
+	// lat (required, -90..90)
+	q.Lat, ok = parseRequiredFloat(c, "lat", -90, 90)
+	if !ok {
 		return q, false
 	}
-	lat, err := strconv.ParseFloat(latStr, 64)
-	if err != nil {
-		errorJSON(c, http.StatusBadRequest, "lat must be a valid number")
-		return q, false
-	}
-	if lat < -90 || lat > 90 {
-		errorJSON(c, http.StatusBadRequest, "lat must be between -90 and 90")
-		return q, false
-	}
-	q.Lat = lat
 
-	// lng (required)
-	lngStr := c.Query("lng")
-	if lngStr == "" {
-		errorJSON(c, http.StatusBadRequest, "lng is required")
+	// lng (required, -180..180)
+	q.Lng, ok = parseRequiredFloat(c, "lng", -180, 180)
+	if !ok {
 		return q, false
 	}
-	lng, err := strconv.ParseFloat(lngStr, 64)
-	if err != nil {
-		errorJSON(c, http.StatusBadRequest, "lng must be a valid number")
-		return q, false
-	}
-	if lng < -180 || lng > 180 {
-		errorJSON(c, http.StatusBadRequest, "lng must be between -180 and 180")
-		return q, false
-	}
-	q.Lng = lng
 
 	// radius (optional, default 150, range [10, 500])
-	radiusStr := c.DefaultQuery("radius", "150")
-	radius, err := strconv.ParseFloat(radiusStr, 64)
-	if err != nil {
-		errorJSON(c, http.StatusBadRequest, "radius must be a valid number")
+	q.Radius, ok = parseOptionalFloat(c, "radius", 150, 10, 500)
+	if !ok {
 		return q, false
 	}
-	if radius < 10 || radius > 500 {
-		errorJSON(c, http.StatusBadRequest, "radius must be between 10 and 500")
-		return q, false
-	}
-	q.Radius = radius
 
-	// heading (optional, default -1 meaning unavailable)
-	headingStr := c.DefaultQuery("heading", "-1")
-	heading, err := strconv.ParseFloat(headingStr, 64)
-	if err != nil {
-		errorJSON(c, http.StatusBadRequest, "heading must be a valid number")
+	// heading (optional, default -1 meaning unavailable, no range)
+	q.Heading, ok = parseOptionalFloat(c, "heading", -1, math.Inf(-1), math.Inf(1))
+	if !ok {
 		return q, false
 	}
-	q.Heading = heading
 
-	// speed (optional, default 0)
-	speedStr := c.DefaultQuery("speed", "0")
-	speed, err := strconv.ParseFloat(speedStr, 64)
-	if err != nil {
-		errorJSON(c, http.StatusBadRequest, "speed must be a valid number")
+	// speed (optional, default 0, no range, clamp to >= 0)
+	q.Speed, ok = parseOptionalFloat(c, "speed", 0, math.Inf(-1), math.Inf(1))
+	if !ok {
 		return q, false
 	}
-	q.Speed = math.Max(0, speed)
+	q.Speed = math.Max(0, q.Speed)
 
 	// language (optional, default "en")
 	q.Language = c.DefaultQuery("language", "en")

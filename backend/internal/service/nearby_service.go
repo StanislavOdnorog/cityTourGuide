@@ -17,6 +17,8 @@ const (
 	directionBonusFactor = 0.20
 	// directionAngleLimit is the half-angle (degrees) for the "ahead" cone.
 	directionAngleLimit = 45.0
+	// nearbyPOIFetchLimit caps the POI query fan-out before scoring and truncation.
+	nearbyPOIFetchLimit = 50
 	// maxCandidates is the maximum number of story candidates returned.
 	maxCandidates = 5
 )
@@ -25,6 +27,8 @@ const (
 type StoryCandidate struct {
 	POIID       int     `json:"poi_id"`
 	POIName     string  `json:"poi_name"`
+	POILat      float64 `json:"poi_lat"`
+	POILng      float64 `json:"poi_lng"`
 	StoryID     int     `json:"story_id"`
 	StoryText   string  `json:"story_text"`
 	AudioURL    *string `json:"audio_url"`
@@ -41,26 +45,20 @@ type POIFinder interface {
 // StoryGetter fetches stories for a given POI.
 type StoryGetter interface {
 	GetByPOIID(ctx context.Context, poiID int, language string, status *domain.StoryStatus) ([]domain.Story, error)
-}
-
-// ListeningGetter retrieves listened story IDs for deduplication.
-type ListeningGetter interface {
-	GetListenedStoryIDs(ctx context.Context, userID string) ([]int, error)
+	GetByPOIIDs(ctx context.Context, poiIDs []int, language string, status *domain.StoryStatus, excludeUserID string) (map[int][]domain.Story, error)
 }
 
 // NearbyService selects and scores nearby stories for a walking user.
 type NearbyService struct {
-	poiFinder       POIFinder
-	storyGetter     StoryGetter
-	listeningGetter ListeningGetter
+	poiFinder   POIFinder
+	storyGetter StoryGetter
 }
 
 // NewNearbyService creates a new NearbyService.
-func NewNearbyService(pf POIFinder, sg StoryGetter, lg ListeningGetter) *NearbyService {
+func NewNearbyService(pf POIFinder, sg StoryGetter) *NearbyService {
 	return &NearbyService{
-		poiFinder:       pf,
-		storyGetter:     sg,
-		listeningGetter: lg,
+		poiFinder:   pf,
+		storyGetter: sg,
 	}
 }
 
@@ -74,8 +72,8 @@ func (s *NearbyService) GetNearbyStories(
 	userID, language string,
 ) ([]StoryCandidate, error) {
 	// 1. Find nearby POIs that have active stories in the given language.
-	// Use a large limit to fetch all nearby POIs for scoring.
-	poiPage := domain.PageRequest{Limit: domain.MaxPageLimit}
+	// Cap POI fan-out to limit DB and allocation overhead in dense areas.
+	poiPage := domain.PageRequest{Limit: nearbyPOIFetchLimit}
 	nearbyResult, err := s.poiFinder.FindNearbyAll(ctx, lat, lng, radiusM, language, poiPage)
 	if err != nil {
 		return nil, fmt.Errorf("nearby_service: find nearby: %w", err)
@@ -85,37 +83,26 @@ func (s *NearbyService) GetNearbyStories(
 	}
 	nearbyPOIs := nearbyResult.Items
 
-	// 2. Get listened story IDs for deduplication.
-	listenedSet := make(map[int]struct{})
-	if userID != "" {
-		listenedIDs, listenErr := s.listeningGetter.GetListenedStoryIDs(ctx, userID)
-		if listenErr != nil {
-			return nil, fmt.Errorf("nearby_service: get listened: %w", listenErr)
-		}
-		for _, id := range listenedIDs {
-			listenedSet[id] = struct{}{}
-		}
+	// 2. Batch-load stories for all nearby POIs, excluding already-listened
+	//    stories via a NOT EXISTS subquery when userID is provided.
+	activeStatus := domain.StoryStatusActive
+	poiIDs := make([]int, len(nearbyPOIs))
+	for i := range nearbyPOIs {
+		poiIDs[i] = nearbyPOIs[i].ID
 	}
 
-	// 3. For each POI, fetch stories and build scored candidates.
-	activeStatus := domain.StoryStatusActive
+	storiesByPOI, err := s.storyGetter.GetByPOIIDs(ctx, poiIDs, language, &activeStatus, userID)
+	if err != nil {
+		return nil, fmt.Errorf("nearby_service: get stories batch: %w", err)
+	}
+
 	var candidates []StoryCandidate
 
 	for i := range nearbyPOIs {
 		np := &nearbyPOIs[i]
 
-		stories, storyErr := s.storyGetter.GetByPOIID(ctx, np.ID, language, &activeStatus)
-		if storyErr != nil {
-			return nil, fmt.Errorf("nearby_service: get stories for poi %d: %w", np.ID, storyErr)
-		}
-
-		for j := range stories {
-			story := &stories[j]
-
-			// Exclude listened stories.
-			if _, listened := listenedSet[story.ID]; listened {
-				continue
-			}
+		for j := range storiesByPOI[np.ID] {
+			story := &storiesByPOI[np.ID][j]
 
 			score := CalculateScore(
 				float64(np.InterestScore),
@@ -126,7 +113,9 @@ func (s *NearbyService) GetNearbyStories(
 
 			candidates = append(candidates, StoryCandidate{
 				POIID:       np.ID,
-				POIName:     np.Name,
+				POIName:     np.POI.DisplayName(language),
+				POILat:      np.Lat,
+				POILng:      np.Lng,
 				StoryID:     story.ID,
 				StoryText:   story.Text,
 				AudioURL:    story.AudioURL,
@@ -137,9 +126,23 @@ func (s *NearbyService) GetNearbyStories(
 		}
 	}
 
-	// 4. Sort by score descending.
+	// 4. Sort by score descending, with deterministic tie-breakers:
+	//    1. Score descending
+	//    2. DistanceM ascending (closer first)
+	//    3. POIID ascending
+	//    4. StoryID ascending
 	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].Score > candidates[j].Score
+		a, b := &candidates[i], &candidates[j]
+		if a.Score != b.Score {
+			return a.Score > b.Score
+		}
+		if a.DistanceM != b.DistanceM {
+			return a.DistanceM < b.DistanceM
+		}
+		if a.POIID != b.POIID {
+			return a.POIID < b.POIID
+		}
+		return a.StoryID < b.StoryID
 	})
 
 	// 5. Return top N candidates.

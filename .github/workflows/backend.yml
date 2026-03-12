@@ -72,6 +72,55 @@ jobs:
           DATABASE_URL: postgres://citystories:citystories_secret@localhost:5432/citystories?sslmode=disable
         run: go test -race -cover -tags integration ./...
 
+  test-migrations:
+    name: Test Migrations
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: citystories
+          POSTGRES_PASSWORD: citystories_secret
+          POSTGRES_DB: citystories
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U citystories"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install golang-migrate
+        run: |
+          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz | tar xz
+          sudo mv migrate /usr/local/bin/migrate
+
+      - name: Test migration roundtrip (up → down → up)
+        env:
+          DATABASE_URL: postgres://citystories:citystories_secret@localhost:5432/citystories?sslmode=disable
+        run: make test-migrations
+
+  security:
+    name: Vulnerability Scan
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: backend/go.sum
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: govulncheck ./...
+
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -89,8 +138,25 @@ jobs:
       - name: Build Worker binary
         run: go build -o bin/worker ./cmd/worker
 
+  lint-api:
+    name: Lint OpenAPI Spec
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Lint OpenAPI spec
+        run: npx --yes @redocly/cli@latest lint backend/api/openapi.yaml --config redocly.yaml
+
   api-types:
     name: Verify API Types
+    needs: lint-api
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -117,3 +183,6 @@ jobs:
             git diff --name-only
             exit 1
           fi
+
+      - name: Check generated client usage
+        run: bash scripts/check-generated-client-usage.sh

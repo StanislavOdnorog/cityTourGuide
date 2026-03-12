@@ -73,6 +73,10 @@ export class WalkingPipeline {
 
     const trackerAdapter: ListeningTracker = {
       trackListening: (storyId: number, completed: boolean) => {
+        if (!this.config.userId) {
+          return;
+        }
+
         const currentStory = usePlayerStore.getState().currentStory;
         const poiId = currentStory?.poi_id ?? 0;
         usePlayerStore.getState().addListenedStory(storyId, poiId);

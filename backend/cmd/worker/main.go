@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -10,8 +11,10 @@ import (
 
 	"github.com/saas/city-stories-guide/backend/internal/config"
 	"github.com/saas/city-stories-guide/backend/internal/logger"
+	"github.com/saas/city-stories-guide/backend/internal/migrations"
 	"github.com/saas/city-stories-guide/backend/internal/platform/claude"
 	"github.com/saas/city-stories-guide/backend/internal/platform/elevenlabs"
+	"github.com/saas/city-stories-guide/backend/internal/platform/mock"
 	"github.com/saas/city-stories-guide/backend/internal/platform/s3"
 	"github.com/saas/city-stories-guide/backend/internal/repository"
 	"github.com/saas/city-stories-guide/backend/internal/worker"
@@ -27,7 +30,7 @@ func main() {
 func run() error {
 	logger.Setup()
 
-	cfg, err := config.Load()
+	cfg, err := config.LoadFor(config.RuntimeWorker)
 	if err != nil {
 		return err
 	}
@@ -42,6 +45,16 @@ func run() error {
 		return err
 	}
 
+	migrationsDir, err := migrations.ResolveDir()
+	if err != nil {
+		pool.Close()
+		return err
+	}
+	if err := migrations.Verify(ctx, pool, migrationsDir); err != nil {
+		pool.Close()
+		return err
+	}
+
 	slog.Info("database connection established")
 
 	// Initialize repositories
@@ -49,36 +62,62 @@ func run() error {
 	storyRepo := repository.NewStoryRepo(pool)
 	poiRepo := repository.NewPOIRepo(pool)
 
-	// Initialize platform clients
-	claudeClient := claude.NewClient(&claude.Config{
-		APIKey: cfg.Claude.APIKey,
-	})
+	// Initialize platform clients based on provider mode.
+	var (
+		storyGen worker.StoryGenerator
+		audioGen worker.AudioGenerator
+		objStore worker.ObjectStorage
+		objDel   worker.ObjectDeleter
+	)
 
-	ttsClient := elevenlabs.NewClient(&elevenlabs.Config{
-		APIKey: cfg.ElevenLabs.APIKey,
-	})
+	switch cfg.Provider {
+	case config.ProviderModeMock:
+		slog.Info("provider mode: MOCK — external integrations use in-process fakes")
+		storyGen = mock.NewStoryGenerator()
+		audioGen = mock.NewAudioGenerator()
+		mockStore := mock.NewObjectStore()
+		objStore = mockStore
+		objDel = mockStore
 
-	s3Client, err := s3.NewClient(ctx, &s3.Config{
-		Endpoint:  cfg.S3.Endpoint,
-		AccessKey: cfg.S3.AccessKey,
-		SecretKey: cfg.S3.SecretKey,
-		Bucket:    cfg.S3.Bucket,
-	})
-	if err != nil {
-		pool.Close()
-		return err
+	default: // ProviderModeReal
+		slog.Info("provider mode: real — connecting to external services")
+		storyGen = claude.NewClient(&claude.Config{
+			APIKey:     cfg.Claude.APIKey,
+			HTTPClient: newExternalHTTPClient(cfg.Claude.Timeout),
+		})
+
+		audioGen = elevenlabs.NewClient(&elevenlabs.Config{
+			APIKey:     cfg.ElevenLabs.APIKey,
+			HTTPClient: newExternalHTTPClient(cfg.ElevenLabs.Timeout),
+		})
+
+		s3Client, s3Err := s3.NewClient(ctx, &s3.Config{
+			Endpoint:  cfg.S3.Endpoint,
+			AccessKey: cfg.S3.AccessKey,
+			SecretKey: cfg.S3.SecretKey,
+			Bucket:    cfg.S3.Bucket,
+		})
+		if s3Err != nil {
+			pool.Close()
+			return s3Err
+		}
+		objStore = s3Client
+		objDel = s3Client
 	}
 
-	// Create and start the inflation worker
+	// Create workers
 	w := worker.NewInflationWorker(
 		inflationRepo,
 		storyRepo,
 		poiRepo,
-		claudeClient,
-		ttsClient,
-		s3Client,
+		storyGen,
+		audioGen,
+		objStore,
 		nil,
 	)
+
+	orphanCleanupRepo := repository.NewOrphanCleanupRepo(pool)
+	cw := worker.NewCleanupWorker(orphanCleanupRepo, objDel, nil)
 
 	sigCh := make(chan os.Signal, 2)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -87,10 +126,14 @@ func run() error {
 	workerCtx, cancelWorker := context.WithCancel(ctx)
 	defer cancelWorker()
 
-	errCh := make(chan error, 1)
+	errCh := make(chan error, 2)
 	go func() {
 		slog.Info("starting inflation worker")
 		errCh <- w.Start(workerCtx)
+	}()
+	go func() {
+		slog.Info("starting cleanup worker")
+		errCh <- cw.Start(workerCtx)
 	}()
 
 	select {
@@ -125,4 +168,8 @@ func run() error {
 		slog.Info("worker shutdown complete", "duration", time.Since(start).String())
 		return nil
 	}
+}
+
+func newExternalHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{Timeout: timeout}
 }

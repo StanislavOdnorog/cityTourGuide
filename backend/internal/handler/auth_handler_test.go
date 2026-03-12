@@ -1,12 +1,10 @@
 package handler
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -82,30 +80,6 @@ func testTokenPair() *service.TokenPair {
 	}
 }
 
-func decodeValidationResponse(t *testing.T, body []byte) map[string]string {
-	t.Helper()
-
-	var resp struct {
-		Error   string `json:"error"`
-		Details []struct {
-			Field   string `json:"field"`
-			Message string `json:"message"`
-		} `json:"details"`
-	}
-	if err := json.Unmarshal(body, &resp); err != nil {
-		t.Fatalf("parse validation response: %v", err)
-	}
-	if resp.Error != "validation_error" {
-		t.Fatalf("expected validation_error, got %q", resp.Error)
-	}
-
-	details := make(map[string]string, len(resp.Details))
-	for _, detail := range resp.Details {
-		details[detail.Field] = detail.Message
-	}
-	return details
-}
-
 func TestAuthHandler_Register_Success(t *testing.T) {
 	mock := &mockAuthService{
 		registerFn: func(_ context.Context, email, password, name string) (*domain.User, *service.TokenPair, error) {
@@ -118,15 +92,11 @@ func TestAuthHandler_Register_Success(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/register", map[string]string{
 		"email":    "test@example.com",
 		"password": "password123",
 		"name":     "Test User",
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusCreated {
 		t.Errorf("expected 201, got %d: %s", w.Code, w.Body.String())
@@ -160,11 +130,7 @@ func TestAuthHandler_Register_MissingFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body, _ := json.Marshal(tt.body)
-			w := httptest.NewRecorder()
-			req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
-			req.Header.Set("Content-Type", "application/json")
-			r.ServeHTTP(w, req)
+			w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/register", tt.body)
 
 			if w.Code != http.StatusBadRequest {
 				t.Errorf("expected 400, got %d: %s", w.Code, w.Body.String())
@@ -178,15 +144,11 @@ func TestAuthHandler_Register_InvalidEmail(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/register", map[string]string{
 		"email":    "not-an-email",
 		"password": "password123",
 		"name":     "Test User",
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", w.Code)
@@ -198,15 +160,11 @@ func TestAuthHandler_Register_ShortPassword(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/register", map[string]string{
 		"email":    "test@example.com",
 		"password": "short",
 		"name":     "Test User",
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", w.Code)
@@ -219,24 +177,21 @@ func TestAuthHandler_Register_EmailTooLong(t *testing.T) {
 	r := setupAuthRouter(h)
 
 	localPart := strings.Repeat("a", 243)
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/register", map[string]string{
 		"email":    localPart + "@example.com",
 		"password": "password123",
 		"name":     "Test User",
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 
-	details := decodeValidationResponse(t, w.Body.Bytes())
-	if details["email"] != "must not exceed 254 characters" {
-		t.Fatalf("unexpected email message: %q", details["email"])
-	}
+	assertValidationResponse(t, w.Code, w.Body.Bytes(), validationResponseExpectation{
+		DetailsByField: map[string]string{
+			"email": "must not exceed 254 characters",
+		},
+	})
 }
 
 func TestAuthHandler_Register_NameTooLong(t *testing.T) {
@@ -244,24 +199,21 @@ func TestAuthHandler_Register_NameTooLong(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/register", map[string]string{
 		"email":    "test@example.com",
 		"password": "password123",
 		"name":     strings.Repeat("n", 201),
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 
-	details := decodeValidationResponse(t, w.Body.Bytes())
-	if details["name"] != "must not exceed 200 characters" {
-		t.Fatalf("unexpected name message: %q", details["name"])
-	}
+	assertValidationResponse(t, w.Code, w.Body.Bytes(), validationResponseExpectation{
+		DetailsByField: map[string]string{
+			"name": "must not exceed 200 characters",
+		},
+	})
 }
 
 func TestAuthHandler_Register_PasswordTooLongForBcrypt(t *testing.T) {
@@ -269,24 +221,21 @@ func TestAuthHandler_Register_PasswordTooLongForBcrypt(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/register", map[string]string{
 		"email":    "test@example.com",
 		"password": strings.Repeat("a", 73),
 		"name":     "Test User",
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 
-	details := decodeValidationResponse(t, w.Body.Bytes())
-	if details["password"] != "must not exceed 72 bytes; bcrypt silently truncates longer passwords" {
-		t.Fatalf("unexpected password message: %q", details["password"])
-	}
+	assertValidationResponse(t, w.Code, w.Body.Bytes(), validationResponseExpectation{
+		DetailsByField: map[string]string{
+			"password": "must not exceed 72 bytes; bcrypt silently truncates longer passwords",
+		},
+	})
 }
 
 func TestAuthHandler_Register_DuplicateEmail(t *testing.T) {
@@ -298,15 +247,11 @@ func TestAuthHandler_Register_DuplicateEmail(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/register", map[string]string{
 		"email":    "test@example.com",
 		"password": "password123",
 		"name":     "Test User",
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusConflict {
 		t.Errorf("expected 409, got %d", w.Code)
@@ -322,15 +267,11 @@ func TestAuthHandler_Register_InternalError(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/register", map[string]string{
 		"email":    "test@example.com",
 		"password": "password123",
 		"name":     "Test User",
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500, got %d", w.Code)
@@ -349,14 +290,10 @@ func TestAuthHandler_Login_Success(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"email":    "test@example.com",
 		"password": "password123",
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -372,14 +309,10 @@ func TestAuthHandler_Login_InvalidCredentials(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"email":    "test@example.com",
 		"password": "wrongpass",
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", w.Code)
@@ -391,13 +324,9 @@ func TestAuthHandler_Login_MissingFields(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"email": "test@example.com",
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", w.Code)
@@ -410,23 +339,20 @@ func TestAuthHandler_Login_EmailTooLong(t *testing.T) {
 	r := setupAuthRouter(h)
 
 	localPart := strings.Repeat("a", 243)
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"email":    localPart + "@example.com",
 		"password": "password123",
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 
-	details := decodeValidationResponse(t, w.Body.Bytes())
-	if details["email"] != "must not exceed 254 characters" {
-		t.Fatalf("unexpected email message: %q", details["email"])
-	}
+	assertValidationResponse(t, w.Code, w.Body.Bytes(), validationResponseExpectation{
+		DetailsByField: map[string]string{
+			"email": "must not exceed 254 characters",
+		},
+	})
 }
 
 func TestAuthHandler_Login_PasswordTooLongForBcrypt(t *testing.T) {
@@ -434,23 +360,20 @@ func TestAuthHandler_Login_PasswordTooLongForBcrypt(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"email":    "test@example.com",
 		"password": strings.Repeat("a", 73),
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 
-	details := decodeValidationResponse(t, w.Body.Bytes())
-	if details["password"] != "must not exceed 72 bytes; bcrypt silently truncates longer passwords" {
-		t.Fatalf("unexpected password message: %q", details["password"])
-	}
+	assertValidationResponse(t, w.Code, w.Body.Bytes(), validationResponseExpectation{
+		DetailsByField: map[string]string{
+			"password": "must not exceed 72 bytes; bcrypt silently truncates longer passwords",
+		},
+	})
 }
 
 func TestAuthHandler_DeviceAuth_Success(t *testing.T) {
@@ -468,14 +391,10 @@ func TestAuthHandler_DeviceAuth_Success(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/device", map[string]string{
 		"device_id": "device-uuid-123",
 		"language":  "ru",
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/device", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -487,11 +406,7 @@ func TestAuthHandler_DeviceAuth_MissingDeviceID(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/device", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/device", map[string]string{})
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", w.Code)
@@ -503,23 +418,20 @@ func TestAuthHandler_DeviceAuth_DeviceIDTooLong(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/device", map[string]string{
 		"device_id": strings.Repeat("d", 501),
 		"language":  "en",
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/device", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 
-	details := decodeValidationResponse(t, w.Body.Bytes())
-	if details["device_id"] != "must not exceed 500 characters" {
-		t.Fatalf("unexpected device_id message: %q", details["device_id"])
-	}
+	assertValidationResponse(t, w.Code, w.Body.Bytes(), validationResponseExpectation{
+		DetailsByField: map[string]string{
+			"device_id": "must not exceed 500 characters",
+		},
+	})
 }
 
 func TestAuthHandler_DeviceAuth_InvalidLanguage(t *testing.T) {
@@ -527,23 +439,20 @@ func TestAuthHandler_DeviceAuth_InvalidLanguage(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/device", map[string]string{
 		"device_id": "device-uuid-123",
 		"language":  "eng",
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/device", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 
-	details := decodeValidationResponse(t, w.Body.Bytes())
-	if details["language"] != "must be a 2-letter ISO 639-1 language code" {
-		t.Fatalf("unexpected language message: %q", details["language"])
-	}
+	assertValidationResponse(t, w.Code, w.Body.Bytes(), validationResponseExpectation{
+		DetailsByField: map[string]string{
+			"language": "must be a 2-letter ISO 639-1 language code",
+		},
+	})
 }
 
 func TestAuthHandler_Refresh_Success(t *testing.T) {
@@ -555,13 +464,9 @@ func TestAuthHandler_Refresh_Success(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/refresh", map[string]string{
 		"refresh_token": "valid-refresh-token",
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -585,13 +490,9 @@ func TestAuthHandler_Refresh_InvalidToken(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/refresh", map[string]string{
 		"refresh_token": "invalid-token",
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", w.Code)
@@ -603,11 +504,7 @@ func TestAuthHandler_Refresh_MissingToken(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/refresh", map[string]string{})
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", w.Code)
@@ -663,11 +560,7 @@ func TestAuthHandler_GoogleAuth_Success(t *testing.T) {
 	})
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{"id_token": "valid-google-id-token"})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/google", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/google", map[string]string{"id_token": "valid-google-id-token"})
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -693,11 +586,7 @@ func TestAuthHandler_GoogleAuth_InvalidToken(t *testing.T) {
 	})
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{"id_token": "invalid-token"})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/google", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/google", map[string]string{"id_token": "invalid-token"})
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d: %s", w.Code, w.Body.String())
@@ -710,11 +599,7 @@ func TestAuthHandler_GoogleAuth_MissingToken(t *testing.T) {
 	h.SetGoogleVerifier(&mockGoogleVerifier{})
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/google", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/google", map[string]string{})
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d: %s", w.Code, w.Body.String())
@@ -727,11 +612,7 @@ func TestAuthHandler_GoogleAuth_NotConfigured(t *testing.T) {
 	// No google verifier set
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{"id_token": "some-token"})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/google", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/google", map[string]string{"id_token": "some-token"})
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("expected 503, got %d: %s", w.Code, w.Body.String())
@@ -758,11 +639,7 @@ func TestAuthHandler_AppleAuth_WithCode_Success(t *testing.T) {
 	})
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{"code": "valid-apple-code"})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/apple", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/apple", map[string]string{"code": "valid-apple-code"})
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -786,11 +663,7 @@ func TestAuthHandler_AppleAuth_WithIDToken_Success(t *testing.T) {
 	})
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{"id_token": "valid-apple-id-token"})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/apple", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/apple", map[string]string{"id_token": "valid-apple-id-token"})
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -805,11 +678,7 @@ func TestAuthHandler_AppleAuth_InvalidToken(t *testing.T) {
 	})
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{"code": "invalid-code"})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/apple", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/apple", map[string]string{"code": "invalid-code"})
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d: %s", w.Code, w.Body.String())
@@ -822,11 +691,7 @@ func TestAuthHandler_AppleAuth_MissingBothCodeAndToken(t *testing.T) {
 	h.SetAppleVerifier(&mockAppleVerifier{})
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/apple", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/apple", map[string]string{})
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d: %s", w.Code, w.Body.String())
@@ -839,11 +704,7 @@ func TestAuthHandler_AppleAuth_NotConfigured(t *testing.T) {
 	// No apple verifier set
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{"code": "some-code"})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/apple", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/apple", map[string]string{"code": "some-code"})
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("expected 503, got %d: %s", w.Code, w.Body.String())
@@ -861,15 +722,11 @@ func TestAuthHandler_Register_EmailNormalization(t *testing.T) {
 	h := NewAuthHandler(mock)
 	r := setupAuthRouter(h)
 
-	body, _ := json.Marshal(map[string]string{
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/register", map[string]string{
 		"email":    "Test@Example.COM",
 		"password": "password123",
 		"name":     "Test User",
 	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusCreated {
 		t.Errorf("expected 201, got %d: %s", w.Code, w.Body.String())
@@ -934,17 +791,11 @@ func TestAuthHandler_ValidationResponses_WithTraceID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body, _ := json.Marshal(tt.body)
-			w := httptest.NewRecorder()
-			req, _ := http.NewRequest(http.MethodPost, tt.path, bytes.NewReader(body))
-			req.Header.Set("Content-Type", "application/json")
-			r.ServeHTTP(w, req)
-
-			if w.Code != http.StatusBadRequest {
-				t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
-			}
-
-			assertValidationErrorResponse(t, w.Body.Bytes(), tt.expected, "trace-auth-123")
+			w := executeJSONRequest(t, r, http.MethodPost, tt.path, tt.body)
+			assertValidationResponse(t, w.Code, w.Body.Bytes(), validationResponseExpectation{
+				RequestID:      "trace-auth-123",
+				DetailsByField: tt.expected,
+			})
 		})
 	}
 }
@@ -953,10 +804,7 @@ func TestAuthHandler_Register_InvalidJSON(t *testing.T) {
 	h := NewAuthHandler(&mockAuthService{})
 	r := setupAuthRouter(h)
 
-	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBufferString("not json"))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/register", "not json")
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
@@ -974,15 +822,14 @@ func TestAuthHandler_Register_ValidationIncludesRequestID(t *testing.T) {
 	auth := r.Group("/api/v1/auth")
 	auth.POST("/register", h.Register)
 
-	body, _ := json.Marshal(map[string]string{"password": "password123", "name": "Test User"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
-	}
-
-	assertValidationErrorResponse(t, w.Body.Bytes(), map[string]string{"email": "this field is required"}, "trace-auth-123")
+	w := executeJSONRequest(t, r, http.MethodPost, "/api/v1/auth/register", map[string]string{
+		"password": "password123",
+		"name":     "Test User",
+	})
+	assertValidationResponse(t, w.Code, w.Body.Bytes(), validationResponseExpectation{
+		RequestID: "trace-auth-123",
+		DetailsByField: map[string]string{
+			"email": "this field is required",
+		},
+	})
 }

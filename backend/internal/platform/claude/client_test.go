@@ -3,6 +3,8 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -405,6 +407,78 @@ func TestGenerateStory_ContextCanceled(t *testing.T) {
 	}
 }
 
+func TestGenerateStory_ClientTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClient(&Config{
+		APIKey:  "test-key",
+		BaseURL: server.URL,
+		Timeout: 50 * time.Millisecond,
+	})
+
+	_, err := client.GenerateStory(context.Background(), testPOI(), "en")
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+
+	var netErr net.Error
+	if !errors.As(err, &netErr) || !netErr.Timeout() {
+		t.Fatalf("expected timeout error, got %v", err)
+	}
+}
+
+func TestGenerateStory_InjectedHTTPClientTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClient(&Config{
+		APIKey:     "test-key",
+		BaseURL:    server.URL,
+		HTTPClient: &http.Client{Timeout: 50 * time.Millisecond},
+	})
+
+	_, err := client.GenerateStory(context.Background(), testPOI(), "en")
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+
+	var netErr net.Error
+	if !errors.As(err, &netErr) || !netErr.Timeout() {
+		t.Fatalf("expected timeout error, got %v", err)
+	}
+}
+
+func TestGenerateStory_RetryStopsOnContextCancellation(t *testing.T) {
+	var attempts atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"error":{"type":"rate_limit_error","message":"rate limited"}}`)) //nolint:errcheck // test helper
+	}))
+	defer server.Close()
+
+	client := NewClient(&Config{APIKey: "test-key", BaseURL: server.URL})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := client.GenerateStory(ctx, testPOI(), "en")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context deadline exceeded, got %v", err)
+	}
+	if attempts.Load() != 1 {
+		t.Errorf("expected retry loop to stop after 1 attempt, got %d", attempts.Load())
+	}
+}
+
 func TestGenerateStory_RequestHeaders(t *testing.T) {
 	var gotAPIKey, gotVersion, gotContentType string
 
@@ -501,6 +575,12 @@ func TestNewClient_DefaultValues(t *testing.T) {
 	if client.model != defaultModel {
 		t.Errorf("expected default model %s, got %s", defaultModel, client.model)
 	}
+	if client.httpClient == nil {
+		t.Fatal("expected http client to be initialized")
+	}
+	if client.httpClient.Timeout != 60*time.Second {
+		t.Errorf("expected default timeout 60s, got %s", client.httpClient.Timeout)
+	}
 }
 
 func TestNewClient_CustomValues(t *testing.T) {
@@ -508,12 +588,40 @@ func TestNewClient_CustomValues(t *testing.T) {
 		APIKey:  "custom-key",
 		BaseURL: "https://custom.api.com",
 		Model:   "claude-haiku-4-5-20251001",
+		Timeout: 5 * time.Second,
 	})
 	if client.baseURL != "https://custom.api.com" {
 		t.Errorf("unexpected baseURL: %s", client.baseURL)
 	}
 	if client.model != "claude-haiku-4-5-20251001" {
 		t.Errorf("unexpected model: %s", client.model)
+	}
+	if client.httpClient.Timeout != 5*time.Second {
+		t.Errorf("unexpected timeout: %s", client.httpClient.Timeout)
+	}
+}
+
+func TestNewClient_CustomHTTPClient(t *testing.T) {
+	baseClient := &http.Client{Timeout: 3 * time.Second}
+	client := NewClient(&Config{
+		APIKey:     "custom-key",
+		HTTPClient: baseClient,
+	})
+
+	if client.httpClient == baseClient {
+		t.Fatal("expected client to copy injected http client")
+	}
+	if client.httpClient.Timeout != 3*time.Second {
+		t.Errorf("unexpected timeout: %s", client.httpClient.Timeout)
+	}
+
+	override := NewClient(&Config{
+		APIKey:     "custom-key",
+		HTTPClient: baseClient,
+		Timeout:    7 * time.Second,
+	})
+	if override.httpClient.Timeout != 7*time.Second {
+		t.Errorf("expected override timeout 7s, got %s", override.httpClient.Timeout)
 	}
 }
 

@@ -36,6 +36,81 @@ services:
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - miniodata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  migrate:
+    image: migrate/migrate:v4.18.1
+    container_name: csg-migrate
+    volumes:
+      - ../backend/migrations:/migrations:ro
+    command:
+      - "-path"
+      - "/migrations"
+      - "-database"
+      - "postgres://${POSTGRES_USER:-citystories}:${POSTGRES_PASSWORD:-citystories_secret}@postgres:5432/${POSTGRES_DB:-citystories}?sslmode=disable"
+      - "up"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ../backend
+    container_name: csg-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgres://${POSTGRES_USER:-citystories}:${POSTGRES_PASSWORD:-citystories_secret}@postgres:5432/${POSTGRES_DB:-citystories}?sslmode=disable"
+      JWT_SECRET: "${JWT_SECRET:-local-dev-secret-do-not-use-in-production}"
+      PORT: "8080"
+      GIN_MODE: "${GIN_MODE:-debug}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:5173}"
+      S3_ENDPOINT: "http://minio:9000"
+      S3_ACCESS_KEY: "${MINIO_ROOT_USER:-minioadmin}"
+      S3_SECRET_KEY: "${MINIO_ROOT_PASSWORD:-minioadmin_secret}"
+      S3_BUCKET: "${S3_BUCKET:-city-stories}"
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.worker
+    container_name: csg-worker
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgres://${POSTGRES_USER:-citystories}:${POSTGRES_PASSWORD:-citystories_secret}@postgres:5432/${POSTGRES_DB:-citystories}?sslmode=disable"
+      S3_ENDPOINT: "http://minio:9000"
+      S3_ACCESS_KEY: "${MINIO_ROOT_USER:-minioadmin}"
+      S3_SECRET_KEY: "${MINIO_ROOT_PASSWORD:-minioadmin_secret}"
+      S3_BUCKET: "${S3_BUCKET:-city-stories}"
+      PROVIDER_MODE: "${PROVIDER_MODE:-mock}"
+      CLAUDE_API_KEY: "${CLAUDE_API_KEY:-}"
+      ELEVENLABS_API_KEY: "${ELEVENLABS_API_KEY:-}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   prometheus:
     image: prom/prometheus:v2.53.0

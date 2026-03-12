@@ -1,4 +1,5 @@
 import {
+  AuditOutlined,
   DashboardOutlined,
   EnvironmentOutlined,
   GlobalOutlined,
@@ -9,13 +10,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Badge, ConfigProvider, App as AntApp, Layout, Menu, Button, Spin, theme } from 'antd';
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { useNewReportsCount } from './hooks/useReports';
+import { registerQueryClient, resetAuth } from './lib/authReset';
 import CitiesPage from './pages/CitiesPage';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
 import POIDetailPage from './pages/POIDetailPage';
 import POIMapPage from './pages/POIMapPage';
+import AuditLogsPage from './pages/AuditLogsPage';
 import ReportsPage from './pages/ReportsPage';
 import { useAuthStore } from './store/authStore';
 
@@ -30,29 +34,48 @@ const queryClient = new QueryClient({
   },
 });
 
+registerQueryClient(queryClient);
+
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const { data: newReportsCount = 0 } = useNewReportsCount();
 
   const menuItems = [
-    { key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
-    { key: '/cities', icon: <GlobalOutlined />, label: 'Cities' },
-    { key: '/poi-map', icon: <EnvironmentOutlined />, label: 'POI Map' },
+    {
+      key: '/',
+      icon: <DashboardOutlined />,
+      label: <span data-testid="nav-dashboard">Dashboard</span>,
+    },
+    {
+      key: '/cities',
+      icon: <GlobalOutlined />,
+      label: <span data-testid="nav-cities">Cities</span>,
+    },
+    {
+      key: '/poi-map',
+      icon: <EnvironmentOutlined />,
+      label: <span data-testid="nav-poi-map">POI Map</span>,
+    },
     {
       key: '/reports',
       icon: <WarningOutlined />,
       label: (
         <Badge count={newReportsCount} offset={[16, 0]} size="small">
-          Reports
+          <span data-testid="nav-reports">Reports</span>
         </Badge>
       ),
+    },
+    {
+      key: '/audit-logs',
+      icon: <AuditOutlined />,
+      label: <span data-testid="nav-audit-logs">Audit Logs</span>,
     },
   ];
 
   const handleLogout = () => {
-    logout();
+    resetAuth();
     navigate('/login', { replace: true });
   };
 
@@ -70,6 +93,7 @@ function AppLayout() {
           selectedKeys={[location.pathname]}
           items={menuItems}
           onClick={({ key }) => navigate(key)}
+          data-testid="sidebar-nav"
         />
       </Sider>
       <Layout>
@@ -83,7 +107,7 @@ function AppLayout() {
           }}
         >
           {user?.email && <span style={{ marginRight: 16, color: '#666' }}>{user.email}</span>}
-          <Button icon={<LogoutOutlined />} onClick={handleLogout}>
+          <Button icon={<LogoutOutlined />} onClick={handleLogout} data-testid="logout-button">
             Logout
           </Button>
         </Header>
@@ -94,6 +118,7 @@ function AppLayout() {
             <Route path="/poi-map" element={<POIMapPage />} />
             <Route path="/pois/:id" element={<POIDetailPage />} />
             <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/audit-logs" element={<AuditLogsPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Content>
@@ -134,26 +159,28 @@ function AuthInit({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm }}>
-      <AntApp>
-        <QueryClientProvider client={queryClient}>
-          <BrowserRouter>
-            <AuthInit>
-              <Routes>
-                <Route path="/login" element={<LoginPage />} />
-                <Route
-                  path="/*"
-                  element={
-                    <ProtectedRoute>
-                      <AppLayout />
-                    </ProtectedRoute>
-                  }
-                />
-              </Routes>
-            </AuthInit>
-          </BrowserRouter>
-        </QueryClientProvider>
-      </AntApp>
-    </ConfigProvider>
+    <ErrorBoundary>
+      <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm }}>
+        <AntApp>
+          <QueryClientProvider client={queryClient}>
+            <BrowserRouter>
+              <AuthInit>
+                <Routes>
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route
+                    path="/*"
+                    element={
+                      <ProtectedRoute>
+                        <AppLayout />
+                      </ProtectedRoute>
+                    }
+                  />
+                </Routes>
+              </AuthInit>
+            </BrowserRouter>
+          </QueryClientProvider>
+        </AntApp>
+      </ConfigProvider>
+    </ErrorBoundary>
   );
 }

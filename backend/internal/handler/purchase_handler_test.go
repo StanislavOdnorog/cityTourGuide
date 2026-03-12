@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/saas/city-stories-guide/backend/internal/domain"
+	"github.com/saas/city-stories-guide/backend/internal/repository"
 	"github.com/saas/city-stories-guide/backend/internal/service"
 )
 
@@ -117,6 +118,28 @@ func TestPurchaseHandler_InvalidRequests(t *testing.T) {
 			},
 		},
 		{
+			name:         "verify purchase invalid platform",
+			method:       http.MethodPost,
+			path:         "/api/v1/purchases/verify",
+			body:         `{"platform":"web","transaction_id":"tx-1","receipt":"receipt","type":"subscription","price":9.99}`,
+			router:       r,
+			expectedCode: http.StatusBadRequest,
+			expectedField: map[string]string{
+				"platform": "must be one of: ios android",
+			},
+		},
+		{
+			name:         "verify purchase invalid type",
+			method:       http.MethodPost,
+			path:         "/api/v1/purchases/verify",
+			body:         `{"platform":"ios","transaction_id":"tx-1","receipt":"receipt","type":"invalid_type","price":9.99}`,
+			router:       r,
+			expectedCode: http.StatusBadRequest,
+			expectedField: map[string]string{
+				"type": "must be one of: city_pack subscription lifetime",
+			},
+		},
+		{
 			name:          "verify purchase unauthorized",
 			method:        http.MethodPost,
 			path:          "/api/v1/purchases/verify",
@@ -164,6 +187,66 @@ func TestVerifyPurchase_InvalidJSON(t *testing.T) {
 	}
 
 	assertErrorResponseContains(t, w.Body.Bytes(), "unexpected EOF")
+}
+
+func TestVerifyPurchase_ForeignKeyViolation(t *testing.T) {
+	h := NewPurchaseHandler(&mockPurchaseService{
+		verifyFn: func(context.Context, *service.VerifyPurchaseRequest) (*domain.Purchase, error) {
+			return nil, repository.ErrInvalidReference
+		},
+		statusFn: func(context.Context, string) (*service.PurchaseStatus, error) { return nil, nil },
+	})
+	r := setupPurchaseRouter(h, true)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/purchases/verify", bytes.NewBufferString(`{"platform":"ios","transaction_id":"tx-1","receipt":"receipt","type":"subscription","city_id":999,"price":9.99}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	assertErrorResponse(t, w.Body.Bytes(), "referenced record does not exist", "")
+}
+
+func TestVerifyPurchase_DuplicateTransaction(t *testing.T) {
+	h := NewPurchaseHandler(&mockPurchaseService{
+		verifyFn: func(context.Context, *service.VerifyPurchaseRequest) (*domain.Purchase, error) {
+			return nil, service.ErrDuplicateTransaction
+		},
+		statusFn: func(context.Context, string) (*service.PurchaseStatus, error) { return nil, nil },
+	})
+	r := setupPurchaseRouter(h, true)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/purchases/verify", bytes.NewBufferString(`{"platform":"ios","transaction_id":"tx-dup","receipt":"receipt","type":"subscription","price":9.99}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
+	}
+	assertErrorResponse(t, w.Body.Bytes(), "transaction already processed", "")
+}
+
+func TestVerifyPurchase_DBConflict(t *testing.T) {
+	// When the service returns ErrConflict (DB constraint), handler should map it to 409
+	h := NewPurchaseHandler(&mockPurchaseService{
+		verifyFn: func(context.Context, *service.VerifyPurchaseRequest) (*domain.Purchase, error) {
+			return nil, repository.ErrConflict
+		},
+		statusFn: func(context.Context, string) (*service.PurchaseStatus, error) { return nil, nil },
+	})
+	r := setupPurchaseRouter(h, true)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/purchases/verify", bytes.NewBufferString(`{"platform":"ios","transaction_id":"tx-conflict","receipt":"receipt","type":"subscription","price":9.99}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
+	}
 }
 
 func TestGetPurchaseStatus_Success(t *testing.T) {

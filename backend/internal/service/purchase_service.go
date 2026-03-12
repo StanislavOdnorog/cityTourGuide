@@ -20,7 +20,7 @@ type PurchaseRepository interface {
 	GetByTransactionID(ctx context.Context, transactionID string) (*domain.Purchase, error)
 	GetByUserID(ctx context.Context, userID string) ([]domain.Purchase, error)
 	GetActivePurchases(ctx context.Context, userID string) ([]domain.Purchase, error)
-	CountTodayListenings(ctx context.Context, userID string) (int, error)
+	CountListeningsSince(ctx context.Context, userID string, since time.Time) (int, error)
 }
 
 // PurchaseStatus represents a user's current purchase/access state.
@@ -44,6 +44,9 @@ var (
 type PurchaseService struct {
 	repo             PurchaseRepository
 	freeStoriesLimit int
+	// now returns the current time. Defaults to time.Now. Injectable for testing
+	// UTC day-boundary behavior deterministically.
+	now func() time.Time
 }
 
 // NewPurchaseService creates a new PurchaseService.
@@ -51,7 +54,15 @@ func NewPurchaseService(repo PurchaseRepository) *PurchaseService {
 	return &PurchaseService{
 		repo:             repo,
 		freeStoriesLimit: DefaultFreeStoriesPerDay,
+		now:              time.Now,
 	}
+}
+
+// WithClock returns a copy of the service using the given clock function.
+// This is intended for tests that need deterministic time control.
+func (s *PurchaseService) WithClock(now func() time.Time) *PurchaseService {
+	s.now = now
+	return s
 }
 
 // VerifyAndCreate validates a purchase receipt and creates a purchase record.
@@ -72,12 +83,14 @@ func (s *PurchaseService) VerifyAndCreate(ctx context.Context, req *VerifyPurcha
 		return nil, fmt.Errorf("purchase: invalid type: %s", req.Type)
 	}
 
-	// Deduplication: check if transaction already processed
-	_, err := s.repo.GetByTransactionID(ctx, req.TransactionID)
-	if err == nil {
+	// Fast-path deduplication: check if transaction already processed.
+	// The database unique constraint on transaction_id is the final authority;
+	// this lookup is an optimistic fast path to avoid building the record.
+	existing, err := s.repo.GetByTransactionID(ctx, req.TransactionID)
+	if err == nil && existing != nil {
 		return nil, ErrDuplicateTransaction
 	}
-	if !errors.Is(err, repository.ErrNotFound) {
+	if err != nil && !errors.Is(err, repository.ErrNotFound) {
 		return nil, fmt.Errorf("purchase: check transaction: %w", err)
 	}
 
@@ -100,6 +113,9 @@ func (s *PurchaseService) VerifyAndCreate(ctx context.Context, req *VerifyPurcha
 
 	created, err := s.repo.Create(ctx, purchase)
 	if err != nil {
+		if errors.Is(err, repository.ErrConflict) {
+			return nil, ErrDuplicateTransaction
+		}
 		return nil, fmt.Errorf("purchase: create: %w", err)
 	}
 
@@ -113,7 +129,12 @@ func (s *PurchaseService) GetStatus(ctx context.Context, userID string) (*Purcha
 		return nil, fmt.Errorf("purchase: get active purchases: %w", err)
 	}
 
-	todayCount, err := s.repo.CountTodayListenings(ctx, userID)
+	// Compute the start of the current UTC day so freemium limits are
+	// deterministic regardless of database timezone configuration.
+	utcNow := s.now().UTC()
+	startOfDay := time.Date(utcNow.Year(), utcNow.Month(), utcNow.Day(), 0, 0, 0, 0, time.UTC)
+
+	todayCount, err := s.repo.CountListeningsSince(ctx, userID, startOfDay)
 	if err != nil {
 		return nil, fmt.Errorf("purchase: count today listenings: %w", err)
 	}

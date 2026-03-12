@@ -165,7 +165,7 @@ func (r *ListeningRepo) CreateOrUpdate(ctx context.Context, userID string, story
 // Used for deduplication when selecting nearby stories.
 func (r *ListeningRepo) GetListenedStoryIDs(ctx context.Context, userID string) ([]int, error) {
 	query := `
-		SELECT DISTINCT story_id
+		SELECT story_id
 		FROM user_listening
 		WHERE user_id = $1`
 

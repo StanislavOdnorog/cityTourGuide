@@ -5,6 +5,8 @@ function makeScored(overrides: Partial<ScoredCandidate> = {}): ScoredCandidate {
   return {
     poi_id: 1,
     poi_name: 'Test POI',
+    poi_lat: 41.6875,
+    poi_lng: 44.8084,
     story_id: 1,
     story_text: 'A story',
     audio_url: 'https://example.com/audio.mp3',

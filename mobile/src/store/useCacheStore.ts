@@ -4,11 +4,15 @@ import type { CacheStats } from '@/services/cache';
 interface CacheState {
   stats: CacheStats;
   isClearing: boolean;
+  initialized: boolean;
+  error: string | null;
 }
 
 interface CacheActions {
   setStats: (stats: CacheStats) => void;
   setIsClearing: (clearing: boolean) => void;
+  setInitialized: (initialized: boolean) => void;
+  setError: (error: string | null) => void;
 }
 
 const initialStats: CacheStats = {
@@ -20,7 +24,11 @@ const initialStats: CacheStats = {
 export const useCacheStore = create<CacheState & CacheActions>((set) => ({
   stats: initialStats,
   isClearing: false,
+  initialized: false,
+  error: null,
 
   setStats: (stats) => set({ stats }),
   setIsClearing: (clearing) => set({ isClearing: clearing }),
+  setInitialized: (initialized) => set({ initialized }),
+  setError: (error) => set({ error }),
 }));

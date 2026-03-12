@@ -7,6 +7,8 @@ export type {
   TokenPair,
   UserListening,
   Report,
+  AdminReportListItem,
+  AuditLogItem,
   DeviceToken,
   Purchase,
   PurchaseStatus,

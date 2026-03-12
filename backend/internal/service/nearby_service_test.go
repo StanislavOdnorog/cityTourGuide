@@ -12,11 +12,13 @@ import (
 // --- Mock implementations ---
 
 type mockPOIFinder struct {
-	pois []repository.NearbyPOI
-	err  error
+	pois     []repository.NearbyPOI
+	err      error
+	lastPage domain.PageRequest
 }
 
-func (m *mockPOIFinder) FindNearbyAll(_ context.Context, _, _, _ float64, _ string, _ domain.PageRequest) (*domain.PageResponse[repository.NearbyPOI], error) {
+func (m *mockPOIFinder) FindNearbyAll(_ context.Context, _, _, _ float64, _ string, page domain.PageRequest) (*domain.PageResponse[repository.NearbyPOI], error) {
+	m.lastPage = page
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -30,8 +32,10 @@ func (m *mockPOIFinder) FindNearbyAll(_ context.Context, _, _, _ float64, _ stri
 }
 
 type mockStoryGetter struct {
-	stories map[int][]domain.Story
-	err     error
+	stories        map[int][]domain.Story
+	excludeStoryID map[int]struct{} // simulates listened-story exclusion
+	err            error
+	batchCalls     int
 }
 
 func (m *mockStoryGetter) GetByPOIID(_ context.Context, poiID int, _ string, _ *domain.StoryStatus) ([]domain.Story, error) {
@@ -41,13 +45,26 @@ func (m *mockStoryGetter) GetByPOIID(_ context.Context, poiID int, _ string, _ *
 	return m.stories[poiID], nil
 }
 
-type mockListeningGetter struct {
-	ids []int
-	err error
-}
-
-func (m *mockListeningGetter) GetListenedStoryIDs(_ context.Context, _ string) ([]int, error) {
-	return m.ids, m.err
+func (m *mockStoryGetter) GetByPOIIDs(_ context.Context, poiIDs []int, _ string, _ *domain.StoryStatus, excludeUserID string) (map[int][]domain.Story, error) {
+	m.batchCalls++
+	if m.err != nil {
+		return nil, m.err
+	}
+	result := make(map[int][]domain.Story, len(poiIDs))
+	for _, id := range poiIDs {
+		if excludeUserID != "" && m.excludeStoryID != nil {
+			var filtered []domain.Story
+			for _, s := range m.stories[id] {
+				if _, skip := m.excludeStoryID[s.ID]; !skip {
+					filtered = append(filtered, s)
+				}
+			}
+			result[id] = filtered
+		} else {
+			result[id] = m.stories[id]
+		}
+	}
+	return result, nil
 }
 
 // --- Helper ---
@@ -57,6 +74,21 @@ func makePOI(id int, name string, interestScore int16, lat, lng, distanceM float
 		POI: domain.POI{
 			ID:            id,
 			Name:          name,
+			InterestScore: interestScore,
+			Lat:           lat,
+			Lng:           lng,
+			Status:        domain.POIStatusActive,
+		},
+		DistanceM: distanceM,
+	}
+}
+
+func makePOIWithNameRu(id int, name string, nameRu *string, interestScore int16, lat, lng, distanceM float64) repository.NearbyPOI {
+	return repository.NearbyPOI{
+		POI: domain.POI{
+			ID:            id,
+			Name:          name,
+			NameRu:        nameRu,
 			InterestScore: interestScore,
 			Lat:           lat,
 			Lng:           lng,
@@ -273,7 +305,6 @@ func TestGetNearbyStories_SortedByScore(t *testing.T) {
 	svc := NewNearbyService(
 		&mockPOIFinder{pois: pois},
 		&mockStoryGetter{stories: stories},
-		&mockListeningGetter{},
 	)
 
 	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 150, -1, 1.0, "user1", "en")
@@ -306,8 +337,7 @@ func TestGetNearbyStories_ListenedExcluded(t *testing.T) {
 
 	svc := NewNearbyService(
 		&mockPOIFinder{pois: pois},
-		&mockStoryGetter{stories: stories},
-		&mockListeningGetter{ids: []int{10}}, // story 10 already listened
+		&mockStoryGetter{stories: stories, excludeStoryID: map[int]struct{}{10: {}}}, // story 10 already listened
 	)
 
 	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 150, -1, 1.0, "user1", "en")
@@ -332,8 +362,7 @@ func TestGetNearbyStories_AllListened(t *testing.T) {
 
 	svc := NewNearbyService(
 		&mockPOIFinder{pois: pois},
-		&mockStoryGetter{stories: stories},
-		&mockListeningGetter{ids: []int{10}},
+		&mockStoryGetter{stories: stories, excludeStoryID: map[int]struct{}{10: {}}},
 	)
 
 	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 150, -1, 1.0, "user1", "en")
@@ -360,7 +389,6 @@ func TestGetNearbyStories_DirectionBonus(t *testing.T) {
 	svc := NewNearbyService(
 		&mockPOIFinder{pois: pois},
 		&mockStoryGetter{stories: stories},
-		&mockListeningGetter{},
 	)
 
 	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 200, 90, 1.0, "", "en")
@@ -390,7 +418,6 @@ func TestGetNearbyStories_MaxFiveCandidates(t *testing.T) {
 	svc := NewNearbyService(
 		&mockPOIFinder{pois: pois},
 		&mockStoryGetter{stories: storiesMap},
-		&mockListeningGetter{},
 	)
 
 	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 150, -1, 1.0, "", "en")
@@ -402,11 +429,33 @@ func TestGetNearbyStories_MaxFiveCandidates(t *testing.T) {
 	}
 }
 
+func TestGetNearbyStories_UsesCappedPOIFetchLimit(t *testing.T) {
+	poiFinder := &mockPOIFinder{
+		pois: []repository.NearbyPOI{
+			makePOI(1, "POI", 80, 41.716, 44.828, 50),
+		},
+	}
+
+	svc := NewNearbyService(
+		poiFinder,
+		&mockStoryGetter{stories: map[int][]domain.Story{
+			1: {makeStory(10, 1)},
+		}},
+	)
+
+	_, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 150, -1, 1.0, "", "en")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if poiFinder.lastPage.Limit != nearbyPOIFetchLimit {
+		t.Fatalf("expected POI fetch limit %d, got %d", nearbyPOIFetchLimit, poiFinder.lastPage.Limit)
+	}
+}
+
 func TestGetNearbyStories_NoPOIs(t *testing.T) {
 	svc := NewNearbyService(
 		&mockPOIFinder{pois: nil},
 		&mockStoryGetter{stories: nil},
-		&mockListeningGetter{},
 	)
 
 	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 150, -1, 1.0, "", "en")
@@ -430,7 +479,6 @@ func TestGetNearbyStories_EmptyUserID(t *testing.T) {
 	svc := NewNearbyService(
 		&mockPOIFinder{pois: pois},
 		&mockStoryGetter{stories: stories},
-		&mockListeningGetter{},
 	)
 
 	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 150, -1, 1.0, "", "en")
@@ -452,8 +500,7 @@ func TestGetNearbyStories_MultipleStoriesPerPOI(t *testing.T) {
 
 	svc := NewNearbyService(
 		&mockPOIFinder{pois: pois},
-		&mockStoryGetter{stories: stories},
-		&mockListeningGetter{ids: []int{11}}, // only story 11 listened
+		&mockStoryGetter{stories: stories, excludeStoryID: map[int]struct{}{11: {}}}, // only story 11 listened
 	)
 
 	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 150, -1, 1.0, "user1", "en")
@@ -491,7 +538,6 @@ func TestGetNearbyStories_CandidateFields(t *testing.T) {
 	svc := NewNearbyService(
 		&mockPOIFinder{pois: pois},
 		&mockStoryGetter{stories: stories},
-		&mockListeningGetter{},
 	)
 
 	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 150, -1, 1.0, "", "en")
@@ -508,6 +554,12 @@ func TestGetNearbyStories_CandidateFields(t *testing.T) {
 	}
 	if c.POIName != "Test POI" {
 		t.Errorf("expected POI name 'Test POI', got %q", c.POIName)
+	}
+	if c.POILat != 41.716 {
+		t.Errorf("expected POI lat 41.716, got %f", c.POILat)
+	}
+	if c.POILng != 44.828 {
+		t.Errorf("expected POI lng 44.828, got %f", c.POILng)
 	}
 	if c.StoryID != 10 {
 		t.Errorf("expected story ID 10, got %d", c.StoryID)
@@ -526,5 +578,331 @@ func TestGetNearbyStories_CandidateFields(t *testing.T) {
 	}
 	if c.Score <= 0 {
 		t.Errorf("expected positive score, got %.2f", c.Score)
+	}
+}
+
+func TestGetNearbyStories_TieBreak_SameScore_DifferentDistance(t *testing.T) {
+	// Two POIs with identical interest score but different distances.
+	// Same score (no heading → no direction bonus, same interest → same base+proximity only differs by distance).
+	// We set them at the same distance from radius edge so proximity bonus is equal,
+	// but give different actual distances to test the distance tie-breaker.
+	// Actually, let's make score truly equal by using same interest and same distance to radius ratio,
+	// then vary something else. Simpler: force identical scores by using the same parameters
+	// but different POI IDs.
+
+	// Both at distance=50 from user, same interest=80 → identical scores.
+	pois := []repository.NearbyPOI{
+		makePOI(5, "POI Five", 80, 41.716, 44.828, 50),
+		makePOI(3, "POI Three", 80, 41.716, 44.828, 50),
+	}
+	stories := map[int][]domain.Story{
+		5: {makeStory(50, 5)},
+		3: {makeStory(30, 3)},
+	}
+
+	svc := NewNearbyService(
+		&mockPOIFinder{pois: pois},
+		&mockStoryGetter{stories: stories},
+	)
+
+	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 150, -1, 1.0, "", "en")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(candidates) != 2 {
+		t.Fatalf("expected 2 candidates, got %d", len(candidates))
+	}
+	// Same score, same distance → tie-break by POIID ascending: 3 before 5.
+	if candidates[0].POIID != 3 {
+		t.Errorf("expected POIID 3 first (lower ID tie-break), got %d", candidates[0].POIID)
+	}
+	if candidates[1].POIID != 5 {
+		t.Errorf("expected POIID 5 second, got %d", candidates[1].POIID)
+	}
+}
+
+func TestGetNearbyStories_TieBreak_SameScore_DistanceBreaks(t *testing.T) {
+	// Same interest score, different distances → same base score but different proximity bonus.
+	// Actually this means scores differ. To get truly same score with different distance,
+	// we need different interest scores that compensate. Instead, test that when scores
+	// are equal but distances differ, closer POI comes first.
+
+	// Use radius=100. POI A: interest=80, dist=50 → prox=15, score=95
+	// POI B: interest=85, dist=75 → prox=7.5, score=92.5 — not equal.
+	// Let's use interest=80, dist=40 → prox=18, score=98
+	// and interest=88, dist=60 → prox=12, score=100 — not equal either.
+	// Simplest: same interest, same distance but in different positions (same dist from user).
+	// Then scores are truly identical and distance is the same, so POIID breaks tie.
+
+	// For distance tie-break: need same score but different distance.
+	// interest_A + prox_A = interest_B + prox_B
+	// interest_A + 30*(1 - distA/100) = interest_B + 30*(1 - distB/100)
+	// Let interest_A=80, distA=20 → 80 + 30*0.8 = 104
+	// interest_B=86, distB=40 → 86 + 30*0.6 = 104 ✓
+	pois := []repository.NearbyPOI{
+		makePOI(2, "POI B", 86, 41.716, 44.828, 40),
+		makePOI(1, "POI A", 80, 41.715, 44.827, 20),
+	}
+	stories := map[int][]domain.Story{
+		2: {makeStory(20, 2)},
+		1: {makeStory(10, 1)},
+	}
+
+	svc := NewNearbyService(
+		&mockPOIFinder{pois: pois},
+		&mockStoryGetter{stories: stories},
+	)
+
+	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 100, -1, 1.0, "", "en")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(candidates) != 2 {
+		t.Fatalf("expected 2 candidates, got %d", len(candidates))
+	}
+	// Same score → distance ascending: POI A (dist=20) before POI B (dist=40).
+	if candidates[0].POIID != 1 {
+		t.Errorf("expected POIID 1 first (closer distance tie-break), got %d (scores: %.2f, %.2f)",
+			candidates[0].POIID, candidates[0].Score, candidates[1].Score)
+	}
+}
+
+func TestGetNearbyStories_TieBreak_SameScoreSameDistance_StoryID(t *testing.T) {
+	// Same POI with multiple stories → same score, same distance, same POIID → StoryID breaks tie.
+	pois := []repository.NearbyPOI{
+		makePOI(1, "POI A", 80, 41.716, 44.828, 50),
+	}
+	stories := map[int][]domain.Story{
+		1: {makeStory(33, 1), makeStory(11, 1), makeStory(22, 1)},
+	}
+
+	svc := NewNearbyService(
+		&mockPOIFinder{pois: pois},
+		&mockStoryGetter{stories: stories},
+	)
+
+	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 150, -1, 1.0, "", "en")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(candidates) != 3 {
+		t.Fatalf("expected 3 candidates, got %d", len(candidates))
+	}
+	// All same score, distance, POIID → StoryID ascending: 11, 22, 33.
+	expectedStoryIDs := []int{11, 22, 33}
+	for i, expected := range expectedStoryIDs {
+		if candidates[i].StoryID != expected {
+			t.Errorf("candidates[%d]: expected StoryID %d, got %d", i, expected, candidates[i].StoryID)
+		}
+	}
+}
+
+func TestGetNearbyStories_TieBreak_Stability_Repeated(t *testing.T) {
+	// Run the same query multiple times and verify the order is identical each time.
+	pois := []repository.NearbyPOI{
+		makePOI(4, "D", 80, 41.716, 44.828, 50),
+		makePOI(2, "B", 80, 41.716, 44.828, 50),
+		makePOI(1, "A", 80, 41.716, 44.828, 50),
+		makePOI(3, "C", 80, 41.716, 44.828, 50),
+	}
+	stories := map[int][]domain.Story{
+		1: {makeStory(10, 1)},
+		2: {makeStory(20, 2)},
+		3: {makeStory(30, 3)},
+		4: {makeStory(40, 4)},
+	}
+
+	svc := NewNearbyService(
+		&mockPOIFinder{pois: pois},
+		&mockStoryGetter{stories: stories},
+	)
+
+	var firstOrder []int
+	for run := 0; run < 10; run++ {
+		candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 150, -1, 1.0, "", "en")
+		if err != nil {
+			t.Fatalf("run %d: unexpected error: %v", run, err)
+		}
+		order := make([]int, len(candidates))
+		for i, c := range candidates {
+			order[i] = c.POIID
+		}
+		if run == 0 {
+			firstOrder = order
+			// Verify the expected deterministic order: POIID ascending (all else equal).
+			expectedOrder := []int{1, 2, 3, 4}
+			for i, expected := range expectedOrder {
+				if order[i] != expected {
+					t.Errorf("run 0: candidates[%d] expected POIID %d, got %d", i, expected, order[i])
+				}
+			}
+		} else {
+			for i := range order {
+				if order[i] != firstOrder[i] {
+					t.Errorf("run %d: order changed at index %d: got %d, expected %d", run, i, order[i], firstOrder[i])
+				}
+			}
+		}
+	}
+}
+
+func TestGetNearbyStories_TieBreak_TruncationPreservesOrder(t *testing.T) {
+	// 8 candidates with identical scores; after truncation to 5, the order should be deterministic.
+	var pois []repository.NearbyPOI
+	storiesMap := make(map[int][]domain.Story)
+	// All same interest score and distance → identical composite scores.
+	for i := 1; i <= 8; i++ {
+		pois = append(pois, makePOI(i*10, "POI", 80, 41.716, 44.828, 50))
+		storiesMap[i*10] = []domain.Story{makeStory(i*100, i*10)}
+	}
+
+	svc := NewNearbyService(
+		&mockPOIFinder{pois: pois},
+		&mockStoryGetter{stories: storiesMap},
+	)
+
+	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 150, -1, 1.0, "", "en")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(candidates) != maxCandidates {
+		t.Fatalf("expected %d candidates, got %d", maxCandidates, len(candidates))
+	}
+	// With identical scores and distances, POIID ascending: 10, 20, 30, 40, 50.
+	expectedPOIIDs := []int{10, 20, 30, 40, 50}
+	for i, expected := range expectedPOIIDs {
+		if candidates[i].POIID != expected {
+			t.Errorf("candidates[%d]: expected POIID %d, got %d", i, expected, candidates[i].POIID)
+		}
+	}
+}
+
+func TestGetNearbyStories_BatchLoading_SingleCall(t *testing.T) {
+	// Verify that regardless of POI count, only one batch call is made.
+	var pois []repository.NearbyPOI
+	storiesMap := make(map[int][]domain.Story)
+	for i := 1; i <= 10; i++ {
+		pois = append(pois, makePOI(i, "POI", int16(50+i), 41.715, 44.827, float64(i*10)))
+		storiesMap[i] = []domain.Story{makeStory(100+i, i)}
+	}
+
+	sg := &mockStoryGetter{stories: storiesMap}
+	svc := NewNearbyService(
+		&mockPOIFinder{pois: pois},
+		sg,
+	)
+
+	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 200, -1, 1.0, "", "en")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(candidates) != maxCandidates {
+		t.Errorf("expected %d candidates, got %d", maxCandidates, len(candidates))
+	}
+	if sg.batchCalls != 1 {
+		t.Errorf("expected exactly 1 batch call, got %d", sg.batchCalls)
+	}
+}
+
+func TestGetNearbyStories_RussianNameUsedForRuLanguage(t *testing.T) {
+	nameRu := "Крепость Нарикала"
+	pois := []repository.NearbyPOI{
+		makePOIWithNameRu(1, "Narikala Fortress", &nameRu, 80, 41.716, 44.828, 50),
+	}
+	stories := map[int][]domain.Story{
+		1: {makeStory(10, 1)},
+	}
+
+	svc := NewNearbyService(
+		&mockPOIFinder{pois: pois},
+		&mockStoryGetter{stories: stories},
+	)
+
+	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 150, -1, 1.0, "", "ru")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(candidates) != 1 {
+		t.Fatalf("expected 1 candidate, got %d", len(candidates))
+	}
+	if candidates[0].POIName != "Крепость Нарикала" {
+		t.Errorf("expected Russian POI name, got %q", candidates[0].POIName)
+	}
+}
+
+func TestGetNearbyStories_FallbackToEnglishNameWhenNameRuMissing(t *testing.T) {
+	pois := []repository.NearbyPOI{
+		makePOIWithNameRu(1, "Narikala Fortress", nil, 80, 41.716, 44.828, 50),
+	}
+	stories := map[int][]domain.Story{
+		1: {makeStory(10, 1)},
+	}
+
+	svc := NewNearbyService(
+		&mockPOIFinder{pois: pois},
+		&mockStoryGetter{stories: stories},
+	)
+
+	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 150, -1, 1.0, "", "ru")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(candidates) != 1 {
+		t.Fatalf("expected 1 candidate, got %d", len(candidates))
+	}
+	if candidates[0].POIName != "Narikala Fortress" {
+		t.Errorf("expected fallback to English name, got %q", candidates[0].POIName)
+	}
+}
+
+func TestGetNearbyStories_FallbackWhenNameRuEmpty(t *testing.T) {
+	emptyRu := ""
+	pois := []repository.NearbyPOI{
+		makePOIWithNameRu(1, "Narikala Fortress", &emptyRu, 80, 41.716, 44.828, 50),
+	}
+	stories := map[int][]domain.Story{
+		1: {makeStory(10, 1)},
+	}
+
+	svc := NewNearbyService(
+		&mockPOIFinder{pois: pois},
+		&mockStoryGetter{stories: stories},
+	)
+
+	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 150, -1, 1.0, "", "ru")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(candidates) != 1 {
+		t.Fatalf("expected 1 candidate, got %d", len(candidates))
+	}
+	if candidates[0].POIName != "Narikala Fortress" {
+		t.Errorf("expected fallback to English name for empty name_ru, got %q", candidates[0].POIName)
+	}
+}
+
+func TestGetNearbyStories_EnglishRequestUsesDefaultName(t *testing.T) {
+	nameRu := "Крепость Нарикала"
+	pois := []repository.NearbyPOI{
+		makePOIWithNameRu(1, "Narikala Fortress", &nameRu, 80, 41.716, 44.828, 50),
+	}
+	stories := map[int][]domain.Story{
+		1: {makeStory(10, 1)},
+	}
+
+	svc := NewNearbyService(
+		&mockPOIFinder{pois: pois},
+		&mockStoryGetter{stories: stories},
+	)
+
+	candidates, err := svc.GetNearbyStories(context.Background(), 41.7151, 44.8271, 150, -1, 1.0, "", "en")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(candidates) != 1 {
+		t.Fatalf("expected 1 candidate, got %d", len(candidates))
+	}
+	if candidates[0].POIName != "Narikala Fortress" {
+		t.Errorf("expected English name for language=en, got %q", candidates[0].POIName)
 	}
 }

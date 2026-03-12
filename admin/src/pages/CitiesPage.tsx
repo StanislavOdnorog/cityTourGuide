@@ -1,25 +1,34 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Table,
   Button,
   Tag,
-  Input,
-  Select,
   Space,
+  Select,
   Drawer,
   Form,
+  Input,
   InputNumber,
   Switch,
   Modal,
   App,
 } from 'antd';
-import { PlusOutlined, EditOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  UndoOutlined,
+  ExclamationCircleOutlined,
+} from '@ant-design/icons';
 import { MapContainer, TileLayer, Circle, useMap } from 'react-leaflet';
 import type { ColumnsType } from 'antd/es/table';
 import { useCities } from '../hooks';
 import { useCityManagement } from '../hooks';
+import { useCursorTableState } from '../hooks/useCursorTableState';
 import type { City } from '../types';
 import 'leaflet/dist/leaflet.css';
+
+const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
 function MapUpdater({ lat, lng, zoom }: { lat: number; lng: number; zoom: number }) {
   const map = useMap();
@@ -29,23 +38,75 @@ function MapUpdater({ lat, lng, zoom }: { lat: number; lng: number; zoom: number
 
 export default function CitiesPage() {
   const { message } = App.useApp();
-  const { data: cities = [], isLoading } = useCities();
-  const { createCity, updateCity, toUpdateRequest } = useCityManagement();
+
+  const {
+    page,
+    pageSize: perPage,
+    cursor,
+    setPageAndSize,
+    recordNextCursor,
+    resetPagination,
+  } = useCursorTableState({
+    filterKey: '_unused',
+    filterValues: [] as const,
+    defaultFilter: '',
+    defaultPageSize: 20,
+    pageSizeOptions: PAGE_SIZE_OPTIONS,
+  });
+
+  const { data: citiesData, isLoading } = useCities({
+    cursor,
+    limit: perPage,
+    includeDeleted: true,
+  });
+  const { createCity, updateCity, deleteCity, restoreCity, toUpdateRequest } = useCityManagement();
+
+  const cityItems = citiesData?.items ?? [];
+
+  const total = useMemo(() => {
+    if (!citiesData) return page * perPage;
+    if (citiesData.has_more) return page * perPage + 1;
+    return (page - 1) * perPage + cityItems.length;
+  }, [page, perPage, cityItems.length, citiesData]);
+
+  useEffect(() => {
+    if (citiesData?.has_more && citiesData.next_cursor) {
+      recordNextCursor(citiesData.next_cursor);
+    }
+  }, [citiesData, recordNextCursor]);
+
+  useEffect(() => {
+    if (page > 1 && !isLoading && cityItems.length === 0) {
+      setPageAndSize(Math.max(1, page - 1), perPage);
+    }
+  }, [page, cityItems.length, isLoading, setPageAndSize, perPage]);
 
   const [searchText, setSearchText] = useState('');
-  const [activeFilter, setActiveFilter] = useState<string | undefined>(undefined);
+  const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'visible' | 'deleted'>('all');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingCity, setEditingCity] = useState<City | null>(null);
   const [form] = Form.useForm();
 
-  const filteredCities = cities.filter((city) => {
-    const matchesSearch =
-      !searchText || city.name.toLowerCase().includes(searchText.toLowerCase());
-    const matchesActive =
-      activeFilter === undefined ||
-      (activeFilter === 'active' ? city.is_active : !city.is_active);
-    return matchesSearch && matchesActive;
-  });
+  const isDeleted = (city: City) => !!city.deleted_at;
+
+  // Client-side search scoped to the loaded page only
+  const displayedCities = useMemo(() => {
+    return cityItems.filter((city) => {
+      const matchesSearch =
+        !searchText || city.name.toLowerCase().includes(searchText.toLowerCase());
+      if (!matchesSearch) {
+        return false;
+      }
+
+      if (visibilityFilter === 'deleted') {
+        return isDeleted(city);
+      }
+      if (visibilityFilter === 'visible') {
+        return !isDeleted(city);
+      }
+      return true;
+    });
+  }, [cityItems, searchText, visibilityFilter]);
 
   const openCreateDrawer = () => {
     setEditingCity(null);
@@ -93,9 +154,37 @@ export default function CitiesPage() {
           { id: city.id, body },
           {
             onSuccess: () => message.success(`City ${action}d successfully`),
-            onError: (err) => message.error(err.message),
           },
         );
+      },
+    });
+  };
+
+  const handleDelete = (city: City) => {
+    Modal.confirm({
+      title: `Delete "${city.name}"?`,
+      icon: <ExclamationCircleOutlined />,
+      content: 'The city will be soft-deleted and hidden from the mobile app. You can restore it later.',
+      okText: 'Yes, delete',
+      okType: 'danger',
+      onOk: () => {
+        deleteCity.mutate(city.id, {
+          onSuccess: () => message.success(`City "${city.name}" deleted`),
+        });
+      },
+    });
+  };
+
+  const handleRestore = (city: City) => {
+    Modal.confirm({
+      title: `Restore "${city.name}"?`,
+      icon: <ExclamationCircleOutlined />,
+      content: 'This will restore the city. It will become visible again based on its active status.',
+      okText: 'Yes, restore',
+      onOk: () => {
+        restoreCity.mutate(city.id, {
+          onSuccess: () => message.success(`City "${city.name}" restored`),
+        });
       },
     });
   };
@@ -122,7 +211,6 @@ export default function CitiesPage() {
               message.success('City updated');
               setDrawerOpen(false);
             },
-            onError: (err) => message.error(err.message),
           },
         );
       } else {
@@ -130,8 +218,8 @@ export default function CitiesPage() {
           onSuccess: () => {
             message.success('City created');
             setDrawerOpen(false);
+            resetPagination();
           },
-          onError: (err) => message.error(err.message),
         });
       }
     } catch {
@@ -143,12 +231,13 @@ export default function CitiesPage() {
     {
       title: 'Name',
       dataIndex: 'name',
-      sorter: (a, b) => a.name.localeCompare(b.name),
+      render: (name: string, city) => (
+        <span style={isDeleted(city) ? { opacity: 0.5 } : undefined}>{name}</span>
+      ),
     },
     {
       title: 'Country',
       dataIndex: 'country',
-      sorter: (a, b) => a.country.localeCompare(b.country),
     },
     {
       title: 'Center',
@@ -157,42 +246,69 @@ export default function CitiesPage() {
     {
       title: 'Radius (km)',
       dataIndex: 'radius_km',
-      sorter: (a, b) => a.radius_km - b.radius_km,
     },
     {
       title: 'Status',
-      dataIndex: 'is_active',
-      render: (active: boolean) => (
-        <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>
+      render: (_, city) => (
+        <Space size={4}>
+          {isDeleted(city) ? (
+            <Tag color="default">Deleted</Tag>
+          ) : (
+            <Tag color={city.is_active ? 'green' : 'red'}>
+              {city.is_active ? 'Active' : 'Inactive'}
+            </Tag>
+          )}
+        </Space>
       ),
     },
     {
       title: 'Download (MB)',
       dataIndex: 'download_size_mb',
-      sorter: (a, b) => a.download_size_mb - b.download_size_mb,
     },
     {
       title: 'Created',
       dataIndex: 'created_at',
       render: (date: string) => new Date(date).toLocaleDateString(),
-      sorter: (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     },
     {
       title: 'Actions',
-      render: (_, city) => (
-        <Space>
-          <Button size="small" icon={<EditOutlined />} onClick={() => openEditDrawer(city)}>
-            Edit
-          </Button>
-          <Button
-            size="small"
-            danger={city.is_active}
-            onClick={() => handleToggleActive(city)}
-          >
-            {city.is_active ? 'Deactivate' : 'Activate'}
-          </Button>
-        </Space>
-      ),
+      render: (_, city) => {
+        if (isDeleted(city)) {
+          return (
+            <Button
+              size="small"
+              icon={<UndoOutlined />}
+              onClick={() => handleRestore(city)}
+              loading={restoreCity.isPending}
+            >
+              Restore
+            </Button>
+          );
+        }
+        return (
+          <Space>
+            <Button size="small" icon={<EditOutlined />} onClick={() => openEditDrawer(city)}>
+              Edit
+            </Button>
+            <Button
+              size="small"
+              danger={city.is_active}
+              onClick={() => handleToggleActive(city)}
+            >
+              {city.is_active ? 'Deactivate' : 'Activate'}
+            </Button>
+            <Button
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => handleDelete(city)}
+              loading={deleteCity.isPending}
+            >
+              Delete
+            </Button>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -208,21 +324,20 @@ export default function CitiesPage() {
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
         <Space>
           <Input.Search
-            placeholder="Search cities..."
+            placeholder="Filter this page..."
             allowClear
             style={{ width: 250 }}
             onSearch={setSearchText}
             onChange={(e) => !e.target.value && setSearchText('')}
           />
           <Select
-            placeholder="Status"
-            allowClear
-            style={{ width: 120 }}
-            value={activeFilter}
-            onChange={setActiveFilter}
+            value={visibilityFilter}
+            style={{ width: 150 }}
+            onChange={(value: 'all' | 'visible' | 'deleted') => setVisibilityFilter(value)}
             options={[
-              { value: 'active', label: 'Active' },
-              { value: 'inactive', label: 'Inactive' },
+              { value: 'all', label: 'All rows' },
+              { value: 'visible', label: 'Visible only' },
+              { value: 'deleted', label: 'Deleted only' },
             ]}
           />
         </Space>
@@ -233,10 +348,18 @@ export default function CitiesPage() {
 
       <Table
         columns={columns}
-        dataSource={filteredCities}
+        dataSource={displayedCities}
         rowKey="id"
         loading={isLoading}
-        pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50'] }}
+        rowClassName={(city) => (isDeleted(city) ? 'ant-table-row-deleted' : '')}
+        pagination={{
+          current: page,
+          pageSize: perPage,
+          total,
+          showSizeChanger: true,
+          pageSizeOptions: ['10', '20', '50'],
+          onChange: (p, ps) => setPageAndSize(p, ps),
+        }}
       />
 
       <Drawer
@@ -335,6 +458,11 @@ export default function CitiesPage() {
           </div>
         </div>
       </Drawer>
+      <style>{`
+        .ant-table-row-deleted > td {
+          opacity: 0.65;
+        }
+      `}</style>
     </div>
   );
 }

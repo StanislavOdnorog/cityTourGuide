@@ -16,6 +16,10 @@ type StoryRepo struct {
 	pool *pgxpool.Pool
 }
 
+type storyQueryRower interface {
+	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+}
+
 // NewStoryRepo creates a new StoryRepo.
 func NewStoryRepo(pool *pgxpool.Pool) *StoryRepo {
 	return &StoryRepo{pool: pool}
@@ -55,13 +59,17 @@ func (r *StoryRepo) Create(ctx context.Context, story *domain.Story) (*domain.St
 
 // GetByID returns a story by its ID.
 func (r *StoryRepo) GetByID(ctx context.Context, id int) (*domain.Story, error) {
+	return r.getByID(ctx, r.pool, id, "")
+}
+
+func (r *StoryRepo) getByID(ctx context.Context, q storyQueryRower, id int, suffix string) (*domain.Story, error) {
 	query := `
 		SELECT id, poi_id, language, text, audio_url, duration_sec, layer_type, order_index, is_inflation, confidence, sources, status, created_at, updated_at
 		FROM story
-		WHERE id = $1`
+		WHERE id = $1 ` + suffix
 
 	var s domain.Story
-	err := r.pool.QueryRow(ctx, query, id).Scan(
+	err := q.QueryRow(ctx, query, id).Scan(
 		&s.ID, &s.POIID, &s.Language, &s.Text, &s.AudioURL, &s.DurationSec,
 		&s.LayerType, &s.OrderIndex, &s.IsInflation, &s.Confidence, &s.Sources,
 		&s.Status, &s.CreatedAt, &s.UpdatedAt,
@@ -74,6 +82,11 @@ func (r *StoryRepo) GetByID(ctx context.Context, id int) (*domain.Story, error) 
 	}
 
 	return &s, nil
+}
+
+// GetByIDForUpdateTx returns a story by its ID and locks it for update.
+func (r *StoryRepo) GetByIDForUpdateTx(ctx context.Context, tx pgx.Tx, id int) (*domain.Story, error) {
+	return r.getByID(ctx, tx, id, "FOR UPDATE")
 }
 
 // GetByPOIID returns stories for a given POI, filtered by language and status.
@@ -119,9 +132,86 @@ func (r *StoryRepo) GetByPOIID(ctx context.Context, poiID int, language string, 
 	return stories, nil
 }
 
+// GetByPOIIDs returns stories for multiple POIs in a single query, grouped by POI ID.
+// Stories are ordered by order_index, created_at within each POI group.
+// POIs with no stories will have empty slices in the returned map.
+// If excludeUserID is non-empty, stories the user has already listened to are
+// excluded via a NOT EXISTS subquery, eliminating a separate round-trip.
+func (r *StoryRepo) GetByPOIIDs(ctx context.Context, poiIDs []int, language string, status *domain.StoryStatus, excludeUserID string) (map[int][]domain.Story, error) {
+	result := make(map[int][]domain.Story, len(poiIDs))
+	if len(poiIDs) == 0 {
+		return result, nil
+	}
+
+	// Pre-populate map so POIs with no stories get empty slices.
+	for _, id := range poiIDs {
+		result[id] = []domain.Story{}
+	}
+
+	query := `
+		SELECT id, poi_id, language, text, audio_url, duration_sec, layer_type, order_index, is_inflation, confidence, sources, status, created_at, updated_at
+		FROM story
+		WHERE poi_id = ANY($1) AND language = $2`
+
+	args := []interface{}{poiIDs, language}
+	argIdx := 3
+
+	if status != nil {
+		query += fmt.Sprintf(" AND status = $%d", argIdx)
+		args = append(args, *status)
+		argIdx++
+	}
+
+	if excludeUserID != "" {
+		query += fmt.Sprintf(" AND NOT EXISTS (SELECT 1 FROM user_listening ul WHERE ul.story_id = story.id AND ul.user_id = $%d)", argIdx)
+		args = append(args, excludeUserID)
+	}
+
+	query += " ORDER BY poi_id, order_index, created_at"
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("story_repo: get by poi ids: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var s domain.Story
+		if err := rows.Scan(
+			&s.ID, &s.POIID, &s.Language, &s.Text, &s.AudioURL, &s.DurationSec,
+			&s.LayerType, &s.OrderIndex, &s.IsInflation, &s.Confidence, &s.Sources,
+			&s.Status, &s.CreatedAt, &s.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("story_repo: get by poi ids scan: %w", err)
+		}
+		result[s.POIID] = append(result[s.POIID], s)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("story_repo: get by poi ids rows: %w", err)
+	}
+
+	return result, nil
+}
+
 // ListByPOIID returns stories with cursor-based pagination, ordered by id ASC.
-func (r *StoryRepo) ListByPOIID(ctx context.Context, poiID int, language string, status *domain.StoryStatus, page domain.PageRequest) (*domain.PageResponse[domain.Story], error) {
+func (r *StoryRepo) ListByPOIID(ctx context.Context, poiID int, language string, status *domain.StoryStatus, page domain.PageRequest, sort ListSort) (*domain.PageResponse[domain.Story], error) {
 	if err := page.NormalizeLimit(); err != nil {
+		return nil, fmt.Errorf("story_repo: list: %w", err)
+	}
+
+	resolvedSort, err := ResolveSort(sort, map[string]SortColumn{
+		"id":          {Key: "id", Column: "id", Type: SortValueInt},
+		"poi_id":      {Key: "poi_id", Column: "poi_id", Type: SortValueInt},
+		"language":    {Key: "language", Column: "language", Type: SortValueString},
+		"status":      {Key: "status", Column: "status", Type: SortValueString},
+		"layer_type":  {Key: "layer_type", Column: "layer_type", Type: SortValueString},
+		"order_index": {Key: "order_index", Column: "order_index", Type: SortValueInt16},
+		"confidence":  {Key: "confidence", Column: "confidence", Type: SortValueInt16},
+		"created_at":  {Key: "created_at", Column: "created_at", Type: SortValueTime},
+		"updated_at":  {Key: "updated_at", Column: "updated_at", Type: SortValueTime},
+	}, "id", SortDirAsc)
+	if err != nil {
 		return nil, fmt.Errorf("story_repo: list: %w", err)
 	}
 
@@ -139,17 +229,17 @@ func (r *StoryRepo) ListByPOIID(ctx context.Context, poiID int, language string,
 		argIdx++
 	}
 
-	if page.Cursor != "" {
-		cursorID, err := domain.DecodeCursor(page.Cursor)
-		if err != nil {
-			return nil, fmt.Errorf("story_repo: list: %w", err)
-		}
-		query += fmt.Sprintf(" AND id > $%d", argIdx)
-		args = append(args, cursorID)
-		argIdx++
+	cursorCondition, cursorArgs, err := resolvedSort.CursorCondition(page.Cursor, argIdx)
+	if err != nil {
+		return nil, fmt.Errorf("story_repo: list: %w", err)
+	}
+	if cursorCondition != "" {
+		query += " AND " + cursorCondition
+		args = append(args, cursorArgs...)
+		argIdx += len(cursorArgs)
 	}
 
-	query += fmt.Sprintf(" ORDER BY id ASC LIMIT $%d", argIdx)
+	query += fmt.Sprintf(" ORDER BY %s LIMIT $%d", resolvedSort.OrderBy(), argIdx)
 	args = append(args, page.Limit+1)
 
 	rows, err := r.pool.Query(ctx, query, args...)
@@ -182,7 +272,10 @@ func (r *StoryRepo) ListByPOIID(ctx context.Context, poiID int, language string,
 
 	var nextCursor string
 	if hasMore && len(stories) > 0 {
-		nextCursor = domain.EncodeCursor(stories[len(stories)-1].ID)
+		nextCursor, err = EncodeOrderedCursor(resolvedSort, storySortValue(stories[len(stories)-1], resolvedSort.Key), stories[len(stories)-1].ID)
+		if err != nil {
+			return nil, fmt.Errorf("story_repo: list: %w", err)
+		}
 	}
 
 	return &domain.PageResponse[domain.Story]{
@@ -192,8 +285,35 @@ func (r *StoryRepo) ListByPOIID(ctx context.Context, poiID int, language string,
 	}, nil
 }
 
+func storySortValue(story domain.Story, key string) interface{} {
+	switch key {
+	case "poi_id":
+		return story.POIID
+	case "language":
+		return story.Language
+	case "status":
+		return string(story.Status)
+	case "layer_type":
+		return string(story.LayerType)
+	case "order_index":
+		return story.OrderIndex
+	case "confidence":
+		return story.Confidence
+	case "created_at":
+		return story.CreatedAt
+	case "updated_at":
+		return story.UpdatedAt
+	default:
+		return story.ID
+	}
+}
+
 // Update modifies an existing story and returns the updated record.
 func (r *StoryRepo) Update(ctx context.Context, story *domain.Story) (*domain.Story, error) {
+	return r.update(ctx, r.pool, story)
+}
+
+func (r *StoryRepo) update(ctx context.Context, q storyQueryRower, story *domain.Story) (*domain.Story, error) {
 	query := `
 		UPDATE story
 		SET poi_id = $2, language = $3, text = $4, audio_url = $5, duration_sec = $6,
@@ -203,7 +323,7 @@ func (r *StoryRepo) Update(ctx context.Context, story *domain.Story) (*domain.St
 		RETURNING id, poi_id, language, text, audio_url, duration_sec, layer_type, order_index, is_inflation, confidence, sources, status, created_at, updated_at`
 
 	var s domain.Story
-	err := r.pool.QueryRow(ctx, query,
+	err := q.QueryRow(ctx, query,
 		story.ID,
 		story.POIID,
 		story.Language,
@@ -231,6 +351,35 @@ func (r *StoryRepo) Update(ctx context.Context, story *domain.Story) (*domain.St
 	return &s, nil
 }
 
+// UpdateTx modifies an existing story inside an existing transaction.
+func (r *StoryRepo) UpdateTx(ctx context.Context, tx pgx.Tx, story *domain.Story) (*domain.Story, error) {
+	return r.update(ctx, tx, story)
+}
+
+// UpdateStatusTx updates only a story status inside an existing transaction.
+func (r *StoryRepo) UpdateStatusTx(ctx context.Context, tx pgx.Tx, id int, status domain.StoryStatus) (*domain.Story, error) {
+	query := `
+		UPDATE story
+		SET status = $2, updated_at = NOW()
+		WHERE id = $1
+		RETURNING id, poi_id, language, text, audio_url, duration_sec, layer_type, order_index, is_inflation, confidence, sources, status, created_at, updated_at`
+
+	var s domain.Story
+	err := tx.QueryRow(ctx, query, id, status).Scan(
+		&s.ID, &s.POIID, &s.Language, &s.Text, &s.AudioURL, &s.DurationSec,
+		&s.LayerType, &s.OrderIndex, &s.IsInflation, &s.Confidence, &s.Sources,
+		&s.Status, &s.CreatedAt, &s.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("story_repo: update status tx: %w", err)
+	}
+
+	return &s, nil
+}
+
 // Delete removes a story by its ID.
 func (r *StoryRepo) Delete(ctx context.Context, id int) error {
 	query := `DELETE FROM story WHERE id = $1`
@@ -250,7 +399,9 @@ func (r *StoryRepo) Delete(ctx context.Context, id int) error {
 // GetDownloadManifest returns stories for a city with POI name, for building download manifests.
 func (r *StoryRepo) GetDownloadManifest(ctx context.Context, cityID int, language string) ([]domain.DownloadManifestItem, error) {
 	query := `
-		SELECT s.id, s.poi_id, p.name, s.audio_url, s.duration_sec
+		SELECT s.id, s.poi_id,
+			CASE WHEN $2 = 'ru' AND p.name_ru IS NOT NULL AND p.name_ru != '' THEN p.name_ru ELSE p.name END,
+			s.audio_url, s.duration_sec
 		FROM story s
 		INNER JOIN poi p ON s.poi_id = p.id
 		WHERE p.city_id = $1 AND s.language = $2 AND s.status = 'active' AND s.audio_url IS NOT NULL

@@ -39,7 +39,7 @@ func (r *PurchaseRepo) Create(ctx context.Context, p *domain.Purchase) (*domain.
 		&created.IsLTD, &created.ExpiresAt, &created.CreatedAt,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("purchase_repo: create: %w", err)
+		return nil, ClassifyError(err)
 	}
 
 	return &created, nil
@@ -165,18 +165,21 @@ func (r *PurchaseRepo) GetActivePurchases(ctx context.Context, userID string) ([
 	return purchases, nil
 }
 
-// CountTodayListenings returns how many stories a user has listened to today (UTC).
-func (r *PurchaseRepo) CountTodayListenings(ctx context.Context, userID string) (int, error) {
+// CountListeningsSince returns how many stories a user has listened to since
+// the given timestamp (inclusive). Callers are expected to pass a UTC day
+// boundary so that freemium limits are deterministic regardless of database
+// timezone settings.
+func (r *PurchaseRepo) CountListeningsSince(ctx context.Context, userID string, since time.Time) (int, error) {
 	query := `
 		SELECT COUNT(*)
 		FROM user_listening
 		WHERE user_id = $1
-		  AND listened_at >= CURRENT_DATE`
+		  AND listened_at >= $2`
 
 	var count int
-	err := r.pool.QueryRow(ctx, query, userID).Scan(&count)
+	err := r.pool.QueryRow(ctx, query, userID, since).Scan(&count)
 	if err != nil {
-		return 0, fmt.Errorf("purchase_repo: count today listenings: %w", err)
+		return 0, fmt.Errorf("purchase_repo: count listenings since: %w", err)
 	}
 
 	return count, nil

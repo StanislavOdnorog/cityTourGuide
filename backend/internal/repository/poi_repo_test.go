@@ -345,7 +345,7 @@ func TestPOIRepo_ListByCityID_PaginationTraversal(t *testing.T) {
 		createTestPOI(t, poiRepo, ctx, city.ID, "Page POI 3", 41.6920, 44.8020),
 	}
 
-	firstPage, err := poiRepo.ListByCityID(ctx, city.ID, nil, nil, domain.PageRequest{Limit: 2})
+	firstPage, err := poiRepo.ListByCityID(ctx, city.ID, nil, nil, domain.PageRequest{Limit: 2}, repository.ListSort{})
 	if err != nil {
 		t.Fatalf("list first page: %v", err)
 	}
@@ -363,7 +363,7 @@ func TestPOIRepo_ListByCityID_PaginationTraversal(t *testing.T) {
 	secondPage, err := poiRepo.ListByCityID(ctx, city.ID, nil, nil, domain.PageRequest{
 		Cursor: firstPage.NextCursor,
 		Limit:  2,
-	})
+	}, repository.ListSort{})
 	if err != nil {
 		t.Fatalf("list second page: %v", err)
 	}
@@ -407,12 +407,56 @@ func TestPOIRepo_ListByCityID_InvalidCursor(t *testing.T) {
 	_, err := poiRepo.ListByCityID(ctx, city.ID, nil, nil, domain.PageRequest{
 		Cursor: "not-base64",
 		Limit:  20,
-	})
+	}, repository.ListSort{})
 	if err == nil {
 		t.Fatal("expected error for invalid cursor")
 	}
 	if got := err.Error(); !strings.Contains(got, "invalid cursor") {
 		t.Fatalf("expected wrapped descriptive error, got %q", got)
+	}
+}
+
+func TestPOIRepo_ListByCityID_SortsByInterestScoreDesc(t *testing.T) {
+	tp := setupTestPool(t)
+	defer tp.Close()
+
+	cityRepo := repository.NewCityRepo(tp.Pool)
+	poiRepo := repository.NewPOIRepo(tp.Pool)
+	ctx := context.Background()
+
+	city := createTestCity(t, cityRepo, ctx)
+	defer func() { _ = cityRepo.Delete(ctx, city.ID) }()
+
+	low := createTestPOI(t, poiRepo, ctx, city.ID, "Low", 41.69, 44.80)
+	medium := createTestPOI(t, poiRepo, ctx, city.ID, "Medium", 41.691, 44.801)
+	high := createTestPOI(t, poiRepo, ctx, city.ID, "High", 41.692, 44.802)
+
+	_, err := tp.Pool.Exec(ctx, `UPDATE poi SET interest_score = 10 WHERE id = $1`, low.ID)
+	if err != nil {
+		t.Fatalf("update low score: %v", err)
+	}
+	_, err = tp.Pool.Exec(ctx, `UPDATE poi SET interest_score = 50 WHERE id = $1`, medium.ID)
+	if err != nil {
+		t.Fatalf("update medium score: %v", err)
+	}
+	_, err = tp.Pool.Exec(ctx, `UPDATE poi SET interest_score = 90 WHERE id = $1`, high.ID)
+	if err != nil {
+		t.Fatalf("update high score: %v", err)
+	}
+
+	result, err := poiRepo.ListByCityID(ctx, city.ID, nil, nil, domain.PageRequest{Limit: 10}, repository.ListSort{
+		By:  "interest_score",
+		Dir: repository.SortDirDesc,
+	})
+	if err != nil {
+		t.Fatalf("ListByCityID failed: %v", err)
+	}
+
+	if len(result.Items) != 3 {
+		t.Fatalf("expected 3 pois, got %d", len(result.Items))
+	}
+	if result.Items[0].Name != "High" || result.Items[1].Name != "Medium" || result.Items[2].Name != "Low" {
+		t.Fatalf("unexpected order: %q, %q, %q", result.Items[0].Name, result.Items[1].Name, result.Items[2].Name)
 	}
 }
 

@@ -1,0 +1,178 @@
+name: Monorepo Verify
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Makefile'
+      - 'backend/api/openapi.yaml'
+      - '.github/workflows/monorepo.yml'
+      - 'scripts/check-generated-client-usage.sh'
+      - 'admin/src/api/**'
+      - 'mobile/src/api/**'
+      - 'README.md'
+      - 'PRD.md'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Makefile'
+      - 'backend/api/openapi.yaml'
+      - '.github/workflows/monorepo.yml'
+      - 'scripts/check-generated-client-usage.sh'
+      - 'admin/src/api/**'
+      - 'mobile/src/api/**'
+      - 'README.md'
+      - 'PRD.md'
+  workflow_dispatch:
+
+jobs:
+  verify-backend:
+    name: Verify Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: backend/go.sum
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.8
+          working-directory: backend
+
+      - name: Test
+        working-directory: backend
+        run: go test -race -cover ./...
+
+      - name: Build
+        working-directory: backend
+        run: |
+          go build -o bin/api ./cmd/api
+          go build -o bin/worker ./cmd/worker
+
+  verify-admin:
+    name: Verify Admin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: admin/package-lock.json
+
+      - name: Install dependencies
+        working-directory: admin
+        run: npm ci
+
+      - name: Lint
+        working-directory: admin
+        run: npm run lint
+
+      - name: Typecheck
+        working-directory: admin
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: admin
+        run: npm test
+
+      - name: Build
+        working-directory: admin
+        run: npm run build
+
+  verify-mobile:
+    name: Verify Mobile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Lint
+        working-directory: mobile
+        run: npm run lint
+
+      - name: Typecheck
+        working-directory: mobile
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: mobile
+        run: npm test
+
+  verify-mobile-audit:
+    name: Mobile Dependency Audit
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Run npm audit
+        working-directory: mobile
+        run: npm audit --audit-level=high
+
+  lint-api:
+    name: Lint OpenAPI Spec
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Lint OpenAPI spec
+        run: npx --yes @redocly/cli@latest lint backend/api/openapi.yaml --config redocly.yaml
+
+  verify-api:
+    name: Verify API Types
+    needs: lint-api
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: |
+          cd admin && npm ci
+          cd ../mobile && npm ci
+
+      - name: Generate API types
+        run: make generate-api
+
+      - name: Check for drift
+        run: |
+          if [ -n "$(git diff --name-only)" ]; then
+            echo "::error::Generated API types are out of date. Run 'make generate-api' and commit the changes."
+            git diff --name-only
+            exit 1
+          fi
+
+      - name: Check generated client usage
+        run: bash scripts/check-generated-client-usage.sh

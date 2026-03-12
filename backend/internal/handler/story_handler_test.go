@@ -27,6 +27,7 @@ type mockStoryRepo struct {
 	calledPOIID    int
 	calledLanguage string
 	calledStatus   *domain.StoryStatus
+	calledSort     repository.ListSort
 }
 
 func (m *mockStoryRepo) Create(_ context.Context, story *domain.Story) (*domain.Story, error) {
@@ -64,10 +65,11 @@ func (m *mockStoryRepo) Update(_ context.Context, story *domain.Story) (*domain.
 	return story, nil
 }
 
-func (m *mockStoryRepo) ListByPOIID(_ context.Context, poiID int, language string, status *domain.StoryStatus, page domain.PageRequest) (*domain.PageResponse[domain.Story], error) {
+func (m *mockStoryRepo) ListByPOIID(_ context.Context, poiID int, language string, status *domain.StoryStatus, page domain.PageRequest, sort repository.ListSort) (*domain.PageResponse[domain.Story], error) {
 	m.calledPOIID = poiID
 	m.calledLanguage = language
 	m.calledStatus = status
+	m.calledSort = sort
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -83,6 +85,68 @@ func (m *mockStoryRepo) ListByPOIID(_ context.Context, poiID int, language strin
 	}, nil
 }
 
+func TestListStories_UsesDefaultSort(t *testing.T) {
+	mock := &mockStoryRepo{}
+	h := NewStoryHandler(mock, nil)
+	r := setupStoryRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stories?poi_id=1&sort_by=order_index&sort_dir=desc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if mock.calledSort.By != "id" || mock.calledSort.Dir != repository.SortDirAsc {
+		t.Fatalf("expected default sort {id asc}, got %+v", mock.calledSort)
+	}
+}
+
+func TestListAdminStories_SortParams(t *testing.T) {
+	mock := &mockStoryRepo{}
+	h := NewStoryHandler(mock, nil)
+	r := setupStoryRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/stories?poi_id=1&sort_by=order_index&sort_dir=desc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if mock.calledSort.By != "order_index" || mock.calledSort.Dir != repository.SortDirDesc {
+		t.Fatalf("expected sort {order_index desc}, got %+v", mock.calledSort)
+	}
+}
+
+func TestListAdminStories_InvalidSortBy(t *testing.T) {
+	mock := &mockStoryRepo{}
+	h := NewStoryHandler(mock, nil)
+	r := setupStoryRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/stories?poi_id=1&sort_by=deleted_at", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestListAdminStories_InvalidSortDir(t *testing.T) {
+	mock := &mockStoryRepo{}
+	h := NewStoryHandler(mock, nil)
+	r := setupStoryRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/stories?poi_id=1&sort_dir=sideways", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func (m *mockStoryRepo) Delete(_ context.Context, _ int) error {
 	if m.deleteErr != nil {
 		return m.deleteErr
@@ -95,6 +159,7 @@ func setupStoryRouter(h *StoryHandler) *gin.Engine {
 	r := gin.New()
 	r.GET("/api/v1/stories", h.ListStories)
 	r.GET("/api/v1/stories/:id", h.GetStory)
+	r.GET("/api/v1/admin/stories", h.ListAdminStories)
 	r.POST("/api/v1/admin/stories", h.CreateStory)
 	r.PUT("/api/v1/admin/stories/:id", h.UpdateStory)
 	r.DELETE("/api/v1/admin/stories/:id", h.DeleteStory)
@@ -110,7 +175,7 @@ func TestListStories_Success(t *testing.T) {
 			{ID: 2, POIID: 1, Language: "en", Text: "Another story", LayerType: domain.StoryLayerAtmosphere, Status: domain.StoryStatusActive},
 		},
 	}
-	h := NewStoryHandler(mock)
+	h := NewStoryHandler(mock, nil)
 	r := setupStoryRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stories?poi_id=1", nil)
@@ -139,7 +204,7 @@ func TestListStories_Success(t *testing.T) {
 
 func TestListStories_MissingPOIID(t *testing.T) {
 	mock := &mockStoryRepo{}
-	h := NewStoryHandler(mock)
+	h := NewStoryHandler(mock, nil)
 	r := setupStoryRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stories", nil)
@@ -161,7 +226,7 @@ func TestListStories_MissingPOIID(t *testing.T) {
 
 func TestListStories_DefaultLanguage(t *testing.T) {
 	mock := &mockStoryRepo{stories: []domain.Story{}}
-	h := NewStoryHandler(mock)
+	h := NewStoryHandler(mock, nil)
 	r := setupStoryRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stories?poi_id=1", nil)
@@ -178,7 +243,7 @@ func TestListStories_DefaultLanguage(t *testing.T) {
 
 func TestListStories_WithFilters(t *testing.T) {
 	mock := &mockStoryRepo{stories: []domain.Story{}}
-	h := NewStoryHandler(mock)
+	h := NewStoryHandler(mock, nil)
 	r := setupStoryRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stories?poi_id=1&language=ru&status=active", nil)
@@ -201,7 +266,7 @@ func TestListStories_WithFilters(t *testing.T) {
 
 func TestListStories_InvalidStatus(t *testing.T) {
 	mock := &mockStoryRepo{}
-	h := NewStoryHandler(mock)
+	h := NewStoryHandler(mock, nil)
 	r := setupStoryRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stories?poi_id=1&status=archived", nil)
@@ -239,7 +304,7 @@ func TestListStories_Pagination(t *testing.T) {
 		stories[i] = domain.Story{ID: i + 1, POIID: 1, Language: "en", Text: "Story", LayerType: domain.StoryLayerGeneral, Status: domain.StoryStatusActive}
 	}
 	mock := &mockStoryRepo{stories: stories}
-	h := NewStoryHandler(mock)
+	h := NewStoryHandler(mock, nil)
 	r := setupStoryRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stories?poi_id=1&limit=10", nil)
@@ -266,13 +331,43 @@ func TestListStories_Pagination(t *testing.T) {
 	}
 }
 
+func TestListStories_NilStoriesReturnsEmptyArray(t *testing.T) {
+	mock := &mockStoryRepo{
+		stories: nil,
+	}
+	h := NewStoryHandler(mock, nil)
+	r := setupStoryRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stories?poi_id=1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Items   json.RawMessage `json:"items"`
+		HasMore bool            `json:"has_more"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if string(resp.Items) != "[]" {
+		t.Fatalf("expected items to be [], got %s", string(resp.Items))
+	}
+	if resp.HasMore {
+		t.Error("expected has_more=false")
+	}
+}
+
 func TestGetStory_Success(t *testing.T) {
 	audioURL := "https://example.com/audio.mp3"
 	dur := int16(30)
 	mock := &mockStoryRepo{
 		story: &domain.Story{ID: 1, POIID: 1, Language: "en", Text: "Great story", AudioURL: &audioURL, DurationSec: &dur, LayerType: domain.StoryLayerHumanStory, Status: domain.StoryStatusActive},
 	}
-	h := NewStoryHandler(mock)
+	h := NewStoryHandler(mock, nil)
 	r := setupStoryRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stories/1", nil)
@@ -296,7 +391,7 @@ func TestGetStory_Success(t *testing.T) {
 
 func TestGetStory_NotFound(t *testing.T) {
 	mock := &mockStoryRepo{err: repository.ErrNotFound}
-	h := NewStoryHandler(mock)
+	h := NewStoryHandler(mock, nil)
 	r := setupStoryRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stories/999", nil)
@@ -310,7 +405,7 @@ func TestGetStory_NotFound(t *testing.T) {
 
 func TestCreateStory_Success(t *testing.T) {
 	mock := &mockStoryRepo{}
-	h := NewStoryHandler(mock)
+	h := NewStoryHandler(mock, nil)
 	r := setupStoryRouter(h)
 
 	body := `{"poi_id":1,"language":"en","text":"A test story about history","layer_type":"general"}`
@@ -348,7 +443,7 @@ func TestCreateStory_Success(t *testing.T) {
 
 func TestCreateStory_MissingRequired(t *testing.T) {
 	mock := &mockStoryRepo{}
-	h := NewStoryHandler(mock)
+	h := NewStoryHandler(mock, nil)
 	r := setupStoryRouter(h)
 
 	body := `{"poi_id":1,"language":"en"}`
@@ -364,7 +459,7 @@ func TestCreateStory_MissingRequired(t *testing.T) {
 
 func TestCreateStory_WithOptionalFields(t *testing.T) {
 	mock := &mockStoryRepo{}
-	h := NewStoryHandler(mock)
+	h := NewStoryHandler(mock, nil)
 	r := setupStoryRouter(h)
 
 	audioURL := "https://example.com/audio.mp3"
@@ -486,7 +581,7 @@ func TestCreateStory_Validation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockStoryRepo{}
-			h := NewStoryHandler(mock)
+			h := NewStoryHandler(mock, nil)
 			r := setupStoryRouter(h)
 
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/stories", bytes.NewBufferString(tt.body))
@@ -526,7 +621,7 @@ func TestCreateStory_Validation(t *testing.T) {
 
 func TestUpdateStory_Success(t *testing.T) {
 	mock := &mockStoryRepo{}
-	h := NewStoryHandler(mock)
+	h := NewStoryHandler(mock, nil)
 	r := setupStoryRouter(h)
 
 	body := `{"poi_id":1,"language":"en","text":"Updated story","layer_type":"atmosphere"}`
@@ -552,7 +647,7 @@ func TestUpdateStory_Success(t *testing.T) {
 
 func TestUpdateStory_NotFound(t *testing.T) {
 	mock := &mockStoryRepo{err: repository.ErrNotFound}
-	h := NewStoryHandler(mock)
+	h := NewStoryHandler(mock, nil)
 	r := setupStoryRouter(h)
 
 	body := `{"poi_id":1,"language":"en","text":"Test","layer_type":"general"}`
@@ -568,7 +663,7 @@ func TestUpdateStory_NotFound(t *testing.T) {
 
 func TestUpdateStory_Validation(t *testing.T) {
 	mock := &mockStoryRepo{}
-	h := NewStoryHandler(mock)
+	h := NewStoryHandler(mock, nil)
 	r := setupStoryRouter(h)
 
 	body := `{"poi_id":1,"language":"en","text":"Story","layer_type":"general","confidence":-1}`
@@ -584,7 +679,7 @@ func TestUpdateStory_Validation(t *testing.T) {
 
 func TestDeleteStory_Success(t *testing.T) {
 	mock := &mockStoryRepo{}
-	h := NewStoryHandler(mock)
+	h := NewStoryHandler(mock, nil)
 	r := setupStoryRouter(h)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/stories/1", nil)
@@ -606,7 +701,7 @@ func TestDeleteStory_Success(t *testing.T) {
 
 func TestDeleteStory_NotFound(t *testing.T) {
 	mock := &mockStoryRepo{deleteErr: repository.ErrNotFound}
-	h := NewStoryHandler(mock)
+	h := NewStoryHandler(mock, nil)
 	r := setupStoryRouter(h)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/stories/999", nil)
@@ -620,7 +715,7 @@ func TestDeleteStory_NotFound(t *testing.T) {
 
 func TestStoryHandler_InvalidRequests(t *testing.T) {
 	mock := &mockStoryRepo{}
-	h := NewStoryHandler(mock)
+	h := NewStoryHandler(mock, nil)
 	r := setupStoryRouter(h)
 	addTraceIDMiddleware(r, "trace-story-123")
 
@@ -711,7 +806,7 @@ func TestStoryHandler_InvalidRequests(t *testing.T) {
 }
 
 func TestCreateStory_InvalidJSON(t *testing.T) {
-	h := NewStoryHandler(&mockStoryRepo{})
+	h := NewStoryHandler(&mockStoryRepo{}, nil)
 	r := setupStoryRouter(h)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/stories", bytes.NewBufferString("not json"))
@@ -724,4 +819,70 @@ func TestCreateStory_InvalidJSON(t *testing.T) {
 	}
 
 	assertErrorResponseContains(t, w.Body.Bytes(), "invalid character")
+}
+
+func TestCreateStory_ForeignKeyViolation(t *testing.T) {
+	mock := &mockStoryRepo{createErr: repository.ErrInvalidReference}
+	h := NewStoryHandler(mock, nil)
+	r := setupStoryRouter(h)
+
+	body := `{"poi_id":999,"language":"en","text":"A story","layer_type":"general"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/stories", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	assertErrorResponse(t, w.Body.Bytes(), "referenced record does not exist", "")
+}
+
+func TestCreateStory_UniqueViolation(t *testing.T) {
+	mock := &mockStoryRepo{createErr: repository.ErrConflict}
+	h := NewStoryHandler(mock, nil)
+	r := setupStoryRouter(h)
+
+	body := `{"poi_id":1,"language":"en","text":"A story","layer_type":"general"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/stories", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
+	}
+	assertErrorResponse(t, w.Body.Bytes(), "story already exists", "")
+}
+
+func TestUpdateStory_ForeignKeyViolation(t *testing.T) {
+	mock := &mockStoryRepo{err: repository.ErrInvalidReference}
+	h := NewStoryHandler(mock, nil)
+	r := setupStoryRouter(h)
+
+	body := `{"poi_id":999,"language":"en","text":"Test","layer_type":"general"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/stories/1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	assertErrorResponse(t, w.Body.Bytes(), "referenced record does not exist", "")
+}
+
+func TestDeleteStory_InvalidReference(t *testing.T) {
+	mock := &mockStoryRepo{deleteErr: repository.ErrInvalidReference}
+	h := NewStoryHandler(mock, nil)
+	r := setupStoryRouter(h)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/stories/1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	assertErrorResponse(t, w.Body.Bytes(), "referenced record does not exist", "")
 }

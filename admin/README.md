@@ -1,73 +1,70 @@
-# React + TypeScript + Vite
+# Admin Panel
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React admin panel for City Stories Guide, built with Vite, Ant Design, TanStack Query, and Leaflet.
 
-Currently, two official plugins are available:
+## Local Setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+1. Install dependencies:
 
-## React Compiler
+   ```bash
+   npm ci
+   ```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+2. Start the Vite dev server:
 
-## Expanding the ESLint configuration
+   ```bash
+   npm run dev
+   ```
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+   The backend API must be running for the admin panel to function. See [backend/README.md](../backend/README.md) for setup instructions.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## npm Scripts
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+All commands run from the `admin/` directory.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Start Vite dev server with HMR |
+| `npm run build` | TypeScript compile and Vite production build |
+| `npm run preview` | Preview the production build locally |
+| `npm run lint` | Run ESLint |
+| `npm run lint:fix` | Run ESLint with auto-fix |
+| `npm run typecheck` | Run TypeScript type checking (`tsc -b`) |
+| `npm run format` | Format source files with Prettier |
+| `npm run format:check` | Check formatting without writing |
+| `npm test` | Run Vitest unit tests |
+| `npm run test:e2e` | Run Playwright E2E tests |
+| `npm run test:e2e:ui` | Run Playwright E2E tests with interactive UI |
+| `npm run generate-api` | Regenerate TypeScript types from the OpenAPI spec |
+
+## CI Checks
+
+The Admin CI workflow (`.github/workflows/admin.yml`) runs on changes to `admin/**`:
+
+- **Lint** — `npm run lint`
+- **Typecheck** — `npm run typecheck`
+- **Format** — `npm run format:check`
+- **Build** — `npm run build`
+- **E2E** — `npm run test:e2e` (requires Playwright browsers: `npx playwright install --with-deps chromium`)
+
+## Generated API Types
+
+TypeScript types are generated from `backend/api/openapi.yaml` into `src/api/generated/schema.ts`.
+
+To regenerate after an OpenAPI spec change, run from the **repo root**:
+
+```bash
+make generate-api
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Or from the `admin/` directory:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run generate-api
 ```
+
+CI will fail if the generated types are out of date. Always commit the regenerated output.
+
+## Authentication
+
+The admin panel uses JWT authentication. The backend must be configured with a `JWT_SECRET` in `backend/.env`. Admin users are created via the backend seed command or API.

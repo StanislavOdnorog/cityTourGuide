@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { PurchaseStatus } from '@/types';
 import { usePurchaseStore } from '../usePurchaseStore';
 
@@ -7,6 +8,8 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   setItem: jest.fn(() => Promise.resolve()),
   removeItem: jest.fn(() => Promise.resolve()),
 }));
+
+const mockGetItem = AsyncStorage.getItem as jest.Mock;
 
 const makePurchaseStatus = (overrides: Partial<PurchaseStatus> = {}): PurchaseStatus => ({
   has_full_access: false,
@@ -26,6 +29,7 @@ describe('usePurchaseStore', () => {
       isLoading: false,
       paywallVisible: false,
       _hasHydrated: false,
+      _rehydrationError: null,
     });
   });
 
@@ -125,6 +129,91 @@ describe('usePurchaseStore', () => {
     });
     usePurchaseStore.getState().setStatus(status);
     expect(usePurchaseStore.getState().hasCityAccess(42)).toBe(true);
+  });
+
+  describe('pre-hydration defaults', () => {
+    it('returns defaults before hydration completes', () => {
+      usePurchaseStore.setState({ _hasHydrated: false });
+      const state = usePurchaseStore.getState();
+      expect(state._hasHydrated).toBe(false);
+      expect(state.status).toBeNull();
+      expect(state.isLoading).toBe(false);
+      expect(state.paywallVisible).toBe(false);
+    });
+  });
+
+  describe('corrupted AsyncStorage data', () => {
+    it('handles non-JSON garbage gracefully and sets rehydration error', async () => {
+      mockGetItem.mockResolvedValueOnce('not valid json {{{');
+      await usePurchaseStore.persist.rehydrate();
+
+      const state = usePurchaseStore.getState();
+      expect(state._hasHydrated).toBe(true);
+      expect(state._rehydrationError).toBe('Failed to restore purchase state.');
+      expect(state.status).toBeNull();
+    });
+
+    it('handles null persisted state gracefully without error', async () => {
+      mockGetItem.mockResolvedValueOnce(null);
+      await usePurchaseStore.persist.rehydrate();
+
+      const state = usePurchaseStore.getState();
+      expect(state._hasHydrated).toBe(true);
+      expect(state._rehydrationError).toBeNull();
+      expect(state.status).toBeNull();
+    });
+
+    it('handles state with wrong types gracefully', async () => {
+      mockGetItem.mockResolvedValueOnce(
+        JSON.stringify({
+          state: { status: 'not-an-object' },
+          version: 1,
+        }),
+      );
+      await usePurchaseStore.persist.rehydrate();
+
+      const state = usePurchaseStore.getState();
+      expect(state._hasHydrated).toBe(true);
+      // Store doesn't crash even with wrong type
+    });
+
+    it('handles empty object persisted state gracefully', async () => {
+      mockGetItem.mockResolvedValueOnce(JSON.stringify({ state: {}, version: 1 }));
+      await usePurchaseStore.persist.rehydrate();
+
+      const state = usePurchaseStore.getState();
+      expect(state._hasHydrated).toBe(true);
+    });
+  });
+
+  // Intentional behavior: when status is null (not yet loaded from server),
+  // access-gating methods return true to avoid blocking the user during
+  // bootstrap or network issues. The server is the source of truth;
+  // client-side gating is a UX optimization, not a security boundary.
+  describe('grants access when status is null (intentional)', () => {
+    it('hasCityAccess returns true when status is null', () => {
+      usePurchaseStore.setState({ status: null });
+      expect(usePurchaseStore.getState().hasCityAccess(1)).toBe(true);
+    });
+
+    it('canListenFree returns true when status is null', () => {
+      usePurchaseStore.setState({ status: null });
+      expect(usePurchaseStore.getState().canListenFree()).toBe(true);
+    });
+
+    it('hasFullAccess returns false when status is null', () => {
+      // hasFullAccess uses ?? false, so null status → false
+      // This is intentional: hasFullAccess is used for UI display (show premium badge),
+      // not for gating content. hasCityAccess and canListenFree handle gating.
+      usePurchaseStore.setState({ status: null });
+      expect(usePurchaseStore.getState().hasFullAccess()).toBe(false);
+    });
+
+    it('decrementFreeStories is a no-op when status is null', () => {
+      usePurchaseStore.setState({ status: null });
+      usePurchaseStore.getState().decrementFreeStories();
+      expect(usePurchaseStore.getState().status).toBeNull();
+    });
   });
 
   it('hasCityAccess returns false for non-matching city pack', () => {

@@ -9,6 +9,7 @@ import {
   updatePOI as updatePOIRequest,
   updateStory as updateStoryRequest,
 } from '../api';
+import { handleMutationError } from '../api/errors';
 import type {
   InflationJob,
   POI,
@@ -79,6 +80,7 @@ export function usePOIDetail(poiId: number | null) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['poi', poiId] });
     },
+    onError: handleMutationError,
   });
 
   const updateStory = useMutation({
@@ -90,6 +92,7 @@ export function usePOIDetail(poiId: number | null) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['poi-stories', poiId] });
     },
+    onError: handleMutationError,
   });
 
   const toggleStoryStatus = useMutation({
@@ -110,6 +113,7 @@ export function usePOIDetail(poiId: number | null) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['poi-stories', poiId] });
     },
+    onError: handleMutationError,
   });
 
   const triggerInflation = useMutation({
@@ -120,6 +124,7 @@ export function usePOIDetail(poiId: number | null) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['poi-inflation-jobs', poiId] });
     },
+    onError: handleMutationError,
   });
 
   return {

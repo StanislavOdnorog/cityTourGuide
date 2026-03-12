@@ -3,6 +3,7 @@ import { App, Button, Card, Form, Input, Typography } from 'antd';
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { login } from '../api/client';
+import { formatApiErrorMessage, normalizeApiError } from '../api/errors';
 import { useAuthStore } from '../store/authStore';
 
 const { Title } = Typography;
@@ -39,17 +40,13 @@ export default function LoginPage() {
       message.success('Login successful');
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      if (err && typeof err === 'object' && 'response' in err) {
-        const response = (err as { response: { status: number } }).response;
-        if (response.status === 401) {
-          message.error('Invalid email or password');
-        } else if (response.status === 429) {
-          message.error('Too many login attempts. Please try again later.');
-        } else {
-          message.error('Login failed. Please try again.');
-        }
+      const normalizedError = normalizeApiError(err, 'Login failed. Please try again.');
+      if (normalizedError.status === 401) {
+        message.error('Invalid email or password');
+      } else if (normalizedError.status === 429) {
+        message.error('Too many login attempts. Please try again later.');
       } else {
-        message.error('Network error. Please check your connection.');
+        message.error(formatApiErrorMessage(normalizedError));
       }
     } finally {
       setLoading(false);
@@ -66,7 +63,7 @@ export default function LoginPage() {
         background: '#f0f2f5',
       }}
     >
-      <Card style={{ width: 400 }}>
+      <Card style={{ width: 400 }} data-testid="login-card">
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <Title level={3}>CSG Admin</Title>
           <Typography.Text type="secondary">City Stories Guide — Admin Panel</Typography.Text>
@@ -77,6 +74,7 @@ export default function LoginPage() {
           autoComplete="off"
           layout="vertical"
           size="large"
+          data-testid="login-form"
         >
           <Form.Item
             name="email"
@@ -85,18 +83,18 @@ export default function LoginPage() {
               { type: 'email', message: 'Please enter a valid email' },
             ]}
           >
-            <Input prefix={<UserOutlined />} placeholder="Email" />
+            <Input prefix={<UserOutlined />} placeholder="Email" data-testid="login-email" />
           </Form.Item>
 
           <Form.Item
             name="password"
             rules={[{ required: true, message: 'Please enter your password' }]}
           >
-            <Input.Password prefix={<LockOutlined />} placeholder="Password" />
+            <Input.Password prefix={<LockOutlined />} placeholder="Password" data-testid="login-password" />
           </Form.Item>
 
           <Form.Item>
-            <Button type="primary" htmlType="submit" loading={loading} block>
+            <Button type="primary" htmlType="submit" loading={loading} block data-testid="login-submit">
               Log in
             </Button>
           </Form.Item>

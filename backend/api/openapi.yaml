@@ -45,8 +45,12 @@ tags:
   description: Admin story CRUD operations
 - name: 'Admin: Reports'
   description: Admin report management
+- name: 'Admin: Dashboard'
+  description: Admin dashboard summary data
 - name: 'Admin: Inflation'
   description: Admin AI story inflation jobs
+- name: 'Admin: Audit Logs'
+  description: Admin audit log entries
 components:
   securitySchemes:
     BearerAuth:
@@ -63,6 +67,47 @@ components:
         error:
           type: string
           example: invalid request
+        trace_id:
+          type: string
+          description: Request trace ID for debugging
+          example: abc-123-def
+    ValidationDetail:
+      type: object
+      required:
+      - field
+      - message
+      properties:
+        field:
+          type: string
+          description: JSON field name that failed validation
+          example: email
+        message:
+          type: string
+          description: Human-readable validation failure reason
+          example: must be a valid email address
+    ValidationError:
+      type: object
+      required:
+      - error
+      - details
+      properties:
+        error:
+          type: string
+          enum:
+          - validation_error
+          example: validation_error
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationDetail'
+        trace_id:
+          type: string
+          description: Request trace ID for debugging
+          example: abc-123-def
+    ErrorOrValidationError:
+      oneOf:
+      - $ref: '#/components/schemas/Error'
+      - $ref: '#/components/schemas/ValidationError'
     CursorPaginationParams:
       description: Common cursor-based pagination query parameters
       type: object
@@ -82,6 +127,7 @@ components:
       description: Common cursor-based pagination response fields
       type: object
       required:
+      - items
       - next_cursor
       - has_more
       properties:
@@ -97,6 +143,656 @@ components:
           type: boolean
           description: Whether there are more pages after this one
           example: true
+    MessageResponse:
+      type: object
+      required:
+      - message
+      properties:
+        message:
+          type: string
+    GracePeriodMessageResponse:
+      type: object
+      required:
+      - message
+      - grace_period
+      properties:
+        message:
+          type: string
+        grace_period:
+          type: string
+    StatusResponse:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          type: string
+    ReadinessCheck:
+      type: object
+      required:
+      - name
+      - required
+      - status
+      properties:
+        name:
+          type: string
+          example: database
+        required:
+          type: boolean
+          example: true
+        status:
+          type: string
+          enum:
+          - ok
+          - degraded
+          - unavailable
+          example: ok
+    ReadinessResponse:
+      type: object
+      required:
+      - status
+      - checks
+      properties:
+        status:
+          type: string
+          enum:
+          - ok
+          - degraded
+          - unavailable
+          example: ok
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReadinessCheck'
+    ReadinessUnavailableResponse:
+      allOf:
+      - $ref: '#/components/schemas/Error'
+      - $ref: '#/components/schemas/ReadinessResponse'
+    UnavailableStatusErrorResponse:
+      allOf:
+      - $ref: '#/components/schemas/Error'
+      - type: object
+        required:
+        - status
+        properties:
+          status:
+            type: string
+            example: unavailable
+    CityResponse:
+      type: object
+      required:
+      - data
+      properties:
+        data:
+          $ref: '#/components/schemas/City'
+    POIResponse:
+      type: object
+      required:
+      - data
+      properties:
+        data:
+          $ref: '#/components/schemas/POI'
+    StoryResponse:
+      type: object
+      required:
+      - data
+      properties:
+        data:
+          $ref: '#/components/schemas/Story'
+    UserResponse:
+      type: object
+      required:
+      - data
+      properties:
+        data:
+          $ref: '#/components/schemas/User'
+    AuthResponse:
+      type: object
+      required:
+      - data
+      - tokens
+      properties:
+        data:
+          $ref: '#/components/schemas/User'
+        tokens:
+          $ref: '#/components/schemas/TokenPair'
+    RefreshTokensResponse:
+      type: object
+      required:
+      - tokens
+      properties:
+        tokens:
+          $ref: '#/components/schemas/TokenPair'
+    UserListeningResponse:
+      type: object
+      required:
+      - data
+      properties:
+        data:
+          $ref: '#/components/schemas/UserListening'
+    ReportResponse:
+      type: object
+      required:
+      - data
+      properties:
+        data:
+          $ref: '#/components/schemas/Report'
+    ReportListResponse:
+      type: object
+      required:
+      - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Report'
+    ModeratedReportResultResponse:
+      type: object
+      required:
+      - data
+      properties:
+        data:
+          $ref: '#/components/schemas/ModeratedReportResult'
+    DeviceTokenResponse:
+      type: object
+      required:
+      - data
+      properties:
+        data:
+          $ref: '#/components/schemas/DeviceToken'
+    PurchaseResponse:
+      type: object
+      required:
+      - data
+      properties:
+        data:
+          $ref: '#/components/schemas/Purchase'
+    PurchaseStatusResponse:
+      type: object
+      required:
+      - data
+      properties:
+        data:
+          $ref: '#/components/schemas/PurchaseStatus'
+    AdminStatsResponse:
+      type: object
+      required:
+      - data
+      properties:
+        data:
+          $ref: '#/components/schemas/AdminStats'
+    InflationJobResponse:
+      type: object
+      required:
+      - data
+      properties:
+        data:
+          $ref: '#/components/schemas/InflationJob'
+    InflationJobListResponse:
+      type: object
+      required:
+      - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/InflationJob'
+    NearbyStoriesResponse:
+      type: object
+      required:
+      - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoryCandidate'
+    DownloadManifestResponse:
+      type: object
+      required:
+      - data
+      - total_size_bytes
+      - total_stories
+      - city_name
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DownloadManifestItem'
+        total_size_bytes:
+          type: integer
+          format: int64
+        total_stories:
+          type: integer
+        city_name:
+          type: string
+    CitiesPageResponse:
+      allOf:
+      - $ref: '#/components/schemas/CursorPaginatedResponse'
+      - type: object
+        properties:
+          items:
+            type: array
+            items:
+              $ref: '#/components/schemas/City'
+    POIsPageResponse:
+      allOf:
+      - $ref: '#/components/schemas/CursorPaginatedResponse'
+      - type: object
+        properties:
+          items:
+            type: array
+            items:
+              $ref: '#/components/schemas/POI'
+    StoriesPageResponse:
+      allOf:
+      - $ref: '#/components/schemas/CursorPaginatedResponse'
+      - type: object
+        properties:
+          items:
+            type: array
+            items:
+              $ref: '#/components/schemas/Story'
+    ListeningsPageResponse:
+      allOf:
+      - $ref: '#/components/schemas/CursorPaginatedResponse'
+      - type: object
+        properties:
+          items:
+            type: array
+            items:
+              $ref: '#/components/schemas/UserListening'
+    AdminReportsPageResponse:
+      allOf:
+      - $ref: '#/components/schemas/CursorPaginatedResponse'
+      - type: object
+        properties:
+          items:
+            type: array
+            items:
+              $ref: '#/components/schemas/AdminReportListItem'
+    AuditLogsPageResponse:
+      allOf:
+      - $ref: '#/components/schemas/CursorPaginatedResponse'
+      - type: object
+        properties:
+          items:
+            type: array
+            items:
+              $ref: '#/components/schemas/AuditLogItem'
+    RegisterRequest:
+      type: object
+      required:
+      - email
+      - password
+      - name
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: user@example.com
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+          example: securepass123
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: John Doe
+    LoginRequest:
+      type: object
+      required:
+      - email
+      - password
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: user@example.com
+        password:
+          type: string
+          maxLength: 72
+          example: securepass123
+    DeviceAuthRequest:
+      type: object
+      required:
+      - device_id
+      properties:
+        device_id:
+          type: string
+          minLength: 1
+          maxLength: 500
+          example: device-uuid-abc123
+        language:
+          type: string
+          minLength: 2
+          maxLength: 2
+          pattern: ^[a-z]{2}$
+          example: en
+    RefreshRequest:
+      type: object
+      required:
+      - refresh_token
+      properties:
+        refresh_token:
+          type: string
+    GoogleAuthRequest:
+      type: object
+      required:
+      - id_token
+      properties:
+        id_token:
+          type: string
+          description: Google ID token from client SDK
+    AppleAuthRequest:
+      type: object
+      anyOf:
+      - required:
+        - code
+      - required:
+        - id_token
+      properties:
+        code:
+          type: string
+          description: Apple authorization code
+        id_token:
+          type: string
+          description: Apple ID token
+    CreateCityRequest:
+      type: object
+      required:
+      - name
+      - country
+      - center_lat
+      - center_lng
+      - radius_km
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        name_ru:
+          type: string
+          nullable: true
+          maxLength: 200
+        country:
+          type: string
+          minLength: 1
+          maxLength: 100
+        center_lat:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        center_lng:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+        radius_km:
+          type: number
+          format: double
+          minimum: 0.1
+          maximum: 1000
+        is_active:
+          type: boolean
+        download_size_mb:
+          type: number
+          format: double
+          minimum: 0
+    UpdateCityRequest:
+      $ref: '#/components/schemas/CreateCityRequest'
+    CreatePOIRequest:
+      type: object
+      required:
+      - city_id
+      - name
+      - lat
+      - lng
+      - type
+      properties:
+        city_id:
+          type: integer
+        name:
+          type: string
+          maxLength: 500
+        name_ru:
+          type: string
+          nullable: true
+        lat:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+        type:
+          type: string
+          enum:
+          - building
+          - street
+          - park
+          - monument
+          - church
+          - bridge
+          - square
+          - museum
+          - district
+          - other
+        tags:
+          type: object
+          nullable: true
+        address:
+          type: string
+          nullable: true
+          maxLength: 1000
+        interest_score:
+          type: integer
+          format: int16
+          minimum: 0
+          maximum: 100
+        status:
+          type: string
+          enum:
+          - active
+          - disabled
+          - pending_review
+    UpdatePOIRequest:
+      $ref: '#/components/schemas/CreatePOIRequest'
+    CreateStoryRequest:
+      type: object
+      required:
+      - poi_id
+      - language
+      - text
+      - layer_type
+      properties:
+        poi_id:
+          type: integer
+        language:
+          type: string
+          minLength: 2
+          maxLength: 2
+          pattern: ^[a-z]{2}$
+        text:
+          type: string
+          maxLength: 50000
+        audio_url:
+          type: string
+          nullable: true
+          format: uri
+        duration_sec:
+          type: integer
+          format: int16
+          nullable: true
+          minimum: 0
+        layer_type:
+          type: string
+          enum:
+          - atmosphere
+          - human_story
+          - hidden_detail
+          - time_shift
+          - general
+        order_index:
+          type: integer
+          format: int16
+        is_inflation:
+          type: boolean
+        confidence:
+          type: integer
+          format: int16
+          minimum: 0
+          maximum: 100
+        sources:
+          type: object
+          nullable: true
+        status:
+          type: string
+          enum:
+          - active
+          - disabled
+          - reported
+          - pending_review
+    UpdateStoryRequest:
+      $ref: '#/components/schemas/CreateStoryRequest'
+    TrackListeningRequest:
+      type: object
+      required:
+      - user_id
+      - story_id
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        story_id:
+          type: integer
+        completed:
+          type: boolean
+          default: false
+        lat:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+    CreateReportRequest:
+      type: object
+      required:
+      - story_id
+      - user_id
+      - type
+      properties:
+        story_id:
+          type: integer
+        user_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+          - wrong_location
+          - wrong_fact
+          - inappropriate_content
+        comment:
+          type: string
+          minLength: 10
+          maxLength: 1000
+        lat:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+    UpdateReportStatusRequest:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          enum:
+          - new
+          - reviewed
+          - resolved
+          - dismissed
+    RegisterDeviceTokenRequest:
+      type: object
+      required:
+      - user_id
+      - token
+      - platform
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        token:
+          type: string
+          maxLength: 500
+        platform:
+          type: string
+          enum:
+          - ios
+          - android
+    UnregisterDeviceTokenRequest:
+      type: object
+      required:
+      - token
+      properties:
+        token:
+          type: string
+    VerifyPurchaseRequest:
+      type: object
+      required:
+      - platform
+      - transaction_id
+      - receipt
+      - type
+      - price
+      properties:
+        platform:
+          type: string
+          enum:
+          - ios
+          - android
+          example: ios
+        transaction_id:
+          type: string
+          maxLength: 500
+          example: txn_abc123
+        receipt:
+          type: string
+          maxLength: 50000
+        type:
+          type: string
+          enum:
+          - city_pack
+          - subscription
+          - lifetime
+        city_id:
+          type: integer
+          nullable: true
+          description: Optional city ID for city_pack purchases.
+        price:
+          type: number
+          format: double
+          minimum: 0
+          exclusiveMinimum: true
+          example: 4.99
     City:
       type: object
       required:
@@ -143,6 +839,10 @@ components:
           type: number
           format: double
           example: 120.5
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -303,6 +1003,8 @@ components:
       required:
       - poi_id
       - poi_name
+      - poi_lat
+      - poi_lng
       - story_id
       - story_text
       - audio_url
@@ -316,6 +1018,14 @@ components:
         poi_name:
           type: string
           example: Narikala Fortress
+        poi_lat:
+          type: number
+          format: double
+          example: 41.6875
+        poi_lng:
+          type: number
+          format: double
+          example: 44.8089
         story_id:
           type: integer
           example: 5
@@ -500,6 +1210,115 @@ components:
         created_at:
           type: string
           format: date-time
+    AdminReportListItem:
+      type: object
+      required:
+      - id
+      - story_id
+      - user_id
+      - type
+      - status
+      - created_at
+      properties:
+        id:
+          type: integer
+          example: 1
+        story_id:
+          type: integer
+          example: 5
+        user_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+          - wrong_location
+          - wrong_fact
+          - inappropriate_content
+          example: wrong_fact
+        comment:
+          type: string
+          nullable: true
+          example: The date mentioned is incorrect
+        user_lat:
+          type: number
+          format: double
+          nullable: true
+        user_lng:
+          type: number
+          format: double
+          nullable: true
+        status:
+          type: string
+          enum:
+          - new
+          - reviewed
+          - resolved
+          - dismissed
+          example: new
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        poi_id:
+          type: integer
+          nullable: true
+          description: ID of the POI the reported story belongs to
+          example: 42
+        poi_name:
+          type: string
+          nullable: true
+          description: Name of the POI
+          example: Charles Bridge
+        story_language:
+          type: string
+          nullable: true
+          description: Language code of the reported story
+          example: en
+        story_status:
+          type: string
+          nullable: true
+          enum:
+          - active
+          - disabled
+          - reported
+          - pending_review
+    ModeratedStory:
+      type: object
+      required:
+      - id
+      - poi_id
+      - language
+      - status
+      properties:
+        id:
+          type: integer
+        poi_id:
+          type: integer
+        language:
+          type: string
+        status:
+          type: string
+          enum:
+          - active
+          - disabled
+          - reported
+          - pending_review
+    ModeratedReportResult:
+      type: object
+      required:
+      - report
+      - story
+      properties:
+        report:
+          $ref: '#/components/schemas/Report'
+        story:
+          $ref: '#/components/schemas/ModeratedStory'
+          description: Current status of the reported story
+          example: active
     DeviceToken:
       type: object
       required:
@@ -565,6 +1384,9 @@ components:
           example: 1
         platform:
           type: string
+          enum:
+          - ios
+          - android
           example: ios
         transaction_id:
           type: string
@@ -589,7 +1411,6 @@ components:
       required:
       - has_full_access
       - is_lifetime
-      - active_subscription
       - city_packs
       - free_stories_used
       - free_stories_limit
@@ -602,6 +1423,7 @@ components:
           type: boolean
           example: false
         active_subscription:
+          type: object
           nullable: true
           allOf:
           - $ref: '#/components/schemas/Purchase'
@@ -628,6 +1450,9 @@ components:
       - segments_count
       - max_segments
       - created_at
+      - heartbeat_at
+      - worker_id
+      - attempts
       properties:
         id:
           type: integer
@@ -642,6 +1467,7 @@ components:
           - running
           - completed
           - failed
+          - dead
           example: pending
         trigger_type:
           type: string
@@ -656,7 +1482,7 @@ components:
         max_segments:
           type: integer
           format: int16
-          example: 5
+          example: 3
         started_at:
           type: string
           format: date-time
@@ -668,6 +1494,89 @@ components:
         error_log:
           type: string
           nullable: true
+        created_at:
+          type: string
+          format: date-time
+        heartbeat_at:
+          type: string
+          format: date-time
+          nullable: true
+        worker_id:
+          type: string
+          nullable: true
+        attempts:
+          type: integer
+          format: int16
+          example: 0
+    AdminStats:
+      type: object
+      required:
+      - cities_count
+      - pois_count
+      - stories_count
+      - reports_count
+      - new_reports_count
+      properties:
+        cities_count:
+          type: integer
+          example: 12
+        pois_count:
+          type: integer
+          example: 248
+        stories_count:
+          type: integer
+          example: 913
+        reports_count:
+          type: integer
+          example: 7
+        new_reports_count:
+          type: integer
+          example: 3
+    AuditLogItem:
+      type: object
+      required:
+      - id
+      - actor_id
+      - action
+      - resource_type
+      - resource_id
+      - http_method
+      - request_path
+      - trace_id
+      - status
+      - created_at
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 42
+        actor_id:
+          type: string
+          example: admin-uuid-123
+        action:
+          type: string
+          example: create
+        resource_type:
+          type: string
+          example: city
+        resource_id:
+          type: string
+          example: '5'
+        http_method:
+          type: string
+          example: POST
+        request_path:
+          type: string
+          example: /api/v1/admin/cities
+        trace_id:
+          type: string
+          example: trace-abc-123
+        payload:
+          type: object
+          nullable: true
+        status:
+          type: string
+          example: success
         created_at:
           type: string
           format: date-time
@@ -719,17 +1628,13 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: ok
+                $ref: '#/components/schemas/StatusResponse'
   /readyz:
     get:
       tags:
       - Health
       summary: Readiness check
-      description: Returns 200 if the server is ready to handle requests (database connected).
+      description: Returns component-level readiness for required and optional dependencies. Required failures or shutdown mode return 503; optional failures are reported as degraded without forcing 503.
       operationId: readyz
       servers:
       - url: /
@@ -739,24 +1644,13 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: ok
+                $ref: '#/components/schemas/ReadinessResponse'
         '503':
           description: Service unavailable
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: unavailable
-                  error:
-                    type: string
-                    example: database unreachable
+                $ref: '#/components/schemas/ReadinessUnavailableResponse'
   /nearby-stories:
     get:
       tags:
@@ -821,32 +1715,58 @@ paths:
           default: en
       - name: user_id
         in: query
-        description: Optional user UUID for personalization
+        description: Optional user identifier for personalization and listened-story deduplication
         schema:
           type: string
-          format: uuid
       responses:
         '200':
           description: List of story candidates sorted by relevance
           content:
             application/json:
               schema:
-                type: object
-                required:
-                - data
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/StoryCandidate'
+                $ref: '#/components/schemas/NearbyStoriesResponse'
+              example:
+                data:
+                  - poi_id: 1
+                    poi_name: Narikala Fortress
+                    poi_lat: 41.6875
+                    poi_lng: 44.8084
+                    story_id: 5
+                    story_text: "Standing on this ancient hill, you can almost hear the echoes of centuries past..."
+                    audio_url: "https://storage.example.com/stories/5/en.mp3"
+                    duration_sec: 120
+                    distance_m: 45.2
+                    score: 0.87
+                  - poi_id: 3
+                    poi_name: Abanotubani
+                    poi_lat: 41.6878
+                    poi_lng: 44.8103
+                    story_id: 12
+                    story_text: "The sulfur baths have drawn visitors for over a thousand years..."
+                    audio_url: "https://storage.example.com/stories/12/en.mp3"
+                    duration_sec: 95
+                    distance_m: 120.8
+                    score: 0.72
         '400':
           description: Invalid parameters
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+              example:
+                error: "lat must be between -90 and 90"
+                trace_id: "req-abc-123"
         '429':
           description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "rate limit exceeded"
+                trace_id: "req-def-456"
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -877,26 +1797,32 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/City'
-                  next_cursor:
-                    type: string
-                  has_more:
-                    type: boolean
-                required:
-                - items
-                - next_cursor
-                - has_more
+                $ref: '#/components/schemas/CitiesPageResponse'
+              example:
+                items:
+                  - id: 1
+                    name: Tbilisi
+                    name_ru: Тбилиси
+                    country: Georgia
+                    center_lat: 41.7151
+                    center_lng: 44.8271
+                    radius_km: 15.0
+                    is_active: true
+                    download_size_mb: 120.5
+                    deleted_at: null
+                    created_at: "2025-01-15T10:00:00Z"
+                    updated_at: "2025-01-15T10:00:00Z"
+                next_cursor: "aWQ6Mg=="
+                has_more: true
         '400':
           description: Invalid cursor or limit
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+              example:
+                error: "invalid cursor"
+                trace_id: "req-abc-123"
         '500':
           description: Internal server error
           content:
@@ -916,19 +1842,26 @@ paths:
         schema:
           type: integer
       responses:
+        '400':
+          description: Invalid city ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '200':
           description: City details
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/City'
-                required:
-                - data
+                $ref: '#/components/schemas/CityResponse'
         '404':
           description: City not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -952,32 +1885,30 @@ paths:
         schema:
           type: string
           default: en
+          enum:
+          - en
+          - ru
       responses:
+        '400':
+          description: Invalid city ID or unsupported language
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '200':
           description: Download manifest
           content:
             application/json:
               schema:
-                type: object
-                required:
-                - data
-                - total_size_bytes
-                - total_stories
-                - city_name
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/DownloadManifestItem'
-                  total_size_bytes:
-                    type: integer
-                    format: int64
-                  total_stories:
-                    type: integer
-                  city_name:
-                    type: string
+                $ref: '#/components/schemas/DownloadManifestResponse'
         '404':
           description: City not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1036,22 +1967,15 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/POI'
-                  next_cursor:
-                    type: string
-                  has_more:
-                    type: boolean
-                required:
-                - items
-                - next_cursor
-                - has_more
+                $ref: '#/components/schemas/POIsPageResponse'
         '400':
-          description: Missing or invalid city_id, cursor, or limit
+          description: Missing or invalid city_id, status, type, cursor, or limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOrValidationError'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1069,19 +1993,26 @@ paths:
         schema:
           type: integer
       responses:
+        '400':
+          description: Invalid POI ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '200':
           description: POI details
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/POI'
-                required:
-                - data
+                $ref: '#/components/schemas/POIResponse'
         '404':
           description: POI not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1131,22 +2062,15 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Story'
-                  next_cursor:
-                    type: string
-                  has_more:
-                    type: boolean
-                required:
-                - items
-                - next_cursor
-                - has_more
+                $ref: '#/components/schemas/StoriesPageResponse'
         '400':
-          description: Missing or invalid poi_id, cursor, or limit
+          description: Missing or invalid poi_id, status, cursor, or limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOrValidationError'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1164,19 +2088,26 @@ paths:
         schema:
           type: integer
       responses:
+        '400':
+          description: Invalid story ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '200':
           description: Story details
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Story'
-                required:
-                - data
+                $ref: '#/components/schemas/StoryResponse'
         '404':
           description: Story not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1213,22 +2144,15 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/UserListening'
-                  next_cursor:
-                    type: string
-                  has_more:
-                    type: boolean
-                required:
-                - items
-                - next_cursor
-                - has_more
+                $ref: '#/components/schemas/ListeningsPageResponse'
         '400':
           description: Missing user_id or invalid cursor/limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1243,39 +2167,22 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-              - user_id
-              - story_id
-              properties:
-                user_id:
-                  type: string
-                  format: uuid
-                story_id:
-                  type: integer
-                completed:
-                  type: boolean
-                  default: false
-                lat:
-                  type: number
-                  format: double
-                lng:
-                  type: number
-                  format: double
+              $ref: '#/components/schemas/TrackListeningRequest'
       responses:
         '201':
           description: Listening event created
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/UserListening'
-                required:
-                - data
+                $ref: '#/components/schemas/UserListeningResponse'
         '400':
           description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOrValidationError'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1291,45 +2198,48 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-              - story_id
-              - user_id
-              - type
-              properties:
-                story_id:
-                  type: integer
-                user_id:
-                  type: string
-                  format: uuid
-                type:
-                  type: string
-                  enum:
-                  - wrong_location
-                  - wrong_fact
-                  - inappropriate_content
-                comment:
-                  type: string
-                lat:
-                  type: number
-                  format: double
-                lng:
-                  type: number
-                  format: double
+              $ref: '#/components/schemas/CreateReportRequest'
+            example:
+              story_id: 5
+              user_id: "550e8400-e29b-41d4-a716-446655440000"
+              type: "wrong_fact"
+              comment: "The date mentioned in the story is incorrect — the fortress was built in the 4th century, not the 6th."
+              lat: 41.6875
+              lng: 44.8084
       responses:
         '201':
           description: Report created
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Report'
-                required:
-                - data
+                $ref: '#/components/schemas/ReportResponse'
+              example:
+                data:
+                  id: 1
+                  story_id: 5
+                  user_id: "550e8400-e29b-41d4-a716-446655440000"
+                  type: "wrong_fact"
+                  comment: "The date mentioned in the story is incorrect — the fortress was built in the 4th century, not the 6th."
+                  user_lat: 41.6875
+                  user_lng: 44.8084
+                  status: "new"
+                  resolved_at: null
+                  created_at: "2025-03-01T14:30:00Z"
         '400':
           description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOrValidationError'
+              example:
+                error: "validation_error"
+                details:
+                  - field: "comment"
+                    message: "must be at least 10 characters"
+                  - field: "type"
+                    message: "must be one of: wrong_location, wrong_fact, inappropriate_content"
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1345,36 +2255,22 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-              - user_id
-              - token
-              - platform
-              properties:
-                user_id:
-                  type: string
-                  format: uuid
-                token:
-                  type: string
-                platform:
-                  type: string
-                  enum:
-                  - ios
-                  - android
+              $ref: '#/components/schemas/RegisterDeviceTokenRequest'
       responses:
         '201':
           description: Device token registered
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/DeviceToken'
-                required:
-                - data
+                $ref: '#/components/schemas/DeviceTokenResponse'
         '400':
           description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOrValidationError'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1389,25 +2285,27 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-              - token
-              properties:
-                token:
-                  type: string
+              $ref: '#/components/schemas/UnregisterDeviceTokenRequest'
       responses:
         '200':
           description: Device token unregistered
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: device token unregistered
+                allOf:
+                - $ref: '#/components/schemas/MessageResponse'
+                - type: object
+                  properties:
+                    message:
+                      example: device token unregistered
         '400':
           description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOrValidationError'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1424,51 +2322,66 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-              - email
-              - password
-              - name
-              properties:
-                email:
-                  type: string
-                  format: email
-                  example: user@example.com
-                password:
-                  type: string
-                  minLength: 8
-                  example: securepass123
-                name:
-                  type: string
-                  example: John Doe
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              email: "newuser@example.com"
+              password: "securepass123"
+              name: "Jane Smith"
       responses:
         '201':
           description: Account created
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/User'
-                  tokens:
-                    $ref: '#/components/schemas/TokenPair'
-                required:
-                - data
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                data:
+                  id: "660e8400-e29b-41d4-a716-446655440001"
+                  email: "newuser@example.com"
+                  name: "Jane Smith"
+                  auth_provider: "email"
+                  language_pref: "en"
+                  is_anonymous: false
+                  is_admin: false
+                  created_at: "2025-03-01T12:00:00Z"
+                  updated_at: "2025-03-01T12:00:00Z"
+                tokens:
+                  access_token: "eyJhbGciOiJIUzI1NiIs..."
+                  refresh_token: "eyJhbGciOiJIUzI1NiIs..."
+                  expires_in: 3600
         '400':
           description: Validation error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/ErrorOrValidationError'
+              example:
+                error: "validation_error"
+                details:
+                  - field: "password"
+                    message: "must be at least 8 characters"
+                  - field: "name"
+                    message: "must not be empty"
         '409':
           description: Email already registered
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+              example:
+                error: "email already registered"
+                trace_id: "req-abc-123"
         '429':
           description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "rate limit exceeded"
+                trace_id: "req-abc-123"
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1484,38 +2397,63 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-              - email
-              - password
-              properties:
-                email:
-                  type: string
-                  format: email
-                password:
-                  type: string
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: "user@example.com"
+              password: "securepass123"
       responses:
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOrValidationError'
+              example:
+                error: "validation_error"
+                details:
+                  - field: "email"
+                    message: "must be a valid email address"
         '200':
           description: Login successful
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/User'
-                  tokens:
-                    $ref: '#/components/schemas/TokenPair'
-                required:
-                - data
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                data:
+                  id: "550e8400-e29b-41d4-a716-446655440000"
+                  email: "user@example.com"
+                  name: "John Doe"
+                  auth_provider: "email"
+                  language_pref: "en"
+                  is_anonymous: false
+                  is_admin: false
+                  created_at: "2025-01-15T10:00:00Z"
+                  updated_at: "2025-01-15T10:00:00Z"
+                tokens:
+                  access_token: "eyJhbGciOiJIUzI1NiIs..."
+                  refresh_token: "eyJhbGciOiJIUzI1NiIs..."
+                  expires_in: 3600
         '401':
           description: Invalid credentials
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+              example:
+                error: "invalid credentials"
+                trace_id: "req-abc-123"
         '403':
           description: Account scheduled for deletion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "account is scheduled for deletion"
+                trace_id: "req-abc-123"
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1532,32 +2470,43 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-              - device_id
-              properties:
-                device_id:
-                  type: string
-                  example: device-uuid-abc123
-                language:
-                  type: string
-                  example: en
+              $ref: '#/components/schemas/DeviceAuthRequest'
+            example:
+              device_id: "device-uuid-abc123"
+              language: "en"
       responses:
         '200':
           description: Device authenticated
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/User'
-                  tokens:
-                    $ref: '#/components/schemas/TokenPair'
-                required:
-                - data
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                data:
+                  id: "770e8400-e29b-41d4-a716-446655440002"
+                  auth_provider: "email"
+                  language_pref: "en"
+                  is_anonymous: true
+                  is_admin: false
+                  created_at: "2025-03-01T12:00:00Z"
+                  updated_at: "2025-03-01T12:00:00Z"
+                tokens:
+                  access_token: "eyJhbGciOiJIUzI1NiIs..."
+                  refresh_token: "eyJhbGciOiJIUzI1NiIs..."
+                  expires_in: 3600
         '400':
           description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOrValidationError'
+              example:
+                error: "validation_error"
+                details:
+                  - field: "device_id"
+                    message: "must not be empty"
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1573,24 +2522,28 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-              - refresh_token
-              properties:
-                refresh_token:
-                  type: string
+              $ref: '#/components/schemas/RefreshRequest'
       responses:
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOrValidationError'
         '200':
           description: Tokens refreshed
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  tokens:
-                    $ref: '#/components/schemas/TokenPair'
+                $ref: '#/components/schemas/RefreshTokensResponse'
         '401':
           description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1606,27 +2559,20 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-              - id_token
-              properties:
-                id_token:
-                  type: string
-                  description: Google ID token from client SDK
+              $ref: '#/components/schemas/GoogleAuthRequest'
       responses:
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOrValidationError'
         '200':
           description: Google auth successful
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/User'
-                  tokens:
-                    $ref: '#/components/schemas/TokenPair'
-                required:
-                - data
+                $ref: '#/components/schemas/AuthResponse'
         '401':
           description: Invalid Google token
           content:
@@ -1645,6 +2591,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /auth/apple:
     post:
       tags:
@@ -1656,34 +2608,20 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                code:
-                  type: string
-                  description: Apple authorization code
-                id_token:
-                  type: string
-                  description: Apple ID token
+              $ref: '#/components/schemas/AppleAuthRequest'
       responses:
         '200':
           description: Apple auth successful
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/User'
-                  tokens:
-                    $ref: '#/components/schemas/TokenPair'
-                required:
-                - data
+                $ref: '#/components/schemas/AuthResponse'
         '400':
-          description: Either code or id_token is required
+          description: Invalid request or either code or id_token is required
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/ErrorOrValidationError'
         '401':
           description: Invalid Apple token
           content:
@@ -1702,6 +2640,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /users/me:
     get:
       tags:
@@ -1716,14 +2660,21 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/User'
-                required:
-                - data
+                $ref: '#/components/schemas/UserResponse'
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1742,16 +2693,28 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: Account scheduled for deletion
-                  grace_period:
-                    type: string
-                    example: 30 days
+                allOf:
+                - $ref: '#/components/schemas/GracePeriodMessageResponse'
+                - type: object
+                  properties:
+                    message:
+                      example: Account scheduled for deletion
+                    grace_period:
+                      example: 30 days
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1771,13 +2734,32 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: Account restored successfully
+                allOf:
+                - $ref: '#/components/schemas/MessageResponse'
+                - type: object
+                  properties:
+                    message:
+                      example: Account restored successfully
+        '400':
+          description: Account is not scheduled for deletion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1795,64 +2777,66 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-              - platform
-              - transaction_id
-              - receipt
-              - type
-              - price
-              properties:
-                platform:
-                  type: string
-                  example: ios
-                transaction_id:
-                  type: string
-                  example: txn_abc123
-                receipt:
-                  type: string
-                type:
-                  type: string
-                  enum:
-                  - city_pack
-                  - subscription
-                  - lifetime
-                city_id:
-                  type: integer
-                  nullable: true
-                  description: Required for city_pack purchases
-                price:
-                  type: number
-                  format: double
-                  minimum: 0
-                  exclusiveMinimum: true
-                  example: 4.99
+              $ref: '#/components/schemas/VerifyPurchaseRequest'
+            example:
+              platform: "ios"
+              transaction_id: "txn_abc123"
+              receipt: "MIIbxgYJKoZIhvcNAQcCoIIb..."
+              type: "city_pack"
+              city_id: 1
+              price: 4.99
       responses:
         '201':
           description: Purchase verified and recorded
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Purchase'
-                required:
-                - data
+                $ref: '#/components/schemas/PurchaseResponse'
+              example:
+                data:
+                  id: 1
+                  user_id: "550e8400-e29b-41d4-a716-446655440000"
+                  type: "city_pack"
+                  city_id: 1
+                  platform: "ios"
+                  transaction_id: "txn_abc123"
+                  price: 4.99
+                  is_ltd: false
+                  expires_at: null
+                  created_at: "2025-03-01T15:00:00Z"
         '400':
           description: Invalid receipt or request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/ErrorOrValidationError'
+              example:
+                error: "validation_error"
+                details:
+                  - field: "receipt"
+                    message: "must not be empty"
+                  - field: "price"
+                    message: "must be greater than 0"
         '401':
           description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+              example:
+                error: "unauthorized"
+                trace_id: "req-abc-123"
         '409':
           description: Transaction already processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "transaction already processed"
+                trace_id: "req-abc-123"
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1871,75 +2855,128 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/PurchaseStatus'
-                required:
-                - data
+                $ref: '#/components/schemas/PurchaseStatusResponse'
+              example:
+                data:
+                  has_full_access: false
+                  is_lifetime: false
+                  active_subscription: null
+                  city_packs:
+                    - id: 1
+                      user_id: "550e8400-e29b-41d4-a716-446655440000"
+                      type: "city_pack"
+                      city_id: 1
+                      platform: "ios"
+                      transaction_id: "txn_abc123"
+                      price: 4.99
+                      is_ltd: false
+                      expires_at: null
+                      created_at: "2025-03-01T15:00:00Z"
+                  free_stories_used: 3
+                  free_stories_limit: 5
+                  free_stories_left: 2
         '401':
           description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /admin/cities:
-    post:
-      tags:
-      - 'Admin: Cities'
-      summary: Create a city
-      operationId: adminCreateCity
-      security:
-      - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - name
-              - country
-              - center_lat
-              - center_lng
-              - radius_km
-              - download_size_mb
-              properties:
-                name:
-                  type: string
-                name_ru:
-                  type: string
-                  nullable: true
-                country:
-                  type: string
-                center_lat:
-                  type: number
-                  format: double
-                center_lng:
-                  type: number
-                  format: double
-                radius_km:
-                  type: number
-                  format: double
-                is_active:
-                  type: boolean
-                download_size_mb:
-                  type: number
-                  format: double
-      responses:
-        '201':
-          description: City created
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/City'
-                required:
-                - data
+                $ref: '#/components/schemas/Error'
+  /admin/stats:
+    get:
+      tags:
+      - 'Admin: Dashboard'
+      summary: Get admin dashboard summary counts
+      operationId: adminGetStats
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Aggregate admin dashboard counts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStatsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /admin/cities:
+    get:
+      tags:
+      - 'Admin: Cities'
+      summary: List cities for admin
+      operationId: adminListCities
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: cursor
+        in: query
+        description: Opaque cursor from previous response's next_cursor
+        schema:
+          type: string
+      - name: limit
+        in: query
+        description: Number of items per page (default 20, max 100)
+        schema:
+          type: integer
+          default: 20
+          minimum: 1
+          maximum: 100
+      - name: include_deleted
+        in: query
+        description: Include soft-deleted cities in the response
+        schema:
+          type: boolean
+          default: false
+      - name: sort_by
+        in: query
+        description: Sort field
+        schema:
+          type: string
+          enum:
+          - id
+          - name
+          - country
+          - is_active
+          - created_at
+          - updated_at
+      - name: sort_dir
+        in: query
+        description: Sort direction
+        schema:
+          type: string
+          enum:
+          - asc
+          - desc
+      responses:
+        '200':
+          description: Paginated list of admin-visible cities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CitiesPageResponse'
         '400':
-          description: Validation error
+          description: Invalid cursor or limit
           content:
             application/json:
               schema:
@@ -1952,6 +2989,98 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+      - 'Admin: Cities'
+      summary: Create a city
+      operationId: adminCreateCity
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCityRequest'
+            example:
+              name: "Prague"
+              name_ru: "Прага"
+              country: "Czech Republic"
+              center_lat: 50.0755
+              center_lng: 14.4378
+              radius_km: 12.0
+              is_active: true
+              download_size_mb: 85.0
+      responses:
+        '201':
+          description: City created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CityResponse'
+              example:
+                data:
+                  id: 2
+                  name: "Prague"
+                  name_ru: "Прага"
+                  country: "Czech Republic"
+                  center_lat: 50.0755
+                  center_lng: 14.4378
+                  radius_km: 12.0
+                  is_active: true
+                  download_size_mb: 85.0
+                  deleted_at: null
+                  created_at: "2025-03-01T16:00:00Z"
+                  updated_at: "2025-03-01T16:00:00Z"
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOrValidationError'
+              example:
+                error: "validation_error"
+                details:
+                  - field: "center_lat"
+                    message: "must be between -90 and 90"
+                  - field: "radius_km"
+                    message: "must be between 0.1 and 1000"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "admin access required"
+                trace_id: "req-abc-123"
+        '409':
+          description: City already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "city already exists"
+                trace_id: "req-abc-123"
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -1975,54 +3104,20 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-              - name
-              - country
-              - center_lat
-              - center_lng
-              - radius_km
-              - download_size_mb
-              properties:
-                name:
-                  type: string
-                name_ru:
-                  type: string
-                  nullable: true
-                country:
-                  type: string
-                center_lat:
-                  type: number
-                  format: double
-                center_lng:
-                  type: number
-                  format: double
-                radius_km:
-                  type: number
-                  format: double
-                is_active:
-                  type: boolean
-                download_size_mb:
-                  type: number
-                  format: double
+              $ref: '#/components/schemas/UpdateCityRequest'
       responses:
         '200':
           description: City updated
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/City'
-                required:
-                - data
+                $ref: '#/components/schemas/CityResponse'
         '400':
           description: Validation error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/ErrorOrValidationError'
         '401':
           description: Unauthorized
           content:
@@ -2037,6 +3132,18 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: City not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: City already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -2060,11 +3167,18 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: city deleted
+                allOf:
+                - $ref: '#/components/schemas/MessageResponse'
+                - type: object
+                  properties:
+                    message:
+                      example: city deleted
+        '400':
+          description: Invalid city ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Unauthorized
           content:
@@ -2083,7 +3197,159 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /admin/cities/{id}/restore:
+    post:
+      tags:
+      - 'Admin: Cities'
+      summary: Restore a soft-deleted city
+      operationId: adminRestoreCity
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: City restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CityResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: City not found or not deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /admin/pois:
+    get:
+      tags:
+      - 'Admin: POIs'
+      summary: List POIs for admin
+      operationId: adminListPOIs
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: city_id
+        in: query
+        required: true
+        schema:
+          type: integer
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - active
+          - disabled
+          - pending_review
+      - name: type
+        in: query
+        schema:
+          type: string
+          enum:
+          - building
+          - street
+          - park
+          - monument
+          - church
+          - bridge
+          - square
+          - museum
+          - district
+          - other
+      - name: cursor
+        in: query
+        description: Opaque cursor from previous response's next_cursor
+        schema:
+          type: string
+      - name: limit
+        in: query
+        description: Number of items per page (default 20, max 100)
+        schema:
+          type: integer
+          default: 20
+          minimum: 1
+          maximum: 100
+      - name: sort_by
+        in: query
+        description: Sort field
+        schema:
+          type: string
+          enum:
+          - id
+          - name
+          - type
+          - status
+          - interest_score
+          - created_at
+          - updated_at
+      - name: sort_dir
+        in: query
+        description: Sort direction
+        schema:
+          type: string
+          enum:
+          - asc
+          - desc
+      responses:
+        '200':
+          description: Paginated list of POIs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/POIsPageResponse'
+        '400':
+          description: Missing or invalid city_id, status, type, cursor, limit, or sort params
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOrValidationError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     post:
       tags:
       - 'Admin: POIs'
@@ -2096,73 +3362,20 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-              - city_id
-              - name
-              - lat
-              - lng
-              - type
-              properties:
-                city_id:
-                  type: integer
-                name:
-                  type: string
-                name_ru:
-                  type: string
-                  nullable: true
-                lat:
-                  type: number
-                  format: double
-                lng:
-                  type: number
-                  format: double
-                type:
-                  type: string
-                  enum:
-                  - building
-                  - street
-                  - park
-                  - monument
-                  - church
-                  - bridge
-                  - square
-                  - museum
-                  - district
-                  - other
-                tags:
-                  type: object
-                  nullable: true
-                address:
-                  type: string
-                  nullable: true
-                interest_score:
-                  type: integer
-                  format: int16
-                status:
-                  type: string
-                  enum:
-                  - active
-                  - disabled
-                  - pending_review
+              $ref: '#/components/schemas/CreatePOIRequest'
       responses:
         '201':
           description: POI created
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/POI'
-                required:
-                - data
+                $ref: '#/components/schemas/POIResponse'
         '400':
           description: Validation error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/ErrorOrValidationError'
         '401':
           description: Unauthorized
           content:
@@ -2171,6 +3384,18 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: POI already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -2194,73 +3419,20 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-              - city_id
-              - name
-              - lat
-              - lng
-              - type
-              properties:
-                city_id:
-                  type: integer
-                name:
-                  type: string
-                name_ru:
-                  type: string
-                  nullable: true
-                lat:
-                  type: number
-                  format: double
-                lng:
-                  type: number
-                  format: double
-                type:
-                  type: string
-                  enum:
-                  - building
-                  - street
-                  - park
-                  - monument
-                  - church
-                  - bridge
-                  - square
-                  - museum
-                  - district
-                  - other
-                tags:
-                  type: object
-                  nullable: true
-                address:
-                  type: string
-                  nullable: true
-                interest_score:
-                  type: integer
-                  format: int16
-                status:
-                  type: string
-                  enum:
-                  - active
-                  - disabled
-                  - pending_review
+              $ref: '#/components/schemas/UpdatePOIRequest'
       responses:
         '200':
           description: POI updated
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/POI'
-                required:
-                - data
+                $ref: '#/components/schemas/POIResponse'
         '400':
           description: Validation error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/ErrorOrValidationError'
         '401':
           description: Unauthorized
           content:
@@ -2275,6 +3447,18 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: POI not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: POI already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -2298,11 +3482,18 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: POI deleted
+                allOf:
+                - $ref: '#/components/schemas/MessageResponse'
+                - type: object
+                  properties:
+                    message:
+                      example: POI deleted
+        '400':
+          description: Invalid POI ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Unauthorized
           content:
@@ -2321,7 +3512,107 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /admin/stories:
+    get:
+      tags:
+      - 'Admin: Stories'
+      summary: List stories for admin
+      operationId: adminListStories
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: poi_id
+        in: query
+        required: true
+        schema:
+          type: integer
+      - name: language
+        in: query
+        schema:
+          type: string
+          default: en
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - active
+          - disabled
+          - reported
+          - pending_review
+      - name: cursor
+        in: query
+        description: Opaque cursor from previous response's next_cursor
+        schema:
+          type: string
+      - name: limit
+        in: query
+        description: Number of items per page (default 20, max 100)
+        schema:
+          type: integer
+          default: 20
+          minimum: 1
+          maximum: 100
+      - name: sort_by
+        in: query
+        description: Sort field
+        schema:
+          type: string
+          enum:
+          - id
+          - poi_id
+          - language
+          - status
+          - layer_type
+          - order_index
+          - confidence
+          - created_at
+          - updated_at
+      - name: sort_dir
+        in: query
+        description: Sort direction
+        schema:
+          type: string
+          enum:
+          - asc
+          - desc
+      responses:
+        '200':
+          description: Paginated list of stories
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoriesPageResponse'
+        '400':
+          description: Missing or invalid poi_id, status, cursor, limit, or sort params
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOrValidationError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     post:
       tags:
       - 'Admin: Stories'
@@ -2334,70 +3625,20 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-              - poi_id
-              - language
-              - text
-              - layer_type
-              properties:
-                poi_id:
-                  type: integer
-                language:
-                  type: string
-                text:
-                  type: string
-                audio_url:
-                  type: string
-                  nullable: true
-                duration_sec:
-                  type: integer
-                  format: int16
-                  nullable: true
-                layer_type:
-                  type: string
-                  enum:
-                  - atmosphere
-                  - human_story
-                  - hidden_detail
-                  - time_shift
-                  - general
-                order_index:
-                  type: integer
-                  format: int16
-                is_inflation:
-                  type: boolean
-                confidence:
-                  type: integer
-                  format: int16
-                sources:
-                  type: object
-                  nullable: true
-                status:
-                  type: string
-                  enum:
-                  - active
-                  - disabled
-                  - reported
-                  - pending_review
+              $ref: '#/components/schemas/CreateStoryRequest'
       responses:
         '201':
           description: Story created
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Story'
-                required:
-                - data
+                $ref: '#/components/schemas/StoryResponse'
         '400':
           description: Validation error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/ErrorOrValidationError'
         '401':
           description: Unauthorized
           content:
@@ -2406,6 +3647,18 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Story already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -2429,70 +3682,20 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-              - poi_id
-              - language
-              - text
-              - layer_type
-              properties:
-                poi_id:
-                  type: integer
-                language:
-                  type: string
-                text:
-                  type: string
-                audio_url:
-                  type: string
-                  nullable: true
-                duration_sec:
-                  type: integer
-                  format: int16
-                  nullable: true
-                layer_type:
-                  type: string
-                  enum:
-                  - atmosphere
-                  - human_story
-                  - hidden_detail
-                  - time_shift
-                  - general
-                order_index:
-                  type: integer
-                  format: int16
-                is_inflation:
-                  type: boolean
-                confidence:
-                  type: integer
-                  format: int16
-                sources:
-                  type: object
-                  nullable: true
-                status:
-                  type: string
-                  enum:
-                  - active
-                  - disabled
-                  - reported
-                  - pending_review
+              $ref: '#/components/schemas/UpdateStoryRequest'
       responses:
         '200':
           description: Story updated
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Story'
-                required:
-                - data
+                $ref: '#/components/schemas/StoryResponse'
         '400':
           description: Validation error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/ErrorOrValidationError'
         '401':
           description: Unauthorized
           content:
@@ -2507,6 +3710,18 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Story not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Story already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -2530,11 +3745,18 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: story deleted
+                allOf:
+                - $ref: '#/components/schemas/MessageResponse'
+                - type: object
+                  properties:
+                    message:
+                      example: story deleted
+        '400':
+          description: Invalid story ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Unauthorized
           content:
@@ -2553,6 +3775,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /admin/reports:
     get:
       tags:
@@ -2564,6 +3792,7 @@ paths:
       parameters:
       - name: status
         in: query
+        description: Filter by report status
         schema:
           type: string
           enum:
@@ -2584,26 +3813,50 @@ paths:
           default: 20
           minimum: 1
           maximum: 100
+      - name: sort_by
+        in: query
+        description: Sort field
+        schema:
+          type: string
+          enum:
+          - id
+          - story_id
+          - type
+          - status
+          - created_at
+      - name: sort_dir
+        in: query
+        description: Sort direction
+        schema:
+          type: string
+          enum:
+          - asc
+          - desc
       responses:
         '200':
           description: Paginated list of reports
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Report'
-                  next_cursor:
-                    type: string
-                  has_more:
-                    type: boolean
-                required:
-                - items
-                - next_cursor
-                - has_more
+                $ref: '#/components/schemas/AdminReportsPageResponse'
+              example:
+                items:
+                  - id: 1
+                    story_id: 5
+                    user_id: "550e8400-e29b-41d4-a716-446655440000"
+                    type: "wrong_fact"
+                    comment: "The date mentioned is incorrect"
+                    user_lat: 41.6875
+                    user_lng: 44.8084
+                    status: "new"
+                    resolved_at: null
+                    created_at: "2025-03-01T14:30:00Z"
+                    poi_id: 1
+                    poi_name: "Narikala Fortress"
+                    story_language: "en"
+                    story_status: "active"
+                next_cursor: "aWQ6Mg=="
+                has_more: false
         '400':
           description: Invalid cursor or limit
           content:
@@ -2618,6 +3871,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -2641,29 +3900,65 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-              - status
-              properties:
-                status:
-                  type: string
-                  enum:
-                  - new
-                  - reviewed
-                  - resolved
-                  - dismissed
+              $ref: '#/components/schemas/UpdateReportStatusRequest'
       responses:
         '200':
           description: Report status updated
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Report'
-                required:
-                - data
+                $ref: '#/components/schemas/ReportResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOrValidationError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /admin/reports/{id}/disable-story:
+    post:
+      tags:
+      - 'Admin: Reports'
+      summary: Disable the reported story and resolve the report atomically
+      operationId: adminDisableReportedStory
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: Story disabled and report resolved, or current closed state returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModeratedReportResultResponse'
         '400':
           description: Validation error
           content:
@@ -2684,6 +3979,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -2709,14 +4010,13 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Report'
-                required:
-                - data
+                $ref: '#/components/schemas/ReportListResponse'
+        '400':
+          description: Invalid POI ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Unauthorized
           content:
@@ -2725,6 +4025,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -2751,12 +4057,13 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/InflationJob'
-                required:
-                - data
+                $ref: '#/components/schemas/InflationJobResponse'
+        '400':
+          description: Invalid POI ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Unauthorized
           content:
@@ -2769,8 +4076,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '404':
-          description: POI not found
+        '409':
+          description: POI already has maximum inflation segments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -2796,14 +4109,13 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/InflationJob'
-                required:
-                - data
+                $ref: '#/components/schemas/InflationJobListResponse'
+        '400':
+          description: Invalid POI ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Unauthorized
           content:
@@ -2812,6 +4124,118 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /admin/audit-logs:
+    get:
+      tags:
+      - 'Admin: Audit Logs'
+      summary: List audit log entries
+      operationId: adminListAuditLogs
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: actor_id
+        in: query
+        description: Filter by actor (admin user) ID
+        schema:
+          type: string
+      - name: resource_type
+        in: query
+        description: Filter by resource type (e.g. city, poi, story, report)
+        schema:
+          type: string
+      - name: action
+        in: query
+        description: Filter by action (e.g. create, update, delete)
+        schema:
+          type: string
+      - name: created_from
+        in: query
+        description: Include entries created at or after this RFC3339 timestamp
+        schema:
+          type: string
+          format: date-time
+      - name: created_to
+        in: query
+        description: Include entries created at or before this RFC3339 timestamp
+        schema:
+          type: string
+          format: date-time
+      - name: status
+        in: query
+        description: Filter by status (e.g. success, error)
+        schema:
+          type: string
+      - name: cursor
+        in: query
+        description: Opaque cursor from previous response's next_cursor
+        schema:
+          type: string
+      - name: limit
+        in: query
+        description: Number of items per page (default 20, max 100)
+        schema:
+          type: integer
+          default: 20
+          minimum: 1
+          maximum: 100
+      - name: sort_by
+        in: query
+        description: Sort field
+        schema:
+          type: string
+          enum:
+          - id
+          - action
+          - resource_type
+          - status
+          - http_method
+          - request_path
+          - created_at
+      - name: sort_dir
+        in: query
+        description: Sort direction
+        schema:
+          type: string
+          enum:
+          - asc
+          - desc
+      responses:
+        '200':
+          description: Paginated list of audit log entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogsPageResponse'
+        '400':
+          description: Invalid cursor, limit, or filter input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:

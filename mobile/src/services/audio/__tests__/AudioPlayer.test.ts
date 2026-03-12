@@ -92,6 +92,8 @@ function makeCandidate(overrides: Partial<ScoredCandidate> = {}): ScoredCandidat
   return {
     poi_id: 1,
     poi_name: 'Holy Trinity Cathedral',
+    poi_lat: 41.6875,
+    poi_lng: 44.8084,
     story_id: 42,
     story_text: 'A story about the cathedral',
     audio_url: 'https://cdn.example.com/audio/42.mp3',

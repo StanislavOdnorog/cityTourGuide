@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -11,9 +11,12 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { deleteAccount } from '@/api/endpoints';
+import { isAppApiError, userMessageForError } from '@/api/errors';
+import { handleNotificationToggle } from '@/hooks/settingsActions';
+import { useCacheManager } from '@/hooks/useCacheManager';
 import { StoryCacheManager } from '@/services/cache';
 import { notificationManager } from '@/services/notifications';
-import { useCacheStore } from '@/store/useCacheStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import { usePurchaseStore } from '@/store/usePurchaseStore';
 import { useSettingsStore, type AppLanguage } from '@/store/useSettingsStore';
 
@@ -88,64 +91,41 @@ export default function SettingsScreen() {
   const setContentNotifications = useSettingsStore((s) => s.setContentNotifications);
   const pushToken = useSettingsStore((s) => s.pushToken);
   const setPushToken = useSettingsStore((s) => s.setPushToken);
-  const deviceId = useSettingsStore((s) => s.deviceId);
 
-  const cacheStats = useCacheStore((s) => s.stats);
-  const isClearing = useCacheStore((s) => s.isClearing);
-  const setCacheStats = useCacheStore((s) => s.setStats);
-  const setIsClearing = useCacheStore((s) => s.setIsClearing);
+  const {
+    stats: cacheStats,
+    isClearing,
+    initialized: cacheInitialized,
+    clearCache,
+    removeCityCache,
+    downloadedCityCount,
+    downloadedCityList,
+  } = useCacheManager(cacheManager);
 
   const purchaseStatus = usePurchaseStore((s) => s.status);
 
-  const [cacheInitialized, setCacheInitialized] = useState(false);
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        await cacheManager.init();
-        const stats = await cacheManager.getStats();
-        setCacheStats(stats);
-        setCacheInitialized(true);
-      } catch {
-        setCacheInitialized(true);
-      }
-    })();
-  }, [setCacheStats]);
-
-  const ensurePushRegistered = useCallback(async () => {
-    if (pushToken) return true;
-    const token = await notificationManager.registerForPushNotifications(deviceId);
-    if (token) {
-      setPushToken(token);
-      return true;
-    }
-    Alert.alert(
-      'Notifications Disabled',
-      'Please enable notifications in your device settings to receive alerts.',
-    );
-    return false;
-  }, [pushToken, deviceId, setPushToken]);
-
   const handleGeoToggle = useCallback(
-    async (enabled: boolean) => {
-      if (enabled) {
-        const ok = await ensurePushRegistered();
-        if (!ok) return;
-      }
-      setGeoNotifications(enabled);
-    },
-    [ensurePushRegistered, setGeoNotifications],
+    (enabled: boolean) =>
+      handleNotificationToggle(
+        enabled,
+        pushToken,
+        setPushToken,
+        setGeoNotifications,
+        notificationManager,
+      ),
+    [pushToken, setPushToken, setGeoNotifications],
   );
 
   const handleContentToggle = useCallback(
-    async (enabled: boolean) => {
-      if (enabled) {
-        const ok = await ensurePushRegistered();
-        if (!ok) return;
-      }
-      setContentNotifications(enabled);
-    },
-    [ensurePushRegistered, setContentNotifications],
+    (enabled: boolean) =>
+      handleNotificationToggle(
+        enabled,
+        pushToken,
+        setPushToken,
+        setContentNotifications,
+        notificationManager,
+      ),
+    [pushToken, setPushToken, setContentNotifications],
   );
 
   const handleLanguageToggle = useCallback(() => {
@@ -159,21 +139,24 @@ export default function SettingsScreen() {
       {
         text: 'Clear',
         style: 'destructive',
-        onPress: async () => {
-          setIsClearing(true);
-          try {
-            await cacheManager.clearAll();
-            const stats = await cacheManager.getStats();
-            setCacheStats(stats);
-          } catch {
-            // Silently handle cache clear errors
-          } finally {
-            setIsClearing(false);
-          }
-        },
+        onPress: () => void clearCache(),
       },
     ]);
-  }, [setCacheStats, setIsClearing]);
+  }, [clearCache]);
+
+  const handleRemoveCity = useCallback(
+    (cityId: number, cityName: string) => {
+      Alert.alert('Remove City', `Remove all cached audio for ${cityName}?`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => void removeCityCache(cityId),
+        },
+      ]);
+    },
+    [removeCityCache],
+  );
 
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -194,8 +177,13 @@ export default function SettingsScreen() {
                 'Account Scheduled for Deletion',
                 'Your account will be permanently deleted in 30 days. You can restore it from the settings before then.',
               );
-            } catch {
-              Alert.alert('Error', 'Failed to delete account. Please try again.');
+            } catch (err) {
+              if (isAppApiError(err) && err.category === 'unauthorized') {
+                useAuthStore.getState().clearSession();
+                Alert.alert('Session Expired', 'Please sign in again.');
+              } else {
+                Alert.alert('Error', userMessageForError(err));
+              }
             } finally {
               setIsDeleting(false);
             }
@@ -290,6 +278,32 @@ export default function SettingsScreen() {
             value={cacheInitialized ? String(cacheStats.cachedFileCount) : '...'}
           />
           <View style={styles.divider} />
+          <SettingRow
+            label="Downloaded cities"
+            value={cacheInitialized ? String(downloadedCityCount) : '...'}
+          />
+          {downloadedCityList.map((city) => (
+            <View key={city.cityId}>
+              <View style={styles.divider} />
+              <Pressable
+                onPress={() => handleRemoveCity(city.cityId, `City #${city.cityId}`)}
+                disabled={isClearing}
+                style={({ pressed }) => [
+                  styles.settingRow,
+                  pressed && styles.settingRowPressed,
+                  isClearing && styles.settingRowDisabled,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove city ${city.cityId}`}
+              >
+                <Text style={styles.settingLabel}>City #{city.cityId}</Text>
+                <Text style={styles.settingValue}>
+                  {formatBytes(city.totalSizeBytes)} · {city.totalFiles} files
+                </Text>
+              </Pressable>
+            </View>
+          ))}
+          <View style={styles.divider} />
           <Pressable
             onPress={handleClearCache}
             disabled={isClearing || !cacheInitialized}
@@ -352,7 +366,7 @@ function getPurchaseLabel(status: ReturnType<typeof usePurchaseStore.getState>['
   if (!status) return 'Free';
   if (status.is_lifetime) return 'Lifetime Access';
   if (status.active_subscription) return 'Monthly Pass';
-  if (status.city_packs.length > 0) return `${status.city_packs.length} City Pack(s)`;
+  if ((status.city_packs ?? []).length > 0) return `${status.city_packs?.length ?? 0} City Pack(s)`;
   return 'Free';
 }
 

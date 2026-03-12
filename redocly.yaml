@@ -1,0 +1,17 @@
+extends:
+  - recommended
+
+apis:
+  main:
+    root: backend/api/openapi.yaml
+
+rules:
+  no-unresolved-refs: error
+  no-unused-components: warn
+  info-contact: off
+  info-license: off
+  tag-description: off
+  operation-4xx-response: off
+  no-server-example.com: off
+  no-example-value-and-externalValue: off
+  security-defined: off

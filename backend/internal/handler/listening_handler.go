@@ -27,7 +27,7 @@ func NewListeningHandler(repo ListeningRepository) *ListeningHandler {
 }
 
 type trackListeningRequest struct {
-	UserID    string   `json:"user_id" binding:"required"`
+	UserID    string   `json:"user_id" binding:"required,uuid"`
 	StoryID   int      `json:"story_id" binding:"required"`
 	Completed bool     `json:"completed"`
 	Lat       *float64 `json:"lat"`
@@ -47,22 +47,9 @@ func (h *ListeningHandler) TrackListening(c *gin.Context) {
 		return
 	}
 
-	// Validate that lat/lng come in pairs
-	if (req.Lat == nil) != (req.Lng == nil) {
-		errorJSON(c, http.StatusBadRequest, "lat and lng must both be provided or both omitted")
+	// Validate that lat/lng come in pairs and ranges
+	if !validateCoordPair(c, req.Lat, req.Lng) {
 		return
-	}
-
-	// Validate coordinate ranges if provided
-	if req.Lat != nil && req.Lng != nil {
-		if *req.Lat < -90 || *req.Lat > 90 {
-			errorJSON(c, http.StatusBadRequest, "lat must be between -90 and 90")
-			return
-		}
-		if *req.Lng < -180 || *req.Lng > 180 {
-			errorJSON(c, http.StatusBadRequest, "lng must be between -180 and 180")
-			return
-		}
 	}
 
 	listening, err := h.repo.CreateOrUpdate(
@@ -81,9 +68,8 @@ func (h *ListeningHandler) TrackListening(c *gin.Context) {
 
 // ListListenings handles GET /api/v1/listenings?user_id=.
 func (h *ListeningHandler) ListListenings(c *gin.Context) {
-	userID := c.Query("user_id")
-	if userID == "" {
-		errorJSON(c, http.StatusBadRequest, "user_id is required")
+	userID, ok := parseUserIDQuery(c)
+	if !ok {
 		return
 	}
 
@@ -102,13 +88,5 @@ func (h *ListeningHandler) ListListenings(c *gin.Context) {
 		return
 	}
 
-	if result.Items == nil {
-		result.Items = []domain.UserListening{}
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"items":       result.Items,
-		"next_cursor": result.NextCursor,
-		"has_more":    result.HasMore,
-	})
+	writeCursorPage(c, result)
 }

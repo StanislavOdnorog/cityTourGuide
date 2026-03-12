@@ -34,3 +34,27 @@ type Report struct {
 	ResolvedAt *time.Time   `json:"resolved_at"`
 	CreatedAt  time.Time    `json:"created_at"`
 }
+
+// AdminReportListItem extends Report with joined POI and story context
+// for the admin report listing endpoint.
+type AdminReportListItem struct {
+	Report
+	POIID         *int    `json:"poi_id"`
+	POIName       *string `json:"poi_name"`
+	StoryLanguage *string `json:"story_language"`
+	StoryStatus   *string `json:"story_status"`
+}
+
+// ModeratedStory contains story metadata returned from atomic report moderation.
+type ModeratedStory struct {
+	ID       int         `json:"id"`
+	POIID    int         `json:"poi_id"`
+	Language string      `json:"language"`
+	Status   StoryStatus `json:"status"`
+}
+
+// ModeratedReportResult contains the report and story state after moderation.
+type ModeratedReportResult struct {
+	Report Report         `json:"report"`
+	Story  ModeratedStory `json:"story"`
+}

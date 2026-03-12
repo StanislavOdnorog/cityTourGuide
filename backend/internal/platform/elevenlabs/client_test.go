@@ -3,7 +3,9 @@ package elevenlabs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -275,6 +277,12 @@ func TestGenerateAudio_DefaultConfig(t *testing.T) {
 	if client.style != 0.3 {
 		t.Errorf("style = %f, want %f", client.style, 0.3)
 	}
+	if client.httpClient == nil {
+		t.Fatal("expected http client to be initialized")
+	}
+	if client.httpClient.Timeout != 120*time.Second {
+		t.Errorf("http client timeout = %s, want 120s", client.httpClient.Timeout)
+	}
 }
 
 func TestGenerateAudio_CustomConfig(t *testing.T) {
@@ -287,6 +295,7 @@ func TestGenerateAudio_CustomConfig(t *testing.T) {
 		Stability:  0.9,
 		Similarity: 0.1,
 		Style:      0.7,
+		Timeout:    5 * time.Second,
 	})
 
 	if client.baseURL != "https://custom.api.com" {
@@ -309,6 +318,33 @@ func TestGenerateAudio_CustomConfig(t *testing.T) {
 	}
 	if client.style != 0.7 {
 		t.Errorf("style = %f, want %f", client.style, 0.7)
+	}
+	if client.httpClient.Timeout != 5*time.Second {
+		t.Errorf("http client timeout = %s, want 5s", client.httpClient.Timeout)
+	}
+}
+
+func TestGenerateAudio_CustomHTTPClient(t *testing.T) {
+	baseClient := &http.Client{Timeout: 3 * time.Second}
+	client := NewClient(&Config{
+		APIKey:     "key",
+		HTTPClient: baseClient,
+	})
+
+	if client.httpClient == baseClient {
+		t.Fatal("expected client to copy injected http client")
+	}
+	if client.httpClient.Timeout != 3*time.Second {
+		t.Errorf("http client timeout = %s, want 3s", client.httpClient.Timeout)
+	}
+
+	override := NewClient(&Config{
+		APIKey:     "key",
+		HTTPClient: baseClient,
+		Timeout:    7 * time.Second,
+	})
+	if override.httpClient.Timeout != 7*time.Second {
+		t.Errorf("http client timeout = %s, want 7s", override.httpClient.Timeout)
 	}
 }
 
@@ -454,6 +490,83 @@ func TestGenerateAudio_ContextCanceled(t *testing.T) {
 		t.Fatal("expected error for canceled context")
 	}
 	<-started // ensure server handler was called
+}
+
+func TestGenerateAudio_ClientTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.Header().Set("Content-Type", "audio/mpeg")
+		w.Write(fakeMP3()) //nolint:errcheck // test helper
+	}))
+	defer server.Close()
+
+	client := NewClient(&Config{
+		APIKey:  "test-key",
+		BaseURL: server.URL,
+		Timeout: 50 * time.Millisecond,
+	})
+
+	_, err := client.GenerateAudio(context.Background(), "Slow response.", "en")
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+
+	var netErr net.Error
+	if !errors.As(err, &netErr) || !netErr.Timeout() {
+		t.Fatalf("expected timeout error, got %v", err)
+	}
+}
+
+func TestGenerateAudio_InjectedHTTPClientTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.Header().Set("Content-Type", "audio/mpeg")
+		w.Write(fakeMP3()) //nolint:errcheck // test helper
+	}))
+	defer server.Close()
+
+	client := NewClient(&Config{
+		APIKey:     "test-key",
+		BaseURL:    server.URL,
+		HTTPClient: &http.Client{Timeout: 50 * time.Millisecond},
+	})
+
+	_, err := client.GenerateAudio(context.Background(), "Slow response.", "en")
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+
+	var netErr net.Error
+	if !errors.As(err, &netErr) || !netErr.Timeout() {
+		t.Fatalf("expected timeout error, got %v", err)
+	}
+}
+
+func TestGenerateAudio_RetryStopsOnContextCancellation(t *testing.T) {
+	var attempts atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"error":"rate limited"}`)) //nolint:errcheck // test helper
+	}))
+	defer server.Close()
+
+	client := NewClient(&Config{
+		APIKey:  "test-key",
+		BaseURL: server.URL,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := client.GenerateAudio(ctx, "Retry cancel.", "en")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context deadline exceeded, got %v", err)
+	}
+	if attempts.Load() != 1 {
+		t.Errorf("attempts = %d, want 1 after context cancellation", attempts.Load())
+	}
 }
 
 func TestGenerateAudio_EmptyAudioResponse(t *testing.T) {

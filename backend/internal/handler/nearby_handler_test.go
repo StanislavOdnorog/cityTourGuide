@@ -57,6 +57,8 @@ func TestGetNearbyStories_Success(t *testing.T) {
 			{
 				POIID:       1,
 				POIName:     "Narikala Fortress",
+				POILat:      41.6875,
+				POILng:      44.8089,
 				StoryID:     10,
 				StoryText:   "A great story",
 				AudioURL:    &audioURL,
@@ -91,6 +93,12 @@ func TestGetNearbyStories_Success(t *testing.T) {
 	}
 	if resp.Data[0].POIName != "Narikala Fortress" {
 		t.Errorf("expected poi_name='Narikala Fortress', got %q", resp.Data[0].POIName)
+	}
+	if resp.Data[0].POILat != 41.6875 {
+		t.Errorf("expected poi_lat=41.6875, got %f", resp.Data[0].POILat)
+	}
+	if resp.Data[0].POILng != 44.8089 {
+		t.Errorf("expected poi_lng=44.8089, got %f", resp.Data[0].POILng)
 	}
 	if resp.Data[0].AudioURL == nil || *resp.Data[0].AudioURL != audioURL {
 		t.Errorf("expected audio_url=%q, got %v", audioURL, resp.Data[0].AudioURL)
@@ -371,6 +379,8 @@ func TestGetNearbyStories_ResponseIncludesAudioURL(t *testing.T) {
 			{
 				POIID:       5,
 				POIName:     "Bridge of Peace",
+				POILat:      41.6932,
+				POILng:      44.8095,
 				StoryID:     20,
 				StoryText:   "A modern masterpiece",
 				AudioURL:    &audioURL,
@@ -395,6 +405,8 @@ func TestGetNearbyStories_ResponseIncludesAudioURL(t *testing.T) {
 		Data []struct {
 			POIID       int     `json:"poi_id"`
 			POIName     string  `json:"poi_name"`
+			POILat      float64 `json:"poi_lat"`
+			POILng      float64 `json:"poi_lng"`
 			StoryID     int     `json:"story_id"`
 			StoryText   string  `json:"story_text"`
 			AudioURL    *string `json:"audio_url"`
@@ -421,6 +433,53 @@ func TestGetNearbyStories_ResponseIncludesAudioURL(t *testing.T) {
 	}
 	if c.Score != 65.0 {
 		t.Errorf("expected score=65.0, got %f", c.Score)
+	}
+}
+
+func TestGetNearbyStories_RussianPOINamePassedThrough(t *testing.T) {
+	audioURL := "https://example.com/audio.mp3"
+	dur := int16(30)
+	mock := &mockNearbyService{
+		candidates: []service.StoryCandidate{
+			{
+				POIID:       1,
+				POIName:     "Крепость Нарикала",
+				POILat:      41.6875,
+				POILng:      44.8089,
+				StoryID:     10,
+				StoryText:   "История о крепости",
+				AudioURL:    &audioURL,
+				DurationSec: &dur,
+				DistanceM:   42.5,
+				Score:       87.3,
+			},
+		},
+	}
+	h := NewNearbyHandler(mock)
+	r := setupRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/nearby-stories?lat=41.7151&lng=44.8271&language=ru", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Data []service.StoryCandidate `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if len(resp.Data) != 1 {
+		t.Fatalf("expected 1 candidate, got %d", len(resp.Data))
+	}
+	if resp.Data[0].POIName != "Крепость Нарикала" {
+		t.Errorf("expected Russian POI name, got %q", resp.Data[0].POIName)
+	}
+	if mock.calledLanguage != "ru" {
+		t.Errorf("expected language='ru' passed to service, got %q", mock.calledLanguage)
 	}
 }
 

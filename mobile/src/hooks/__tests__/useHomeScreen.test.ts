@@ -12,6 +12,8 @@ import { useWalkStore } from '@/store/useWalkStore';
 const makeScoredCandidate = (overrides?: Partial<ScoredCandidate>): ScoredCandidate => ({
   poi_id: 1,
   poi_name: 'Narikala Fortress',
+  poi_lat: 41.6875,
+  poi_lng: 44.8084,
   story_id: 10,
   story_text: 'A story about Narikala',
   audio_url: 'https://example.com/audio.mp3',

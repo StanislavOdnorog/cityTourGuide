@@ -1,18 +1,68 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { API_BASE_URL } from '@/constants';
 import { createGeneratedApiClient } from './generated/runtime';
+import {
+  canRetryTooManyRequests,
+  cloneRequestConfigForRetry,
+  computeRetryDelayMs,
+  RetryableRequestConfig,
+} from './retry';
 
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
 let onRefreshToken: ((token: string) => Promise<string | null>) | null = null;
+let offlineEnqueue:
+  | ((request: {
+      endpoint: string;
+      method: string;
+      body: unknown;
+      headers: Record<string, string>;
+    }) => Promise<boolean>)
+  | null = null;
+
+const SAFE_OFFLINE_ENDPOINTS = ['/listenings', '/reports', '/device-tokens'];
+const MUTATION_METHODS = ['post', 'put', 'delete'];
+
+export function setOfflineEnqueue(handler: typeof offlineEnqueue): void {
+  offlineEnqueue = handler;
+}
+
+function isNetworkError(error: AxiosError): boolean {
+  return (
+    !error.response &&
+    error.code !== 'ERR_CANCELED' &&
+    (error.code === 'ERR_NETWORK' ||
+      error.code === 'ECONNABORTED' ||
+      error.message === 'Network Error')
+  );
+}
+
+function isSafeOfflineEndpoint(url: string | undefined): boolean {
+  if (!url) return false;
+  return SAFE_OFFLINE_ENDPOINTS.some((ep) => url.includes(ep));
+}
+
+function isMutationMethod(method: string | undefined): boolean {
+  return MUTATION_METHODS.includes((method ?? '').toLowerCase());
+}
 
 export function setTokens(access: string | null, refresh: string | null): void {
   accessToken = access;
   refreshToken = refresh;
 }
 
-export function setRefreshHandler(handler: (token: string) => Promise<string | null>): void {
+export function setRefreshHandler(
+  handler: ((token: string) => Promise<string | null>) | null,
+): void {
   onRefreshToken = handler;
+}
+
+export function getAccessToken(): string | null {
+  return accessToken;
+}
+
+export function hasRefreshToken(): boolean {
+  return Boolean(refreshToken && onRefreshToken);
 }
 
 const apiClient = axios.create({
@@ -47,12 +97,42 @@ function processQueue(error: unknown, token: string | null): void {
   failedQueue = [];
 }
 
+export async function refreshAccessToken(): Promise<string | null> {
+  if (!refreshToken || !onRefreshToken) {
+    return accessToken;
+  }
+
+  if (isRefreshing) {
+    return new Promise((resolve, reject) => {
+      failedQueue.push({ resolve, reject });
+    });
+  }
+
+  isRefreshing = true;
+
+  try {
+    const newToken = await onRefreshToken(refreshToken);
+    if (newToken) {
+      accessToken = newToken;
+    }
+    processQueue(null, newToken);
+    return newToken;
+  } catch (refreshError) {
+    processQueue(refreshError, null);
+    throw refreshError;
+  } finally {
+    isRefreshing = false;
+  }
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & {
-      _retry?: boolean;
-    };
+    const originalRequest = error.config as RetryableRequestConfig | undefined;
+
+    if (!originalRequest || error.code === 'ERR_CANCELED' || originalRequest.signal?.aborted) {
+      return Promise.reject(error);
+    }
 
     if (
       error.response?.status === 401 &&
@@ -60,41 +140,66 @@ apiClient.interceptors.response.use(
       refreshToken &&
       onRefreshToken
     ) {
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({
-            resolve: (token) => {
-              originalRequest.headers.Authorization = `Bearer ${token}`;
-              resolve(apiClient(originalRequest));
-            },
-            reject,
-          });
-        });
-      }
-
       originalRequest._retry = true;
-      isRefreshing = true;
+      originalRequest._skip429Retry = true;
 
       try {
-        const newToken = await onRefreshToken(refreshToken);
+        const newToken = await refreshAccessToken();
         if (newToken) {
-          accessToken = newToken;
-          processQueue(null, newToken);
-          originalRequest.headers.Authorization = `Bearer ${newToken}`;
-          return apiClient(originalRequest);
+          const retryRequest = cloneRequestConfigForRetry(originalRequest);
+          retryRequest.headers.set('Authorization', `Bearer ${newToken}`);
+          return apiClient(retryRequest);
         }
       } catch (refreshError) {
-        processQueue(refreshError, null);
         return Promise.reject(refreshError);
-      } finally {
-        isRefreshing = false;
       }
     }
 
-    if (error.response?.status === 429) {
-      const retryAfter = Number(error.response.headers['retry-after']) || 2;
-      await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
-      return apiClient(originalRequest);
+    if (error.response?.status === 429 && canRetryTooManyRequests(originalRequest)) {
+      const retryCount = originalRequest._retryCount ?? 0;
+      const retryAfterHeader = error.response.headers['retry-after'];
+      const delayMs = computeRetryDelayMs(
+        retryCount,
+        Array.isArray(retryAfterHeader) ? retryAfterHeader[0] : retryAfterHeader,
+      );
+
+      const retryRequest = cloneRequestConfigForRetry(originalRequest, {
+        _retryCount: retryCount + 1,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+
+      if (retryRequest.signal?.aborted) {
+        return Promise.reject(error);
+      }
+
+      return apiClient(retryRequest);
+    }
+
+    // Queue safe mutations that fail due to network errors
+    if (
+      offlineEnqueue &&
+      !originalRequest._skipOfflineQueue &&
+      isNetworkError(error) &&
+      isMutationMethod(originalRequest.method) &&
+      isSafeOfflineEndpoint(originalRequest.url)
+    ) {
+      const headers: Record<string, string> = {};
+      if (originalRequest.headers) {
+        const authHeader =
+          originalRequest.headers.Authorization ?? originalRequest.headers.authorization;
+        if (typeof authHeader === 'string') {
+          headers['Authorization'] = authHeader;
+        }
+      }
+      await offlineEnqueue({
+        endpoint: originalRequest.url ?? '',
+        method: originalRequest.method ?? 'POST',
+        body: originalRequest.data,
+        headers,
+      });
+      // Resolve silently — the mutation is queued for later
+      return { data: null, status: 0, statusText: 'queued', headers: {}, config: originalRequest };
     }
 
     return Promise.reject(error);

@@ -33,7 +33,7 @@ export interface paths {
         };
         /**
          * Readiness check
-         * @description Returns 200 if the server is ready to handle requests (database connected).
+         * @description Returns component-level readiness for required and optional dependencies. Required failures or shutdown mode return 503; optional failures are reported as degraded without forcing 503.
          */
         get: operations["readyz"];
         put?: never;
@@ -423,6 +423,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get admin dashboard summary counts */
+        get: operations["adminGetStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/cities": {
         parameters: {
             query?: never;
@@ -430,7 +447,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List cities for admin */
+        get: operations["adminListCities"];
         put?: never;
         /** Create a city */
         post: operations["adminCreateCity"];
@@ -458,7 +476,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/pois": {
+    "/admin/cities/{id}/restore": {
         parameters: {
             query?: never;
             header?: never;
@@ -466,6 +484,24 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
+        put?: never;
+        /** Restore a soft-deleted city */
+        post: operations["adminRestoreCity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/pois": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List POIs for admin */
+        get: operations["adminListPOIs"];
         put?: never;
         /** Create a POI */
         post: operations["adminCreatePOI"];
@@ -500,7 +536,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List stories for admin */
+        get: operations["adminListStories"];
         put?: never;
         /** Create a story */
         post: operations["adminCreateStory"];
@@ -562,6 +599,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/reports/{id}/disable-story": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disable the reported story and resolve the report atomically */
+        post: operations["adminDisableReportedStory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/pois/{id}/reports": {
         parameters: {
             query?: never;
@@ -616,6 +670,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/audit-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List audit log entries */
+        get: operations["adminListAuditLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -623,7 +694,38 @@ export interface components {
         Error: {
             /** @example invalid request */
             error: string;
+            /**
+             * @description Request trace ID for debugging
+             * @example abc-123-def
+             */
+            trace_id?: string;
         };
+        ValidationDetail: {
+            /**
+             * @description JSON field name that failed validation
+             * @example email
+             */
+            field: string;
+            /**
+             * @description Human-readable validation failure reason
+             * @example must be a valid email address
+             */
+            message: string;
+        };
+        ValidationError: {
+            /**
+             * @example validation_error
+             * @enum {string}
+             */
+            error: "validation_error";
+            details: components["schemas"]["ValidationDetail"][];
+            /**
+             * @description Request trace ID for debugging
+             * @example abc-123-def
+             */
+            trace_id?: string;
+        };
+        ErrorOrValidationError: components["schemas"]["Error"] | components["schemas"]["ValidationError"];
         /** @description Common cursor-based pagination query parameters */
         CursorPaginationParams: {
             /**
@@ -641,7 +743,7 @@ export interface components {
         /** @description Common cursor-based pagination response fields */
         CursorPaginatedResponse: {
             /** @description Page items. Concrete endpoints specify the item schema. */
-            items?: unknown[];
+            items: unknown[];
             /**
              * @description Opaque cursor to pass as cursor param for the next page. Empty string if no more pages.
              * @example aWQ6NDI=
@@ -652,6 +754,265 @@ export interface components {
              * @example true
              */
             has_more: boolean;
+        };
+        MessageResponse: {
+            message: string;
+        };
+        GracePeriodMessageResponse: {
+            message: string;
+            grace_period: string;
+        };
+        StatusResponse: {
+            status: string;
+        };
+        ReadinessCheck: {
+            /** @example database */
+            name: string;
+            /** @example true */
+            required: boolean;
+            /**
+             * @example ok
+             * @enum {string}
+             */
+            status: "ok" | "degraded" | "unavailable";
+        };
+        ReadinessResponse: {
+            /**
+             * @example ok
+             * @enum {string}
+             */
+            status: "ok" | "degraded" | "unavailable";
+            checks: components["schemas"]["ReadinessCheck"][];
+        };
+        ReadinessUnavailableResponse: components["schemas"]["Error"] & components["schemas"]["ReadinessResponse"];
+        UnavailableStatusErrorResponse: components["schemas"]["Error"] & {
+            /** @example unavailable */
+            status: string;
+        };
+        CityResponse: {
+            data: components["schemas"]["City"];
+        };
+        POIResponse: {
+            data: components["schemas"]["POI"];
+        };
+        StoryResponse: {
+            data: components["schemas"]["Story"];
+        };
+        UserResponse: {
+            data: components["schemas"]["User"];
+        };
+        AuthResponse: {
+            data: components["schemas"]["User"];
+            tokens: components["schemas"]["TokenPair"];
+        };
+        RefreshTokensResponse: {
+            tokens: components["schemas"]["TokenPair"];
+        };
+        UserListeningResponse: {
+            data: components["schemas"]["UserListening"];
+        };
+        ReportResponse: {
+            data: components["schemas"]["Report"];
+        };
+        ReportListResponse: {
+            data: components["schemas"]["Report"][];
+        };
+        ModeratedReportResultResponse: {
+            data: components["schemas"]["ModeratedReportResult"];
+        };
+        DeviceTokenResponse: {
+            data: components["schemas"]["DeviceToken"];
+        };
+        PurchaseResponse: {
+            data: components["schemas"]["Purchase"];
+        };
+        PurchaseStatusResponse: {
+            data: components["schemas"]["PurchaseStatus"];
+        };
+        AdminStatsResponse: {
+            data: components["schemas"]["AdminStats"];
+        };
+        InflationJobResponse: {
+            data: components["schemas"]["InflationJob"];
+        };
+        InflationJobListResponse: {
+            data: components["schemas"]["InflationJob"][];
+        };
+        NearbyStoriesResponse: {
+            data: components["schemas"]["StoryCandidate"][];
+        };
+        DownloadManifestResponse: {
+            data: components["schemas"]["DownloadManifestItem"][];
+            /** Format: int64 */
+            total_size_bytes: number;
+            total_stories: number;
+            city_name: string;
+        };
+        CitiesPageResponse: components["schemas"]["CursorPaginatedResponse"] & {
+            items?: components["schemas"]["City"][];
+        };
+        POIsPageResponse: components["schemas"]["CursorPaginatedResponse"] & {
+            items?: components["schemas"]["POI"][];
+        };
+        StoriesPageResponse: components["schemas"]["CursorPaginatedResponse"] & {
+            items?: components["schemas"]["Story"][];
+        };
+        ListeningsPageResponse: components["schemas"]["CursorPaginatedResponse"] & {
+            items?: components["schemas"]["UserListening"][];
+        };
+        AdminReportsPageResponse: components["schemas"]["CursorPaginatedResponse"] & {
+            items?: components["schemas"]["AdminReportListItem"][];
+        };
+        AuditLogsPageResponse: components["schemas"]["CursorPaginatedResponse"] & {
+            items?: components["schemas"]["AuditLogItem"][];
+        };
+        RegisterRequest: {
+            /**
+             * Format: email
+             * @example user@example.com
+             */
+            email: string;
+            /** @example securepass123 */
+            password: string;
+            /** @example John Doe */
+            name: string;
+        };
+        LoginRequest: {
+            /**
+             * Format: email
+             * @example user@example.com
+             */
+            email: string;
+            /** @example securepass123 */
+            password: string;
+        };
+        DeviceAuthRequest: {
+            /** @example device-uuid-abc123 */
+            device_id: string;
+            /** @example en */
+            language?: string;
+        };
+        RefreshRequest: {
+            refresh_token: string;
+        };
+        GoogleAuthRequest: {
+            /** @description Google ID token from client SDK */
+            id_token: string;
+        };
+        AppleAuthRequest: {
+            /** @description Apple authorization code */
+            code?: string;
+            /** @description Apple ID token */
+            id_token?: string;
+        } | unknown | unknown;
+        CreateCityRequest: {
+            name: string;
+            name_ru?: string | null;
+            country: string;
+            /** Format: double */
+            center_lat: number;
+            /** Format: double */
+            center_lng: number;
+            /** Format: double */
+            radius_km: number;
+            is_active?: boolean;
+            /** Format: double */
+            download_size_mb?: number;
+        };
+        UpdateCityRequest: components["schemas"]["CreateCityRequest"];
+        CreatePOIRequest: {
+            city_id: number;
+            name: string;
+            name_ru?: string | null;
+            /** Format: double */
+            lat: number;
+            /** Format: double */
+            lng: number;
+            /** @enum {string} */
+            type: "building" | "street" | "park" | "monument" | "church" | "bridge" | "square" | "museum" | "district" | "other";
+            tags?: unknown;
+            address?: string | null;
+            /** Format: int16 */
+            interest_score?: number;
+            /** @enum {string} */
+            status?: "active" | "disabled" | "pending_review";
+        };
+        UpdatePOIRequest: components["schemas"]["CreatePOIRequest"];
+        CreateStoryRequest: {
+            poi_id: number;
+            language: string;
+            text: string;
+            /** Format: uri */
+            audio_url?: string | null;
+            /** Format: int16 */
+            duration_sec?: number | null;
+            /** @enum {string} */
+            layer_type: "atmosphere" | "human_story" | "hidden_detail" | "time_shift" | "general";
+            /** Format: int16 */
+            order_index?: number;
+            is_inflation?: boolean;
+            /** Format: int16 */
+            confidence?: number;
+            sources?: unknown;
+            /** @enum {string} */
+            status?: "active" | "disabled" | "reported" | "pending_review";
+        };
+        UpdateStoryRequest: components["schemas"]["CreateStoryRequest"];
+        TrackListeningRequest: {
+            /** Format: uuid */
+            user_id: string;
+            story_id: number;
+            /** @default false */
+            completed: boolean;
+            /** Format: double */
+            lat?: number;
+            /** Format: double */
+            lng?: number;
+        };
+        CreateReportRequest: {
+            story_id: number;
+            /** Format: uuid */
+            user_id: string;
+            /** @enum {string} */
+            type: "wrong_location" | "wrong_fact" | "inappropriate_content";
+            comment?: string;
+            /** Format: double */
+            lat?: number;
+            /** Format: double */
+            lng?: number;
+        };
+        UpdateReportStatusRequest: {
+            /** @enum {string} */
+            status: "new" | "reviewed" | "resolved" | "dismissed";
+        };
+        RegisterDeviceTokenRequest: {
+            /** Format: uuid */
+            user_id: string;
+            token: string;
+            /** @enum {string} */
+            platform: "ios" | "android";
+        };
+        UnregisterDeviceTokenRequest: {
+            token: string;
+        };
+        VerifyPurchaseRequest: {
+            /**
+             * @example ios
+             * @enum {string}
+             */
+            platform: "ios" | "android";
+            /** @example txn_abc123 */
+            transaction_id: string;
+            receipt: string;
+            /** @enum {string} */
+            type: "city_pack" | "subscription" | "lifetime";
+            /** @description Optional city ID for city_pack purchases. */
+            city_id?: number | null;
+            /**
+             * Format: double
+             * @example 4.99
+             */
+            price: number;
         };
         City: {
             /** @example 1 */
@@ -684,6 +1045,8 @@ export interface components {
              * @example 120.5
              */
             download_size_mb: number;
+            /** Format: date-time */
+            deleted_at?: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -719,7 +1082,7 @@ export interface components {
              *       "style": "fortress"
              *     }
              */
-            tags?: Record<string, never> | null;
+            tags?: unknown;
             /** @example Narikala, Tbilisi */
             address?: string | null;
             /**
@@ -770,7 +1133,7 @@ export interface components {
              * @example 90
              */
             confidence: number;
-            sources?: Record<string, never> | null;
+            sources?: unknown;
             /**
              * @example active
              * @enum {string}
@@ -786,6 +1149,16 @@ export interface components {
             poi_id: number;
             /** @example Narikala Fortress */
             poi_name: string;
+            /**
+             * Format: double
+             * @example 41.6875
+             */
+            poi_lat: number;
+            /**
+             * Format: double
+             * @example 44.8089
+             */
+            poi_lng: number;
             /** @example 5 */
             story_id: number;
             /** @example Standing on this ancient hill... */
@@ -901,6 +1274,66 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        AdminReportListItem: {
+            /** @example 1 */
+            id: number;
+            /** @example 5 */
+            story_id: number;
+            /** Format: uuid */
+            user_id: string;
+            /**
+             * @example wrong_fact
+             * @enum {string}
+             */
+            type: "wrong_location" | "wrong_fact" | "inappropriate_content";
+            /** @example The date mentioned is incorrect */
+            comment?: string | null;
+            /** Format: double */
+            user_lat?: number | null;
+            /** Format: double */
+            user_lng?: number | null;
+            /**
+             * @example new
+             * @enum {string}
+             */
+            status: "new" | "reviewed" | "resolved" | "dismissed";
+            /** Format: date-time */
+            resolved_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * @description ID of the POI the reported story belongs to
+             * @example 42
+             */
+            poi_id?: number | null;
+            /**
+             * @description Name of the POI
+             * @example Charles Bridge
+             */
+            poi_name?: string | null;
+            /**
+             * @description Language code of the reported story
+             * @example en
+             */
+            story_language?: string | null;
+            /** @enum {string|null} */
+            story_status?: "active" | "disabled" | "reported" | "pending_review" | null;
+        };
+        ModeratedStory: {
+            id: number;
+            poi_id: number;
+            language: string;
+            /** @enum {string} */
+            status: "active" | "disabled" | "reported" | "pending_review";
+        };
+        ModeratedReportResult: {
+            report: components["schemas"]["Report"];
+            /**
+             * @description Current status of the reported story
+             * @example active
+             */
+            story: components["schemas"]["ModeratedStory"];
+        };
         DeviceToken: {
             /** @example 1 */
             id: number;
@@ -932,8 +1365,11 @@ export interface components {
             type: "city_pack" | "subscription" | "lifetime";
             /** @example 1 */
             city_id?: number | null;
-            /** @example ios */
-            platform: string;
+            /**
+             * @example ios
+             * @enum {string}
+             */
+            platform: "ios" | "android";
             /** @example txn_abc123 */
             transaction_id?: string | null;
             /**
@@ -953,7 +1389,7 @@ export interface components {
             has_full_access: boolean;
             /** @example false */
             is_lifetime: boolean;
-            active_subscription: components["schemas"]["Purchase"] | null;
+            active_subscription?: components["schemas"]["Purchase"] | null;
             city_packs: components["schemas"]["Purchase"][];
             /** @example 3 */
             free_stories_used: number;
@@ -971,7 +1407,7 @@ export interface components {
              * @example pending
              * @enum {string}
              */
-            status: "pending" | "running" | "completed" | "failed";
+            status: "pending" | "running" | "completed" | "failed" | "dead";
             /**
              * @example admin_manual
              * @enum {string}
@@ -984,7 +1420,7 @@ export interface components {
             segments_count: number;
             /**
              * Format: int16
-             * @example 5
+             * @example 3
              */
             max_segments: number;
             /** Format: date-time */
@@ -992,6 +1428,52 @@ export interface components {
             /** Format: date-time */
             completed_at?: string | null;
             error_log?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            heartbeat_at: string | null;
+            worker_id: string | null;
+            /**
+             * Format: int16
+             * @example 0
+             */
+            attempts: number;
+        };
+        AdminStats: {
+            /** @example 12 */
+            cities_count: number;
+            /** @example 248 */
+            pois_count: number;
+            /** @example 913 */
+            stories_count: number;
+            /** @example 7 */
+            reports_count: number;
+            /** @example 3 */
+            new_reports_count: number;
+        };
+        AuditLogItem: {
+            /**
+             * Format: int64
+             * @example 42
+             */
+            id: number;
+            /** @example admin-uuid-123 */
+            actor_id: string;
+            /** @example create */
+            action: string;
+            /** @example city */
+            resource_type: string;
+            /** @example 5 */
+            resource_id: string;
+            /** @example POST */
+            http_method: string;
+            /** @example /api/v1/admin/cities */
+            request_path: string;
+            /** @example trace-abc-123 */
+            trace_id: string;
+            payload?: unknown;
+            /** @example success */
+            status: string;
             /** Format: date-time */
             created_at: string;
         };
@@ -1039,10 +1521,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @example ok */
-                        status?: string;
-                    };
+                    "application/json": components["schemas"]["StatusResponse"];
                 };
             };
         };
@@ -1062,10 +1541,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @example ok */
-                        status?: string;
-                    };
+                    "application/json": components["schemas"]["ReadinessResponse"];
                 };
             };
             /** @description Service unavailable */
@@ -1074,12 +1550,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @example unavailable */
-                        status?: string;
-                        /** @example database unreachable */
-                        error?: string;
-                    };
+                    "application/json": components["schemas"]["ReadinessUnavailableResponse"];
                 };
             };
         };
@@ -1099,7 +1570,7 @@ export interface operations {
                 speed?: number;
                 /** @description Story language code */
                 language?: string;
-                /** @description Optional user UUID for personalization */
+                /** @description Optional user identifier for personalization and listened-story deduplication */
                 user_id?: string;
             };
             header?: never;
@@ -1114,9 +1585,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["StoryCandidate"][];
-                    };
+                    /**
+                     * @example {
+                     *       "data": [
+                     *         {
+                     *           "poi_id": 1,
+                     *           "poi_name": "Narikala Fortress",
+                     *           "poi_lat": 41.6875,
+                     *           "poi_lng": 44.8084,
+                     *           "story_id": 5,
+                     *           "story_text": "Standing on this ancient hill, you can almost hear the echoes of centuries past...",
+                     *           "audio_url": "https://storage.example.com/stories/5/en.mp3",
+                     *           "duration_sec": 120,
+                     *           "distance_m": 45.2,
+                     *           "score": 0.87
+                     *         },
+                     *         {
+                     *           "poi_id": 3,
+                     *           "poi_name": "Abanotubani",
+                     *           "poi_lat": 41.6878,
+                     *           "poi_lng": 44.8103,
+                     *           "story_id": 12,
+                     *           "story_text": "The sulfur baths have drawn visitors for over a thousand years...",
+                     *           "audio_url": "https://storage.example.com/stories/12/en.mp3",
+                     *           "duration_sec": 95,
+                     *           "distance_m": 120.8,
+                     *           "score": 0.72
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["NearbyStoriesResponse"];
                 };
             };
             /** @description Invalid parameters */
@@ -1125,11 +1624,32 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "error": "lat must be between -90 and 90",
+                     *       "trace_id": "req-abc-123"
+                     *     }
+                     */
                     "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Rate limit exceeded */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": "rate limit exceeded",
+                     *       "trace_id": "req-def-456"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1159,11 +1679,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        items: components["schemas"]["City"][];
-                        next_cursor: string;
-                        has_more: boolean;
-                    };
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": 1,
+                     *           "name": "Tbilisi",
+                     *           "name_ru": "Тбилиси",
+                     *           "country": "Georgia",
+                     *           "center_lat": 41.7151,
+                     *           "center_lng": 44.8271,
+                     *           "radius_km": 15,
+                     *           "is_active": true,
+                     *           "download_size_mb": 120.5,
+                     *           "deleted_at": null,
+                     *           "created_at": "2025-01-15T10:00:00Z",
+                     *           "updated_at": "2025-01-15T10:00:00Z"
+                     *         }
+                     *       ],
+                     *       "next_cursor": "aWQ6Mg==",
+                     *       "has_more": true
+                     *     }
+                     */
+                    "application/json": components["schemas"]["CitiesPageResponse"];
                 };
             };
             /** @description Invalid cursor or limit */
@@ -1172,6 +1710,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "error": "invalid cursor",
+                     *       "trace_id": "req-abc-123"
+                     *     }
+                     */
                     "application/json": components["schemas"]["Error"];
                 };
             };
@@ -1203,13 +1747,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["City"];
-                    };
+                    "application/json": components["schemas"]["CityResponse"];
+                };
+            };
+            /** @description Invalid city ID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description City not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1223,7 +1783,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Story language */
-                language?: string;
+                language?: "en" | "ru";
             };
             header?: never;
             path: {
@@ -1239,17 +1799,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["DownloadManifestItem"][];
-                        /** Format: int64 */
-                        total_size_bytes: number;
-                        total_stories: number;
-                        city_name: string;
-                    };
+                    "application/json": components["schemas"]["DownloadManifestResponse"];
+                };
+            };
+            /** @description Invalid city ID or unsupported language */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description City not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1282,15 +1854,20 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        items: components["schemas"]["POI"][];
-                        next_cursor: string;
-                        has_more: boolean;
-                    };
+                    "application/json": components["schemas"]["POIsPageResponse"];
                 };
             };
-            /** @description Missing or invalid city_id, cursor, or limit */
+            /** @description Missing or invalid city_id, status, type, cursor, or limit */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1317,13 +1894,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["POI"];
-                    };
+                    "application/json": components["schemas"]["POIResponse"];
+                };
+            };
+            /** @description Invalid POI ID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description POI not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1356,15 +1949,20 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        items: components["schemas"]["Story"][];
-                        next_cursor: string;
-                        has_more: boolean;
-                    };
+                    "application/json": components["schemas"]["StoriesPageResponse"];
                 };
             };
-            /** @description Missing or invalid poi_id, cursor, or limit */
+            /** @description Missing or invalid poi_id, status, cursor, or limit */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1391,13 +1989,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["Story"];
-                    };
+                    "application/json": components["schemas"]["StoryResponse"];
+                };
+            };
+            /** @description Invalid story ID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Story not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1428,15 +2042,20 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        items: components["schemas"]["UserListening"][];
-                        next_cursor: string;
-                        has_more: boolean;
-                    };
+                    "application/json": components["schemas"]["ListeningsPageResponse"];
                 };
             };
             /** @description Missing user_id or invalid cursor/limit */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1455,17 +2074,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    /** Format: uuid */
-                    user_id: string;
-                    story_id: number;
-                    /** @default false */
-                    completed?: boolean;
-                    /** Format: double */
-                    lat?: number;
-                    /** Format: double */
-                    lng?: number;
-                };
+                "application/json": components["schemas"]["TrackListeningRequest"];
             };
         };
         responses: {
@@ -1475,13 +2084,20 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["UserListening"];
-                    };
+                    "application/json": components["schemas"]["UserListeningResponse"];
                 };
             };
             /** @description Invalid request body */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1500,18 +2116,17 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    story_id: number;
-                    /** Format: uuid */
-                    user_id: string;
-                    /** @enum {string} */
-                    type: "wrong_location" | "wrong_fact" | "inappropriate_content";
-                    comment?: string;
-                    /** Format: double */
-                    lat?: number;
-                    /** Format: double */
-                    lng?: number;
-                };
+                /**
+                 * @example {
+                 *       "story_id": 5,
+                 *       "user_id": "550e8400-e29b-41d4-a716-446655440000",
+                 *       "type": "wrong_fact",
+                 *       "comment": "The date mentioned in the story is incorrect — the fortress was built in the 4th century, not the 6th.",
+                 *       "lat": 41.6875,
+                 *       "lng": 44.8084
+                 *     }
+                 */
+                "application/json": components["schemas"]["CreateReportRequest"];
             };
         };
         responses: {
@@ -1521,13 +2136,51 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["Report"];
-                    };
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "id": 1,
+                     *         "story_id": 5,
+                     *         "user_id": "550e8400-e29b-41d4-a716-446655440000",
+                     *         "type": "wrong_fact",
+                     *         "comment": "The date mentioned in the story is incorrect — the fortress was built in the 4th century, not the 6th.",
+                     *         "user_lat": 41.6875,
+                     *         "user_lng": 44.8084,
+                     *         "status": "new",
+                     *         "resolved_at": null,
+                     *         "created_at": "2025-03-01T14:30:00Z"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ReportResponse"];
                 };
             };
             /** @description Invalid request body */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": "validation_error",
+                     *       "details": [
+                     *         {
+                     *           "field": "comment",
+                     *           "message": "must be at least 10 characters"
+                     *         },
+                     *         {
+                     *           "field": "type",
+                     *           "message": "must be one of: wrong_location, wrong_fact, inappropriate_content"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1546,13 +2199,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    /** Format: uuid */
-                    user_id: string;
-                    token: string;
-                    /** @enum {string} */
-                    platform: "ios" | "android";
-                };
+                "application/json": components["schemas"]["RegisterDeviceTokenRequest"];
             };
         };
         responses: {
@@ -1562,13 +2209,20 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["DeviceToken"];
-                    };
+                    "application/json": components["schemas"]["DeviceTokenResponse"];
                 };
             };
             /** @description Invalid request body */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1587,9 +2241,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    token: string;
-                };
+                "application/json": components["schemas"]["UnregisterDeviceTokenRequest"];
             };
         };
         responses: {
@@ -1599,14 +2251,23 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
+                    "application/json": components["schemas"]["MessageResponse"] & {
                         /** @example device token unregistered */
-                        message?: string;
+                        message?: unknown;
                     };
                 };
             };
             /** @description Invalid request body */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1625,17 +2286,14 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    /**
-                     * Format: email
-                     * @example user@example.com
-                     */
-                    email: string;
-                    /** @example securepass123 */
-                    password: string;
-                    /** @example John Doe */
-                    name: string;
-                };
+                /**
+                 * @example {
+                 *       "email": "newuser@example.com",
+                 *       "password": "securepass123",
+                 *       "name": "Jane Smith"
+                 *     }
+                 */
+                "application/json": components["schemas"]["RegisterRequest"];
             };
         };
         responses: {
@@ -1645,10 +2303,27 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["User"];
-                        tokens?: components["schemas"]["TokenPair"];
-                    };
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "id": "660e8400-e29b-41d4-a716-446655440001",
+                     *         "email": "newuser@example.com",
+                     *         "name": "Jane Smith",
+                     *         "auth_provider": "email",
+                     *         "language_pref": "en",
+                     *         "is_anonymous": false,
+                     *         "is_admin": false,
+                     *         "created_at": "2025-03-01T12:00:00Z",
+                     *         "updated_at": "2025-03-01T12:00:00Z"
+                     *       },
+                     *       "tokens": {
+                     *         "access_token": "eyJhbGciOiJIUzI1NiIs...",
+                     *         "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+                     *         "expires_in": 3600
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AuthResponse"];
                 };
             };
             /** @description Validation error */
@@ -1657,7 +2332,22 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    /**
+                     * @example {
+                     *       "error": "validation_error",
+                     *       "details": [
+                     *         {
+                     *           "field": "password",
+                     *           "message": "must be at least 8 characters"
+                     *         },
+                     *         {
+                     *           "field": "name",
+                     *           "message": "must not be empty"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
                 };
             };
             /** @description Email already registered */
@@ -1666,11 +2356,32 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "error": "email already registered",
+                     *       "trace_id": "req-abc-123"
+                     *     }
+                     */
                     "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Rate limit exceeded */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": "rate limit exceeded",
+                     *       "trace_id": "req-abc-123"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1689,11 +2400,13 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    /** Format: email */
-                    email: string;
-                    password: string;
-                };
+                /**
+                 * @example {
+                 *       "email": "user@example.com",
+                 *       "password": "securepass123"
+                 *     }
+                 */
+                "application/json": components["schemas"]["LoginRequest"];
             };
         };
         responses: {
@@ -1703,10 +2416,47 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["User"];
-                        tokens?: components["schemas"]["TokenPair"];
-                    };
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "id": "550e8400-e29b-41d4-a716-446655440000",
+                     *         "email": "user@example.com",
+                     *         "name": "John Doe",
+                     *         "auth_provider": "email",
+                     *         "language_pref": "en",
+                     *         "is_anonymous": false,
+                     *         "is_admin": false,
+                     *         "created_at": "2025-01-15T10:00:00Z",
+                     *         "updated_at": "2025-01-15T10:00:00Z"
+                     *       },
+                     *       "tokens": {
+                     *         "access_token": "eyJhbGciOiJIUzI1NiIs...",
+                     *         "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+                     *         "expires_in": 3600
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": "validation_error",
+                     *       "details": [
+                     *         {
+                     *           "field": "email",
+                     *           "message": "must be a valid email address"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
                 };
             };
             /** @description Invalid credentials */
@@ -1715,11 +2465,32 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "error": "invalid credentials",
+                     *       "trace_id": "req-abc-123"
+                     *     }
+                     */
                     "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Account scheduled for deletion */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": "account is scheduled for deletion",
+                     *       "trace_id": "req-abc-123"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1738,12 +2509,13 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    /** @example device-uuid-abc123 */
-                    device_id: string;
-                    /** @example en */
-                    language?: string;
-                };
+                /**
+                 * @example {
+                 *       "device_id": "device-uuid-abc123",
+                 *       "language": "en"
+                 *     }
+                 */
+                "application/json": components["schemas"]["DeviceAuthRequest"];
             };
         };
         responses: {
@@ -1753,14 +2525,49 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["User"];
-                        tokens?: components["schemas"]["TokenPair"];
-                    };
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "id": "770e8400-e29b-41d4-a716-446655440002",
+                     *         "auth_provider": "email",
+                     *         "language_pref": "en",
+                     *         "is_anonymous": true,
+                     *         "is_admin": false,
+                     *         "created_at": "2025-03-01T12:00:00Z",
+                     *         "updated_at": "2025-03-01T12:00:00Z"
+                     *       },
+                     *       "tokens": {
+                     *         "access_token": "eyJhbGciOiJIUzI1NiIs...",
+                     *         "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+                     *         "expires_in": 3600
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AuthResponse"];
                 };
             };
             /** @description Validation error */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": "validation_error",
+                     *       "details": [
+                     *         {
+                     *           "field": "device_id",
+                     *           "message": "must not be empty"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1779,9 +2586,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    refresh_token: string;
-                };
+                "application/json": components["schemas"]["RefreshRequest"];
             };
         };
         responses: {
@@ -1791,13 +2596,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        tokens?: components["schemas"]["TokenPair"];
-                    };
+                    "application/json": components["schemas"]["RefreshTokensResponse"];
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
                 };
             };
             /** @description Invalid or expired refresh token */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1816,10 +2637,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    /** @description Google ID token from client SDK */
-                    id_token: string;
-                };
+                "application/json": components["schemas"]["GoogleAuthRequest"];
             };
         };
         responses: {
@@ -1829,10 +2647,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["User"];
-                        tokens?: components["schemas"]["TokenPair"];
-                    };
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
                 };
             };
             /** @description Invalid Google token */
@@ -1846,6 +2670,15 @@ export interface operations {
             };
             /** @description Account scheduled for deletion */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1873,12 +2706,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    /** @description Apple authorization code */
-                    code?: string;
-                    /** @description Apple ID token */
-                    id_token?: string;
-                };
+                "application/json": components["schemas"]["AppleAuthRequest"];
             };
         };
         responses: {
@@ -1888,19 +2716,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["User"];
-                        tokens?: components["schemas"]["TokenPair"];
-                    };
+                    "application/json": components["schemas"]["AuthResponse"];
                 };
             };
-            /** @description Either code or id_token is required */
+            /** @description Invalid request or either code or id_token is required */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
                 };
             };
             /** @description Invalid Apple token */
@@ -1914,6 +2739,15 @@ export interface operations {
             };
             /** @description Account scheduled for deletion */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1947,13 +2781,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["User"];
-                    };
+                    "application/json": components["schemas"]["UserResponse"];
                 };
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1978,16 +2828,34 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
+                    "application/json": components["schemas"]["GracePeriodMessageResponse"] & {
                         /** @example Account scheduled for deletion */
-                        message?: string;
+                        message?: unknown;
                         /** @example 30 days */
-                        grace_period?: string;
+                        grace_period?: unknown;
                     };
                 };
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2012,14 +2880,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
+                    "application/json": components["schemas"]["MessageResponse"] & {
                         /** @example Account restored successfully */
-                        message?: string;
+                        message?: unknown;
                     };
+                };
+            };
+            /** @description Account is not scheduled for deletion */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2038,22 +2933,17 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    /** @example ios */
-                    platform: string;
-                    /** @example txn_abc123 */
-                    transaction_id: string;
-                    receipt: string;
-                    /** @enum {string} */
-                    type: "city_pack" | "subscription" | "lifetime";
-                    /** @description Required for city_pack purchases */
-                    city_id?: number | null;
-                    /**
-                     * Format: double
-                     * @example 4.99
-                     */
-                    price: number;
-                };
+                /**
+                 * @example {
+                 *       "platform": "ios",
+                 *       "transaction_id": "txn_abc123",
+                 *       "receipt": "MIIbxgYJKoZIhvcNAQcCoIIb...",
+                 *       "type": "city_pack",
+                 *       "city_id": 1,
+                 *       "price": 4.99
+                 *     }
+                 */
+                "application/json": components["schemas"]["VerifyPurchaseRequest"];
             };
         };
         responses: {
@@ -2063,9 +2953,23 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["Purchase"];
-                    };
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "id": 1,
+                     *         "user_id": "550e8400-e29b-41d4-a716-446655440000",
+                     *         "type": "city_pack",
+                     *         "city_id": 1,
+                     *         "platform": "ios",
+                     *         "transaction_id": "txn_abc123",
+                     *         "price": 4.99,
+                     *         "is_ltd": false,
+                     *         "expires_at": null,
+                     *         "created_at": "2025-03-01T15:00:00Z"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["PurchaseResponse"];
                 };
             };
             /** @description Invalid receipt or request */
@@ -2074,7 +2978,22 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    /**
+                     * @example {
+                     *       "error": "validation_error",
+                     *       "details": [
+                     *         {
+                     *           "field": "receipt",
+                     *           "message": "must not be empty"
+                     *         },
+                     *         {
+                     *           "field": "price",
+                     *           "message": "must be greater than 0"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
                 };
             };
             /** @description Unauthorized */
@@ -2083,11 +3002,32 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "error": "unauthorized",
+                     *       "trace_id": "req-abc-123"
+                     *     }
+                     */
                     "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Transaction already processed */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": "transaction already processed",
+                     *       "trace_id": "req-abc-123"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2112,9 +3052,33 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["PurchaseStatus"];
-                    };
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "has_full_access": false,
+                     *         "is_lifetime": false,
+                     *         "active_subscription": null,
+                     *         "city_packs": [
+                     *           {
+                     *             "id": 1,
+                     *             "user_id": "550e8400-e29b-41d4-a716-446655440000",
+                     *             "type": "city_pack",
+                     *             "city_id": 1,
+                     *             "platform": "ios",
+                     *             "transaction_id": "txn_abc123",
+                     *             "price": 4.99,
+                     *             "is_ltd": false,
+                     *             "expires_at": null,
+                     *             "created_at": "2025-03-01T15:00:00Z"
+                     *           }
+                     *         ],
+                     *         "free_stories_used": 3,
+                     *         "free_stories_limit": 5,
+                     *         "free_stories_left": 2
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["PurchaseStatusResponse"];
                 };
             };
             /** @description Unauthorized */
@@ -2126,172 +3090,33 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
-    adminCreateCity: {
+    adminGetStats: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    name: string;
-                    name_ru?: string | null;
-                    country: string;
-                    /** Format: double */
-                    center_lat: number;
-                    /** Format: double */
-                    center_lng: number;
-                    /** Format: double */
-                    radius_km: number;
-                    is_active?: boolean;
-                    /** Format: double */
-                    download_size_mb: number;
-                };
-            };
-        };
-        responses: {
-            /** @description City created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["City"];
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Admin access required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    adminUpdateCity: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    name: string;
-                    name_ru?: string | null;
-                    country: string;
-                    /** Format: double */
-                    center_lat: number;
-                    /** Format: double */
-                    center_lng: number;
-                    /** Format: double */
-                    radius_km: number;
-                    is_active?: boolean;
-                    /** Format: double */
-                    download_size_mb: number;
-                };
-            };
-        };
-        responses: {
-            /** @description City updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["City"];
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Admin access required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description City not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    adminDeleteCity: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
         requestBody?: never;
         responses: {
-            /** @description City deleted */
+            /** @description Aggregate admin dashboard counts */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @example city deleted */
-                        message?: string;
-                    };
+                    "application/json": components["schemas"]["AdminStatsResponse"];
                 };
             };
             /** @description Unauthorized */
@@ -2312,8 +3137,8 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description City not found */
-            404: {
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2323,418 +3148,19 @@ export interface operations {
             };
         };
     };
-    adminCreatePOI: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    city_id: number;
-                    name: string;
-                    name_ru?: string | null;
-                    /** Format: double */
-                    lat: number;
-                    /** Format: double */
-                    lng: number;
-                    /** @enum {string} */
-                    type: "building" | "street" | "park" | "monument" | "church" | "bridge" | "square" | "museum" | "district" | "other";
-                    tags?: Record<string, never> | null;
-                    address?: string | null;
-                    /** Format: int16 */
-                    interest_score?: number;
-                    /** @enum {string} */
-                    status?: "active" | "disabled" | "pending_review";
-                };
-            };
-        };
-        responses: {
-            /** @description POI created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["POI"];
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Admin access required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    adminUpdatePOI: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    city_id: number;
-                    name: string;
-                    name_ru?: string | null;
-                    /** Format: double */
-                    lat: number;
-                    /** Format: double */
-                    lng: number;
-                    /** @enum {string} */
-                    type: "building" | "street" | "park" | "monument" | "church" | "bridge" | "square" | "museum" | "district" | "other";
-                    tags?: Record<string, never> | null;
-                    address?: string | null;
-                    /** Format: int16 */
-                    interest_score?: number;
-                    /** @enum {string} */
-                    status?: "active" | "disabled" | "pending_review";
-                };
-            };
-        };
-        responses: {
-            /** @description POI updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["POI"];
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Admin access required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description POI not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    adminDeletePOI: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description POI deleted */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @example POI deleted */
-                        message?: string;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Admin access required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description POI not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    adminCreateStory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    poi_id: number;
-                    language: string;
-                    text: string;
-                    audio_url?: string | null;
-                    /** Format: int16 */
-                    duration_sec?: number | null;
-                    /** @enum {string} */
-                    layer_type: "atmosphere" | "human_story" | "hidden_detail" | "time_shift" | "general";
-                    /** Format: int16 */
-                    order_index?: number;
-                    is_inflation?: boolean;
-                    /** Format: int16 */
-                    confidence?: number;
-                    sources?: Record<string, never> | null;
-                    /** @enum {string} */
-                    status?: "active" | "disabled" | "reported" | "pending_review";
-                };
-            };
-        };
-        responses: {
-            /** @description Story created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["Story"];
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Admin access required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    adminUpdateStory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    poi_id: number;
-                    language: string;
-                    text: string;
-                    audio_url?: string | null;
-                    /** Format: int16 */
-                    duration_sec?: number | null;
-                    /** @enum {string} */
-                    layer_type: "atmosphere" | "human_story" | "hidden_detail" | "time_shift" | "general";
-                    /** Format: int16 */
-                    order_index?: number;
-                    is_inflation?: boolean;
-                    /** Format: int16 */
-                    confidence?: number;
-                    sources?: Record<string, never> | null;
-                    /** @enum {string} */
-                    status?: "active" | "disabled" | "reported" | "pending_review";
-                };
-            };
-        };
-        responses: {
-            /** @description Story updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["Story"];
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Admin access required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Story not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    adminDeleteStory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Story deleted */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @example story deleted */
-                        message?: string;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Admin access required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Story not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    adminListReports: {
+    adminListCities: {
         parameters: {
             query?: {
-                status?: "new" | "reviewed" | "resolved" | "dismissed";
                 /** @description Opaque cursor from previous response's next_cursor */
                 cursor?: string;
                 /** @description Number of items per page (default 20, max 100) */
                 limit?: number;
+                /** @description Include soft-deleted cities in the response */
+                include_deleted?: boolean;
+                /** @description Sort field */
+                sort_by?: "id" | "name" | "country" | "is_active" | "created_at" | "updated_at";
+                /** @description Sort direction */
+                sort_dir?: "asc" | "desc";
             };
             header?: never;
             path?: never;
@@ -2742,17 +3168,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Paginated list of reports */
+            /** @description Paginated list of admin-visible cities */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        items: components["schemas"]["Report"][];
-                        next_cursor: string;
-                        has_more: boolean;
-                    };
+                    "application/json": components["schemas"]["CitiesPageResponse"];
                 };
             };
             /** @description Invalid cursor or limit */
@@ -2782,6 +3204,1014 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminCreateCity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "name": "Prague",
+                 *       "name_ru": "Прага",
+                 *       "country": "Czech Republic",
+                 *       "center_lat": 50.0755,
+                 *       "center_lng": 14.4378,
+                 *       "radius_km": 12,
+                 *       "is_active": true,
+                 *       "download_size_mb": 85
+                 *     }
+                 */
+                "application/json": components["schemas"]["CreateCityRequest"];
+            };
+        };
+        responses: {
+            /** @description City created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "id": 2,
+                     *         "name": "Prague",
+                     *         "name_ru": "Прага",
+                     *         "country": "Czech Republic",
+                     *         "center_lat": 50.0755,
+                     *         "center_lng": 14.4378,
+                     *         "radius_km": 12,
+                     *         "is_active": true,
+                     *         "download_size_mb": 85,
+                     *         "deleted_at": null,
+                     *         "created_at": "2025-03-01T16:00:00Z",
+                     *         "updated_at": "2025-03-01T16:00:00Z"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["CityResponse"];
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": "validation_error",
+                     *       "details": [
+                     *         {
+                     *           "field": "center_lat",
+                     *           "message": "must be between -90 and 90"
+                     *         },
+                     *         {
+                     *           "field": "radius_km",
+                     *           "message": "must be between 0.1 and 1000"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": "admin access required",
+                     *       "trace_id": "req-abc-123"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description City already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": "city already exists",
+                     *       "trace_id": "req-abc-123"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminUpdateCity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCityRequest"];
+            };
+        };
+        responses: {
+            /** @description City updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CityResponse"];
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description City not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description City already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminDeleteCity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description City deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"] & {
+                        /** @example city deleted */
+                        message?: unknown;
+                    };
+                };
+            };
+            /** @description Invalid city ID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description City not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminRestoreCity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description City restored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CityResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description City not found or not deleted */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminListPOIs: {
+        parameters: {
+            query: {
+                city_id: number;
+                status?: "active" | "disabled" | "pending_review";
+                type?: "building" | "street" | "park" | "monument" | "church" | "bridge" | "square" | "museum" | "district" | "other";
+                /** @description Opaque cursor from previous response's next_cursor */
+                cursor?: string;
+                /** @description Number of items per page (default 20, max 100) */
+                limit?: number;
+                /** @description Sort field */
+                sort_by?: "id" | "name" | "type" | "status" | "interest_score" | "created_at" | "updated_at";
+                /** @description Sort direction */
+                sort_dir?: "asc" | "desc";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated list of POIs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["POIsPageResponse"];
+                };
+            };
+            /** @description Missing or invalid city_id, status, type, cursor, limit, or sort params */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminCreatePOI: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePOIRequest"];
+            };
+        };
+        responses: {
+            /** @description POI created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["POIResponse"];
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description POI already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminUpdatePOI: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePOIRequest"];
+            };
+        };
+        responses: {
+            /** @description POI updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["POIResponse"];
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description POI not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description POI already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminDeletePOI: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description POI deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"] & {
+                        /** @example POI deleted */
+                        message?: unknown;
+                    };
+                };
+            };
+            /** @description Invalid POI ID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description POI not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminListStories: {
+        parameters: {
+            query: {
+                poi_id: number;
+                language?: string;
+                status?: "active" | "disabled" | "reported" | "pending_review";
+                /** @description Opaque cursor from previous response's next_cursor */
+                cursor?: string;
+                /** @description Number of items per page (default 20, max 100) */
+                limit?: number;
+                /** @description Sort field */
+                sort_by?: "id" | "poi_id" | "language" | "status" | "layer_type" | "order_index" | "confidence" | "created_at" | "updated_at";
+                /** @description Sort direction */
+                sort_dir?: "asc" | "desc";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated list of stories */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoriesPageResponse"];
+                };
+            };
+            /** @description Missing or invalid poi_id, status, cursor, limit, or sort params */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminCreateStory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Story created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryResponse"];
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Story already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminUpdateStory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateStoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Story updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryResponse"];
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Story not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Story already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminDeleteStory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Story deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"] & {
+                        /** @example story deleted */
+                        message?: unknown;
+                    };
+                };
+            };
+            /** @description Invalid story ID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Story not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminListReports: {
+        parameters: {
+            query?: {
+                /** @description Filter by report status */
+                status?: "new" | "reviewed" | "resolved" | "dismissed";
+                /** @description Opaque cursor from previous response's next_cursor */
+                cursor?: string;
+                /** @description Number of items per page (default 20, max 100) */
+                limit?: number;
+                /** @description Sort field */
+                sort_by?: "id" | "story_id" | "type" | "status" | "created_at";
+                /** @description Sort direction */
+                sort_dir?: "asc" | "desc";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated list of reports */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": 1,
+                     *           "story_id": 5,
+                     *           "user_id": "550e8400-e29b-41d4-a716-446655440000",
+                     *           "type": "wrong_fact",
+                     *           "comment": "The date mentioned is incorrect",
+                     *           "user_lat": 41.6875,
+                     *           "user_lng": 44.8084,
+                     *           "status": "new",
+                     *           "resolved_at": null,
+                     *           "created_at": "2025-03-01T14:30:00Z",
+                     *           "poi_id": 1,
+                     *           "poi_name": "Narikala Fortress",
+                     *           "story_language": "en",
+                     *           "story_status": "active"
+                     *         }
+                     *       ],
+                     *       "next_cursor": "aWQ6Mg==",
+                     *       "has_more": false
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminReportsPageResponse"];
+                };
+            };
+            /** @description Invalid cursor or limit */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     adminUpdateReportStatus: {
@@ -2795,10 +4225,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    /** @enum {string} */
-                    status: "new" | "reviewed" | "resolved" | "dismissed";
-                };
+                "application/json": components["schemas"]["UpdateReportStatusRequest"];
             };
         };
         responses: {
@@ -2808,9 +4235,74 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["Report"];
-                    };
+                    "application/json": components["schemas"]["ReportResponse"];
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOrValidationError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Report not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminDisableReportedStory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Story disabled and report resolved, or current closed state returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModeratedReportResultResponse"];
                 };
             };
             /** @description Validation error */
@@ -2849,6 +4341,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     adminListReportsByPOI: {
@@ -2869,9 +4370,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["Report"][];
-                    };
+                    "application/json": components["schemas"]["ReportListResponse"];
+                };
+            };
+            /** @description Invalid POI ID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Unauthorized */
@@ -2885,6 +4393,15 @@ export interface operations {
             };
             /** @description Admin access required */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2912,9 +4429,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["InflationJob"];
-                    };
+                    "application/json": components["schemas"]["InflationJobResponse"];
+                };
+            };
+            /** @description Invalid POI ID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Unauthorized */
@@ -2935,8 +4459,17 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description POI not found */
-            404: {
+            /** @description POI already has maximum inflation segments */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2964,9 +4497,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["InflationJob"][];
-                    };
+                    "application/json": components["schemas"]["InflationJobListResponse"];
+                };
+            };
+            /** @description Invalid POI ID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Unauthorized */
@@ -2980,6 +4520,92 @@ export interface operations {
             };
             /** @description Admin access required */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminListAuditLogs: {
+        parameters: {
+            query?: {
+                /** @description Filter by actor (admin user) ID */
+                actor_id?: string;
+                /** @description Filter by resource type (e.g. city, poi, story, report) */
+                resource_type?: string;
+                /** @description Filter by action (e.g. create, update, delete) */
+                action?: string;
+                /** @description Include entries created at or after this RFC3339 timestamp */
+                created_from?: string;
+                /** @description Include entries created at or before this RFC3339 timestamp */
+                created_to?: string;
+                /** @description Filter by status (e.g. success, error) */
+                status?: string;
+                /** @description Opaque cursor from previous response's next_cursor */
+                cursor?: string;
+                /** @description Number of items per page (default 20, max 100) */
+                limit?: number;
+                /** @description Sort field */
+                sort_by?: "id" | "action" | "resource_type" | "status" | "http_method" | "request_path" | "created_at";
+                /** @description Sort direction */
+                sort_dir?: "asc" | "desc";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated list of audit log entries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditLogsPageResponse"];
+                };
+            };
+            /** @description Invalid cursor, limit, or filter input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

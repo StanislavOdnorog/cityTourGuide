@@ -137,6 +137,8 @@ function makeCandidate(overrides: Partial<NearbyStoryCandidate> = {}): NearbySto
   return {
     poi_id: 1,
     poi_name: 'Narikala Fortress',
+    poi_lat: 41.6875,
+    poi_lng: 44.8084,
     story_id: 10,
     story_text: 'Ancient fortress above Tbilisi...',
     audio_url: 'https://cdn.example.com/narikala.mp3',

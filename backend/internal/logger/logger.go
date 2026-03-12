@@ -7,18 +7,20 @@ import (
 	"strings"
 )
 
-// Setup initializes the global slog logger with a JSON handler.
+// Setup initializes the global slog logger with a JSON handler wrapped by
+// RedactHandler. The redaction layer ensures sensitive attributes (tokens,
+// passwords, etc.) are scrubbed even if application code accidentally logs them.
 // The log level is controlled by the LOG_LEVEL environment variable
 // (debug, info, warn, error). Default is info.
 func Setup() {
 	level := parseLevel(os.Getenv("LOG_LEVEL"))
 
-	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level:     level,
 		AddSource: level == slog.LevelDebug,
 	})
 
-	slog.SetDefault(slog.New(handler))
+	slog.SetDefault(slog.New(NewRedactHandler(jsonHandler)))
 }
 
 func parseLevel(s string) slog.Level {

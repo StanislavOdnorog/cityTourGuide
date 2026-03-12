@@ -22,8 +22,8 @@ import {
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { usePOIDetail } from '../hooks';
 import type { InflationJob, POIStatus, Report, Story, StoryStatus } from '../types';
 
@@ -86,10 +86,15 @@ function AudioPreview({ url }: { url: string }) {
 }
 
 export default function POIDetailPage() {
+  const storyPageSize = 10;
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { message } = App.useApp();
   const poiId = id ? parseInt(id, 10) : null;
+  const highlightedStoryId = Number.parseInt(searchParams.get('storyId') ?? '', 10);
+  const storiesContainerRef = useRef<HTMLDivElement>(null);
+  const [storyPage, setStoryPage] = useState(1);
 
   const {
     poi: { data: poi, isLoading: poiLoading },
@@ -100,6 +105,32 @@ export default function POIDetailPage() {
     toggleStoryStatus,
     triggerInflation,
   } = usePOIDetail(poiId);
+
+  useEffect(() => {
+    if (!Number.isFinite(highlightedStoryId) || stories.length === 0) {
+      return;
+    }
+
+    const storyIndex = stories.findIndex((story) => story.id === highlightedStoryId);
+    if (storyIndex >= 0) {
+      setStoryPage(Math.floor(storyIndex / storyPageSize) + 1);
+    }
+  }, [highlightedStoryId, stories, storyPageSize]);
+
+  useEffect(() => {
+    if (!Number.isFinite(highlightedStoryId) || storiesLoading || stories.length === 0) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const row = storiesContainerRef.current?.querySelector<HTMLTableRowElement>(
+        `tr[data-row-key="${highlightedStoryId}"]`,
+      );
+      row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [highlightedStoryId, stories, storiesLoading]);
 
   if (poiLoading) {
     return (
@@ -117,7 +148,6 @@ export default function POIDetailPage() {
     const newStatus: POIStatus = checked ? 'active' : 'disabled';
     updatePOI.mutate({ status: newStatus } as Partial<typeof poi>, {
       onSuccess: () => message.success(`POI ${checked ? 'enabled' : 'disabled'}`),
-      onError: () => message.error('Failed to update POI status'),
     });
   };
 
@@ -127,7 +157,6 @@ export default function POIDetailPage() {
       {
         onSuccess: (updated) =>
           message.success(`Story ${updated.status === 'active' ? 'enabled' : 'disabled'}`),
-        onError: () => message.error('Failed to update story status'),
       },
     );
   };
@@ -135,14 +164,6 @@ export default function POIDetailPage() {
   const handleTriggerInflation = () => {
     triggerInflation.mutate(undefined, {
       onSuccess: () => message.success('Inflation job created'),
-      onError: (err: unknown) => {
-        const errorMsg =
-          err && typeof err === 'object' && 'response' in err
-            ? ((err as { response?: { data?: { error?: string } } }).response?.data?.error ??
-              'Failed to trigger inflation')
-            : 'Failed to trigger inflation';
-        message.error(errorMsg);
-      },
     });
   };
 
@@ -320,9 +341,17 @@ export default function POIDetailPage() {
   ];
 
   const newReportsCount = reports.filter((r) => r.status === 'new').length;
+  const hasHighlightedStory = Number.isFinite(highlightedStoryId);
 
   return (
     <div>
+      <style>
+        {`
+          .highlighted-story-row > td {
+            background: #fff7e6 !important;
+          }
+        `}
+      </style>
       <Space style={{ marginBottom: 16 }}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>
           Back
@@ -398,17 +427,28 @@ export default function POIDetailPage() {
           items={[
             {
               key: 'stories',
-              label: `Stories (${stories.length})`,
+              label: hasHighlightedStory
+                ? `Stories (${stories.length}) • Focus story #${highlightedStoryId}`
+                : `Stories (${stories.length})`,
               children: (
-                <Table<Story>
-                  columns={storyColumns}
-                  dataSource={stories}
+                <div ref={storiesContainerRef}>
+                  <Table<Story>
+                    columns={storyColumns}
+                    dataSource={stories}
                   rowKey="id"
                   loading={storiesLoading}
                   size="small"
-                  pagination={{ pageSize: 10 }}
+                  pagination={{
+                    current: storyPage,
+                    pageSize: storyPageSize,
+                    onChange: (page) => setStoryPage(page),
+                  }}
                   scroll={{ x: 900 }}
-                />
+                  rowClassName={(record) =>
+                    record.id === highlightedStoryId ? 'highlighted-story-row' : ''
+                    }
+                  />
+                </div>
               ),
             },
             {

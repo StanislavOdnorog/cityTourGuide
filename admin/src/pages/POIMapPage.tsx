@@ -76,7 +76,7 @@ const poiStatusOptions = [
 
 function POIPopup({ poi }: { poi: POI }) {
   return (
-    <div style={{ width: 260 }}>
+    <div style={{ width: 260 }} data-testid={`poi-popup-${poi.id}`}>
       <Descriptions column={1} size="small">
         <Descriptions.Item label="Name">{poi.name}</Descriptions.Item>
         {poi.name_ru && <Descriptions.Item label="Name (RU)">{poi.name_ru}</Descriptions.Item>}
@@ -94,7 +94,7 @@ function POIPopup({ poi }: { poi: POI }) {
       </Descriptions>
       <div style={{ marginTop: 8, textAlign: 'right' }}>
         <Link to={`/pois/${poi.id}`}>
-          <Button type="primary" size="small">
+          <Button type="primary" size="small" data-testid={`poi-detail-link-${poi.id}`}>
             View Details
           </Button>
         </Link>
@@ -104,7 +104,9 @@ function POIPopup({ poi }: { poi: POI }) {
 }
 
 export default function POIMapPage() {
-  const { data: cities = [], isLoading: citiesLoading } = useCities();
+  const citiesQuery = useCities();
+  const cities = citiesQuery.data?.items ?? [];
+  const citiesLoading = citiesQuery.isLoading;
   const [userSelectedCityId, setUserSelectedCityId] = useState<number | null>(null);
   const [filterType, setFilterType] = useState<POIType | ''>('');
   const [filterStatus, setFilterStatus] = useState<POIStatus | ''>('');
@@ -141,7 +143,7 @@ export default function POIMapPage() {
   }, []);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 112px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 112px)' }} data-testid="poi-map-page">
       <Row align="middle" justify="space-between" style={{ marginBottom: 16 }}>
         <Col>
           <Title level={2} style={{ margin: 0 }}>
@@ -150,7 +152,7 @@ export default function POIMapPage() {
         </Col>
         <Col>
           {pois.length > 0 && (
-            <Tag style={{ fontSize: 14, padding: '4px 12px' }}>
+            <Tag style={{ fontSize: 14, padding: '4px 12px' }} data-testid="poi-count">
               {pois.length} POI{pois.length !== 1 ? 's' : ''}
             </Tag>
           )}
@@ -167,6 +169,7 @@ export default function POIMapPage() {
               value={selectedCityId}
               onChange={(v) => setUserSelectedCityId(v)}
               loading={citiesLoading}
+              data-testid="poi-city-filter"
             />
           </Col>
           <Col xs={12} sm={8}>
@@ -175,6 +178,7 @@ export default function POIMapPage() {
               options={poiTypeOptions}
               value={filterType}
               onChange={(v) => setFilterType(v)}
+              data-testid="poi-type-filter"
             />
           </Col>
           <Col xs={12} sm={8}>
@@ -183,6 +187,7 @@ export default function POIMapPage() {
               options={poiStatusOptions}
               value={filterStatus}
               onChange={(v) => setFilterStatus(v)}
+              data-testid="poi-status-filter"
             />
           </Col>
         </Row>
@@ -195,6 +200,7 @@ export default function POIMapPage() {
             center={mapCenter}
             zoom={13}
             style={{ height: '100%', width: '100%', minHeight: 400, borderRadius: 8 }}
+            data-testid="poi-map-container"
           >
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

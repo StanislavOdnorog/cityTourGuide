@@ -45,9 +45,11 @@ type Client struct {
 
 // Config holds settings for the Claude API client.
 type Config struct {
-	APIKey  string
-	BaseURL string
-	Model   string
+	APIKey     string
+	BaseURL    string
+	Model      string
+	HTTPClient *http.Client
+	Timeout    time.Duration
 }
 
 // NewClient creates a new Claude API client.
@@ -61,14 +63,29 @@ func NewClient(cfg *Config) *Client {
 		model = defaultModel
 	}
 
+	httpClient := configuredHTTPClient(cfg.HTTPClient, cfg.Timeout, 60*time.Second)
+
 	return &Client{
-		apiKey:  cfg.APIKey,
-		baseURL: strings.TrimRight(baseURL, "/"),
-		model:   model,
-		httpClient: &http.Client{
-			Timeout: 60 * time.Second,
-		},
+		apiKey:     cfg.APIKey,
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		model:      model,
+		httpClient: httpClient,
 	}
+}
+
+func configuredHTTPClient(base *http.Client, timeout, defaultTimeout time.Duration) *http.Client {
+	overrideTimeout := timeout > 0
+	if timeout <= 0 {
+		timeout = defaultTimeout
+	}
+	if base == nil {
+		return &http.Client{Timeout: timeout}
+	}
+	clientCopy := *base
+	if clientCopy.Timeout == 0 || overrideTimeout {
+		clientCopy.Timeout = timeout
+	}
+	return &clientCopy
 }
 
 // messagesRequest is the request body for the Claude Messages API.

@@ -53,6 +53,8 @@ type Config struct {
 	Stability  float64
 	Similarity float64
 	Style      float64
+	HTTPClient *http.Client
+	Timeout    time.Duration
 }
 
 // NewClient creates a new ElevenLabs TTS client.
@@ -86,6 +88,8 @@ func NewClient(cfg *Config) *Client {
 		style = 0.3
 	}
 
+	httpClient := configuredHTTPClient(cfg.HTTPClient, cfg.Timeout, 120*time.Second)
+
 	return &Client{
 		apiKey:     cfg.APIKey,
 		baseURL:    strings.TrimRight(baseURL, "/"),
@@ -95,10 +99,23 @@ func NewClient(cfg *Config) *Client {
 		stability:  stability,
 		similarity: similarity,
 		style:      style,
-		httpClient: &http.Client{
-			Timeout: 120 * time.Second,
-		},
+		httpClient: httpClient,
 	}
+}
+
+func configuredHTTPClient(base *http.Client, timeout, defaultTimeout time.Duration) *http.Client {
+	overrideTimeout := timeout > 0
+	if timeout <= 0 {
+		timeout = defaultTimeout
+	}
+	if base == nil {
+		return &http.Client{Timeout: timeout}
+	}
+	clientCopy := *base
+	if clientCopy.Timeout == 0 || overrideTimeout {
+		clientCopy.Timeout = timeout
+	}
+	return &clientCopy
 }
 
 // ttsRequest is the request body for the ElevenLabs TTS API.

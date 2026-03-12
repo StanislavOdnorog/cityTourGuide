@@ -117,21 +117,72 @@ jobs:
               'wget -qO- https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz | tar xz -C /tmp && \
                /tmp/migrate -path /app/migrations -database "$DATABASE_URL" up'
 
-            # Verify backend health
-            echo "==> Verifying deployment..."
+            # Verify backend health (60-second overall timeout for all checks)
+            HEALTH_CHECK_DEADLINE=$(($(date +%s) + 60))
+
+            echo "==> Verifying deployment (healthz)..."
+            HEALTHZ_PASSED=false
             for i in $(seq 1 15); do
+              if [ "$(date +%s)" -ge "$HEALTH_CHECK_DEADLINE" ]; then
+                echo "ERROR: Health checks exceeded 60-second deadline!"
+                docker compose -f "$COMPOSE_FILE" logs --tail=100 backend
+                exit 1
+              fi
               if docker compose -f "$COMPOSE_FILE" exec -T backend wget -qO- http://localhost:8080/healthz 2>/dev/null; then
                 echo ""
-                echo "==> Health check passed!"
+                echo "==> Healthz check passed!"
+                HEALTHZ_PASSED=true
                 break
               fi
               if [ "$i" -eq 15 ]; then
-                echo "ERROR: Health check failed after 30 seconds!"
-                docker compose -f "$COMPOSE_FILE" logs --tail=50 backend
+                echo "ERROR: Healthz check failed after 30 seconds!"
+                docker compose -f "$COMPOSE_FILE" logs --tail=100 backend
                 exit 1
               fi
               sleep 2
             done
+
+            echo "==> Verifying deployment (readyz)..."
+            READYZ_PASSED=false
+            for i in $(seq 1 10); do
+              if [ "$(date +%s)" -ge "$HEALTH_CHECK_DEADLINE" ]; then
+                echo "ERROR: Health checks exceeded 60-second deadline!"
+                docker compose -f "$COMPOSE_FILE" logs --tail=100 backend
+                exit 1
+              fi
+              READYZ_RESPONSE=$(docker compose -f "$COMPOSE_FILE" exec -T backend wget -qO- http://localhost:8080/readyz 2>/dev/null) || true
+              if [ -n "$READYZ_RESPONSE" ]; then
+                echo "Readyz response: $READYZ_RESPONSE"
+                if echo "$READYZ_RESPONSE" | grep -q '"status":"ok"'; then
+                  echo "==> Readyz check passed! All components healthy."
+                  READYZ_PASSED=true
+                  break
+                elif echo "$READYZ_RESPONSE" | grep -q '"status":"degraded"'; then
+                  echo "==> Readyz check passed (degraded). Only optional components unhealthy."
+                  READYZ_PASSED=true
+                  break
+                else
+                  echo "Readyz returned unhealthy status (attempt $i/10), retrying..."
+                fi
+              else
+                echo "Readyz not responding yet (attempt $i/10), retrying..."
+              fi
+              sleep 3
+            done
+
+            if [ "$READYZ_PASSED" != "true" ]; then
+              echo "ERROR: Readyz check failed! Required components are not ready."
+              echo "Last readyz response: ${READYZ_RESPONSE:-<empty>}"
+              echo "==> Backend logs (last 100 lines):"
+              docker compose -f "$COMPOSE_FILE" logs --tail=100 backend
+              exit 1
+            fi
+
+            # TODO: Add version verification once /healthz or /version returns the git SHA.
+            # The deploy runs git reset --hard origin/main, so the deployed commit should
+            # match $GITHUB_SHA. A future /version endpoint could be checked here:
+            #   DEPLOYED_SHA=$(wget -qO- http://localhost:8080/version | jq -r '.sha')
+            #   if [ "$DEPLOYED_SHA" != "$EXPECTED_SHA" ]; then ... fi
 
             echo "==> Deployment successful!"
             docker compose -f "$COMPOSE_FILE" ps
