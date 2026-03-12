@@ -86,7 +86,7 @@ type refreshRequest struct {
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req registerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 
@@ -113,7 +113,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 
@@ -143,7 +143,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 func (h *AuthHandler) DeviceAuth(c *gin.Context) {
 	var req deviceAuthRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 
@@ -163,7 +163,7 @@ func (h *AuthHandler) DeviceAuth(c *gin.Context) {
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	var req refreshRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 
@@ -195,7 +195,7 @@ func (h *AuthHandler) GoogleAuth(c *gin.Context) {
 
 	var req googleAuthRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 
@@ -239,7 +239,7 @@ func (h *AuthHandler) AppleAuth(c *gin.Context) {
 
 	var req appleAuthRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 

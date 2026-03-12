@@ -116,7 +116,7 @@ func (h *CityHandler) GetCity(c *gin.Context) {
 func (h *CityHandler) CreateCity(c *gin.Context) {
 	var req createCityRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 
@@ -154,7 +154,7 @@ func (h *CityHandler) UpdateCity(c *gin.Context) {
 
 	var req updateCityRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 

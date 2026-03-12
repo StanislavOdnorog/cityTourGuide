@@ -133,7 +133,7 @@ func (h *StoryHandler) GetStory(c *gin.Context) {
 func (h *StoryHandler) CreateStory(c *gin.Context) {
 	var req createStoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 
@@ -194,7 +194,7 @@ func (h *StoryHandler) UpdateStory(c *gin.Context) {
 
 	var req updateStoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 

@@ -38,7 +38,7 @@ type trackListeningRequest struct {
 func (h *ListeningHandler) TrackListening(c *gin.Context) {
 	var req trackListeningRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 

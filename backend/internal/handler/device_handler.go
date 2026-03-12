@@ -36,7 +36,7 @@ type registerDeviceTokenRequest struct {
 func (h *DeviceHandler) RegisterDeviceToken(c *gin.Context) {
 	var req registerDeviceTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 
@@ -62,7 +62,7 @@ type unregisterDeviceTokenRequest struct {
 func (h *DeviceHandler) UnregisterDeviceToken(c *gin.Context) {
 	var req unregisterDeviceTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 

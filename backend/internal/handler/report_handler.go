@@ -44,7 +44,7 @@ type createReportRequest struct {
 func (h *ReportHandler) CreateReport(c *gin.Context) {
 	var req createReportRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 
@@ -136,7 +136,7 @@ func (h *ReportHandler) UpdateReportStatus(c *gin.Context) {
 
 	var req updateReportStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 

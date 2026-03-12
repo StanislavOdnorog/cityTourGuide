@@ -136,7 +136,7 @@ func (h *POIHandler) GetPOI(c *gin.Context) {
 func (h *POIHandler) CreatePOI(c *gin.Context) {
 	var req createPOIRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 
@@ -186,7 +186,7 @@ func (h *POIHandler) UpdatePOI(c *gin.Context) {
 
 	var req updatePOIRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 

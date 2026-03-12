@@ -47,7 +47,7 @@ func (h *PurchaseHandler) VerifyPurchase(c *gin.Context) {
 
 	var req verifyPurchaseRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+		validationErrorResponse(c, err)
 		return
 	}
 
