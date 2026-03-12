@@ -35,31 +35,31 @@ func NewStoryHandler(repo StoryRepository) *StoryHandler {
 // createStoryRequest represents the request body for creating a story.
 type createStoryRequest struct {
 	POIID       int                   `json:"poi_id" binding:"required"`
-	Language    string                `json:"language" binding:"required"`
-	Text        string                `json:"text" binding:"required"`
-	AudioURL    *string               `json:"audio_url"`
-	DurationSec *int16                `json:"duration_sec"`
-	LayerType   domain.StoryLayerType `json:"layer_type" binding:"required"`
+	Language    string                `json:"language" binding:"required,len=2"`
+	Text        string                `json:"text" binding:"required,max=50000"`
+	AudioURL    *string               `json:"audio_url" binding:"omitempty,url"`
+	DurationSec *int16                `json:"duration_sec" binding:"omitempty,gte=0"`
+	LayerType   domain.StoryLayerType `json:"layer_type" binding:"required,oneof=atmosphere human_story hidden_detail time_shift general"`
 	OrderIndex  *int16                `json:"order_index"`
 	IsInflation *bool                 `json:"is_inflation"`
-	Confidence  *int16                `json:"confidence"`
+	Confidence  *int16                `json:"confidence" binding:"omitempty,gte=0,lte=100"`
 	Sources     *json.RawMessage      `json:"sources"`
-	Status      *domain.StoryStatus   `json:"status"`
+	Status      *domain.StoryStatus   `json:"status" binding:"omitempty,oneof=active disabled reported pending_review"`
 }
 
 // updateStoryRequest represents the request body for updating a story.
 type updateStoryRequest struct {
 	POIID       int                   `json:"poi_id" binding:"required"`
-	Language    string                `json:"language" binding:"required"`
-	Text        string                `json:"text" binding:"required"`
-	AudioURL    *string               `json:"audio_url"`
-	DurationSec *int16                `json:"duration_sec"`
-	LayerType   domain.StoryLayerType `json:"layer_type" binding:"required"`
+	Language    string                `json:"language" binding:"required,len=2"`
+	Text        string                `json:"text" binding:"required,max=50000"`
+	AudioURL    *string               `json:"audio_url" binding:"omitempty,url"`
+	DurationSec *int16                `json:"duration_sec" binding:"omitempty,gte=0"`
+	LayerType   domain.StoryLayerType `json:"layer_type" binding:"required,oneof=atmosphere human_story hidden_detail time_shift general"`
 	OrderIndex  *int16                `json:"order_index"`
 	IsInflation *bool                 `json:"is_inflation"`
-	Confidence  *int16                `json:"confidence"`
+	Confidence  *int16                `json:"confidence" binding:"omitempty,gte=0,lte=100"`
 	Sources     *json.RawMessage      `json:"sources"`
-	Status      *domain.StoryStatus   `json:"status"`
+	Status      *domain.StoryStatus   `json:"status" binding:"omitempty,oneof=active disabled reported pending_review"`
 }
 
 // ListStories handles GET /api/v1/stories?poi_id=&language=&status=.
@@ -79,6 +79,15 @@ func (h *StoryHandler) ListStories(c *gin.Context) {
 
 	var statusFilter *domain.StoryStatus
 	if s := c.Query("status"); s != "" {
+		if err := domain.ValidateEnum(s, "status", []string{
+			string(domain.StoryStatusActive),
+			string(domain.StoryStatusDisabled),
+			string(domain.StoryStatusReported),
+			string(domain.StoryStatusPendingReview),
+		}); err != nil {
+			validationErrorResponse(c, err)
+			return
+		}
 		st := domain.StoryStatus(s)
 		statusFilter = &st
 	}
@@ -133,6 +142,10 @@ func (h *StoryHandler) GetStory(c *gin.Context) {
 func (h *StoryHandler) CreateStory(c *gin.Context) {
 	var req createStoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		validationErrorResponse(c, err)
+		return
+	}
+	if err := validateStoryRequest(req.Language); err != nil {
 		validationErrorResponse(c, err)
 		return
 	}
@@ -194,6 +207,10 @@ func (h *StoryHandler) UpdateStory(c *gin.Context) {
 
 	var req updateStoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		validationErrorResponse(c, err)
+		return
+	}
+	if err := validateStoryRequest(req.Language); err != nil {
 		validationErrorResponse(c, err)
 		return
 	}
@@ -269,4 +286,8 @@ func (h *StoryHandler) DeleteStory(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "story deleted"})
+}
+
+func validateStoryRequest(language string) error {
+	return domain.ValidateISO639_1(language, "language")
 }
