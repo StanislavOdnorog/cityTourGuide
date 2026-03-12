@@ -15,6 +15,14 @@ import (
 	"github.com/saas/city-stories-guide/backend/internal/repository"
 )
 
+type validationErrorBody struct {
+	Error   string `json:"error"`
+	Details []struct {
+		Field   string `json:"field"`
+		Message string `json:"message"`
+	} `json:"details"`
+}
+
 // mockPOIRepo implements POIRepository for testing.
 type mockPOIRepo struct {
 	pois      []domain.POI
@@ -180,6 +188,62 @@ func TestListPOIs_WithFilters(t *testing.T) {
 	}
 }
 
+func TestListPOIs_InvalidStatus(t *testing.T) {
+	mock := &mockPOIRepo{}
+	h := NewPOIHandler(mock)
+	r := setupPOIRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/pois?city_id=1&status=archived", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp validationErrorBody
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if len(resp.Details) != 1 {
+		t.Fatalf("expected 1 validation detail, got %d", len(resp.Details))
+	}
+	if resp.Details[0].Field != "status" {
+		t.Errorf("expected field=status, got %q", resp.Details[0].Field)
+	}
+	if resp.Details[0].Message != "must be one of: active, disabled, pending_review" {
+		t.Errorf("unexpected message: %q", resp.Details[0].Message)
+	}
+}
+
+func TestListPOIs_InvalidType(t *testing.T) {
+	mock := &mockPOIRepo{}
+	h := NewPOIHandler(mock)
+	r := setupPOIRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/pois?city_id=1&type=castle", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp validationErrorBody
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if len(resp.Details) != 1 {
+		t.Fatalf("expected 1 validation detail, got %d", len(resp.Details))
+	}
+	if resp.Details[0].Field != "type" {
+		t.Errorf("expected field=type, got %q", resp.Details[0].Field)
+	}
+	if resp.Details[0].Message != "must be one of: building, street, park, monument, church, bridge, square, museum, district, other" {
+		t.Errorf("unexpected message: %q", resp.Details[0].Message)
+	}
+}
+
 func TestListPOIs_Pagination(t *testing.T) {
 	pois := make([]domain.POI, 30)
 	for i := range pois {
@@ -340,6 +404,59 @@ func TestCreatePOI_WithOptionalFields(t *testing.T) {
 	}
 }
 
+func TestCreatePOI_InvalidValidation(t *testing.T) {
+	mock := &mockPOIRepo{}
+	h := NewPOIHandler(mock)
+	r := setupPOIRouter(h)
+
+	longName := bytes.Repeat([]byte("a"), 501)
+	longAddress := bytes.Repeat([]byte("b"), 1001)
+	body := map[string]any{
+		"city_id":        1,
+		"name":           string(longName),
+		"lat":            91,
+		"lng":            181,
+		"type":           "castle",
+		"interest_score": 101,
+		"address":        string(longAddress),
+		"status":         "archived",
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/pois", bytes.NewBuffer(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp validationErrorBody
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if len(resp.Details) == 0 {
+		t.Fatalf("expected validation details, got none")
+	}
+
+	fields := make(map[string]string, len(resp.Details))
+	for _, detail := range resp.Details {
+		fields[detail.Field] = detail.Message
+	}
+
+	expectedFields := []string{"name", "lat", "lng", "type", "interestscore", "address", "status"}
+	for _, field := range expectedFields {
+		if _, ok := fields[field]; !ok {
+			t.Errorf("expected validation detail for %s, got %+v", field, fields)
+		}
+	}
+}
+
 func TestUpdatePOI_Success(t *testing.T) {
 	mock := &mockPOIRepo{}
 	h := NewPOIHandler(mock)
@@ -369,6 +486,43 @@ func TestUpdatePOI_NotFound(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestUpdatePOI_InvalidValidation(t *testing.T) {
+	mock := &mockPOIRepo{}
+	h := NewPOIHandler(mock)
+	r := setupPOIRouter(h)
+
+	body := `{"city_id":1,"name":"Updated","lat":-91,"lng":44.80,"type":"invalid","interest_score":-1,"status":"bad"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/pois/1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp validationErrorBody
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if len(resp.Details) == 0 {
+		t.Fatalf("expected validation details, got none")
+	}
+
+	fields := make(map[string]string, len(resp.Details))
+	for _, detail := range resp.Details {
+		fields[detail.Field] = detail.Message
+	}
+
+	expectedFields := []string{"lat", "type", "interestscore", "status"}
+	for _, field := range expectedFields {
+		if _, ok := fields[field]; !ok {
+			t.Errorf("expected validation detail for %s, got %+v", field, fields)
+		}
 	}
 }
 

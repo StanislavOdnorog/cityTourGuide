@@ -36,29 +36,29 @@ func NewPOIHandler(repo POIRepository) *POIHandler {
 // createPOIRequest represents the request body for creating a POI.
 type createPOIRequest struct {
 	CityID        int               `json:"city_id" binding:"required"`
-	Name          string            `json:"name" binding:"required"`
+	Name          string            `json:"name" binding:"required,max=500"`
 	NameRu        *string           `json:"name_ru"`
-	Lat           float64           `json:"lat" binding:"required"`
-	Lng           float64           `json:"lng" binding:"required"`
-	Type          domain.POIType    `json:"type" binding:"required"`
+	Lat           float64           `json:"lat" binding:"required,gte=-90,lte=90"`
+	Lng           float64           `json:"lng" binding:"required,gte=-180,lte=180"`
+	Type          domain.POIType    `json:"type" binding:"required,oneof=building street park monument church bridge square museum district other"`
 	Tags          *json.RawMessage  `json:"tags"`
-	Address       *string           `json:"address"`
-	InterestScore *int16            `json:"interest_score"`
-	Status        *domain.POIStatus `json:"status"`
+	Address       *string           `json:"address" binding:"omitempty,max=1000"`
+	InterestScore *int16            `json:"interest_score" binding:"omitempty,gte=0,lte=100"`
+	Status        *domain.POIStatus `json:"status" binding:"omitempty,oneof=active disabled pending_review"`
 }
 
 // updatePOIRequest represents the request body for updating a POI.
 type updatePOIRequest struct {
 	CityID        int               `json:"city_id" binding:"required"`
-	Name          string            `json:"name" binding:"required"`
+	Name          string            `json:"name" binding:"required,max=500"`
 	NameRu        *string           `json:"name_ru"`
-	Lat           float64           `json:"lat" binding:"required"`
-	Lng           float64           `json:"lng" binding:"required"`
-	Type          domain.POIType    `json:"type" binding:"required"`
+	Lat           float64           `json:"lat" binding:"required,gte=-90,lte=90"`
+	Lng           float64           `json:"lng" binding:"required,gte=-180,lte=180"`
+	Type          domain.POIType    `json:"type" binding:"required,oneof=building street park monument church bridge square museum district other"`
 	Tags          *json.RawMessage  `json:"tags"`
-	Address       *string           `json:"address"`
-	InterestScore *int16            `json:"interest_score"`
-	Status        *domain.POIStatus `json:"status"`
+	Address       *string           `json:"address" binding:"omitempty,max=1000"`
+	InterestScore *int16            `json:"interest_score" binding:"omitempty,gte=0,lte=100"`
+	Status        *domain.POIStatus `json:"status" binding:"omitempty,oneof=active disabled pending_review"`
 }
 
 // ListPOIs handles GET /api/v1/pois?city_id=&status=&type=.
@@ -76,12 +76,35 @@ func (h *POIHandler) ListPOIs(c *gin.Context) {
 
 	var statusFilter *domain.POIStatus
 	if s := c.Query("status"); s != "" {
+		if err := domain.ValidateEnum(s, "status", []string{
+			string(domain.POIStatusActive),
+			string(domain.POIStatusDisabled),
+			string(domain.POIStatusPendingReview),
+		}); err != nil {
+			validationErrorResponse(c, err)
+			return
+		}
 		st := domain.POIStatus(s)
 		statusFilter = &st
 	}
 
 	var typeFilter *domain.POIType
 	if t := c.Query("type"); t != "" {
+		if err := domain.ValidateEnum(t, "type", []string{
+			string(domain.POITypeBuilding),
+			string(domain.POITypeStreet),
+			string(domain.POITypePark),
+			string(domain.POITypeMonument),
+			string(domain.POITypeChurch),
+			string(domain.POITypeBridge),
+			string(domain.POITypeSquare),
+			string(domain.POITypeMuseum),
+			string(domain.POITypeDistrict),
+			string(domain.POITypeOther),
+		}); err != nil {
+			validationErrorResponse(c, err)
+			return
+		}
 		pt := domain.POIType(t)
 		typeFilter = &pt
 	}
