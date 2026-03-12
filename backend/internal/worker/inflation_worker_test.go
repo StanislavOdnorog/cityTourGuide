@@ -136,6 +136,9 @@ func TestNewInflationWorker_Defaults(t *testing.T) {
 	if w.batchSize != defaultBatchSize {
 		t.Errorf("batchSize = %d, want %d", w.batchSize, defaultBatchSize)
 	}
+	if w.jobTimeout != 60*time.Second {
+		t.Errorf("jobTimeout = %v, want 60s", w.jobTimeout)
+	}
 }
 
 func TestNewInflationWorker_CustomConfig(t *testing.T) {
@@ -144,7 +147,7 @@ func TestNewInflationWorker_CustomConfig(t *testing.T) {
 		&mockStoryRepo{},
 		&mockPOIRepo{},
 		nil, nil, nil,
-		&Config{PollInterval: 30 * time.Second, BatchSize: 10},
+		&Config{PollInterval: 30 * time.Second, BatchSize: 10, JobTimeout: 45 * time.Second},
 	)
 
 	if w.pollInterval != 30*time.Second {
@@ -152,6 +155,9 @@ func TestNewInflationWorker_CustomConfig(t *testing.T) {
 	}
 	if w.batchSize != 10 {
 		t.Errorf("batchSize = %d, want 10", w.batchSize)
+	}
+	if w.jobTimeout != 45*time.Second {
+		t.Errorf("jobTimeout = %v, want 45s", w.jobTimeout)
 	}
 }
 

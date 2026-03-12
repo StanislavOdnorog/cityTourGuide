@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -41,16 +43,13 @@ func run() error {
 
 	slog.Info("config loaded", "config", cfg.LogSafe())
 
-	// Create context that listens for OS shutdown signals
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+	ctx := context.Background()
 
 	// Initialize database connection pool
 	pool, err := repository.NewPool(ctx, cfg.Database.URL)
 	if err != nil {
 		return err
 	}
-	defer pool.Close()
 
 	slog.Info("database connection established")
 
@@ -217,32 +216,93 @@ func run() error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	// Start server in a goroutine
+	listener, err := net.Listen("tcp", srv.Addr)
+	if err != nil {
+		pool.Close()
+		return err
+	}
+
+	sigCh := make(chan os.Signal, 2)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	cleanup := []func() error{
+		func() error {
+			pool.Close()
+			return nil
+		},
+	}
+
+	return serveWithGracefulShutdown(
+		srv,
+		listener,
+		sigCh,
+		healthHandler.SetShuttingDown,
+		30*time.Second,
+		os.Exit,
+		cleanup...,
+	)
+}
+
+func serveWithGracefulShutdown(
+	srv *http.Server,
+	listener net.Listener,
+	sigCh <-chan os.Signal,
+	setShuttingDown func(bool),
+	shutdownTimeout time.Duration,
+	forceExit func(int),
+	cleanup ...func() error,
+) error {
 	errCh := make(chan error, 1)
+	shutdownDone := make(chan struct{})
+
 	go func() {
-		slog.Info("starting server", "port", cfg.Server.Port)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		slog.Info("starting server", "addr", listener.Addr().String())
+		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
 	}()
 
-	// Wait for shutdown signal or server error
 	select {
-	case <-ctx.Done():
-		stop()
-		slog.Info("shutting down server")
 	case err := <-errCh:
 		return err
+	case sig := <-sigCh:
+		start := time.Now()
+		if setShuttingDown != nil {
+			setShuttingDown(true)
+		}
+
+		go func() {
+			select {
+			case sig := <-sigCh:
+				slog.Error("received second shutdown signal, forcing exit", "signal", sig.String())
+				forceExit(1)
+			case <-shutdownDone:
+			}
+		}()
+
+		slog.Info("shutdown initiated", "signal", sig.String(), "timeout", shutdownTimeout.String())
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			close(shutdownDone)
+			return err
+		}
+
+		for _, closeFn := range cleanup {
+			if closeFn == nil {
+				continue
+			}
+			if err := closeFn(); err != nil {
+				close(shutdownDone)
+				return err
+			}
+		}
+
+		close(shutdownDone)
+		slog.Info("shutdown complete", "duration", time.Since(start).String())
+		return nil
 	}
-
-	// Graceful shutdown with timeout
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		return err
-	}
-
-	slog.Info("server stopped")
-	return nil
 }

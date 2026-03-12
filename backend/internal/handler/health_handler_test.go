@@ -93,3 +93,31 @@ func TestReadyz_DBDown_Returns503(t *testing.T) {
 		t.Errorf("expected error 'database unreachable', got %s", body["error"])
 	}
 }
+
+func TestReadyz_ShuttingDown_Returns503(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := NewHealthHandler(&mockPinger{})
+	h.SetShuttingDown(true)
+
+	r := gin.New()
+	r.GET("/readyz", h.Readyz)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/readyz", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", w.Code)
+	}
+
+	var body map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if body["status"] != "unavailable" {
+		t.Errorf("expected status unavailable, got %s", body["status"])
+	}
+	if body["error"] != "server shutting down" {
+		t.Errorf("expected error 'server shutting down', got %s", body["error"])
+	}
+}

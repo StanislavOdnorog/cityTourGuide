@@ -53,12 +53,14 @@ type InflationWorker struct {
 	s3Client      *s3.Client
 	pollInterval  time.Duration
 	batchSize     int
+	jobTimeout    time.Duration
 }
 
 // Config holds optional configuration for the InflationWorker.
 type Config struct {
 	PollInterval time.Duration
 	BatchSize    int
+	JobTimeout   time.Duration
 }
 
 // NewInflationWorker creates a new inflation worker with all required dependencies.
@@ -73,12 +75,16 @@ func NewInflationWorker(
 ) *InflationWorker {
 	pollInterval := defaultPollInterval
 	batchSize := defaultBatchSize
+	jobTimeout := 60 * time.Second
 	if cfg != nil {
 		if cfg.PollInterval > 0 {
 			pollInterval = cfg.PollInterval
 		}
 		if cfg.BatchSize > 0 {
 			batchSize = cfg.BatchSize
+		}
+		if cfg.JobTimeout > 0 {
+			jobTimeout = cfg.JobTimeout
 		}
 	}
 
@@ -91,6 +97,7 @@ func NewInflationWorker(
 		s3Client:      s3Client,
 		pollInterval:  pollInterval,
 		batchSize:     batchSize,
+		jobTimeout:    jobTimeout,
 	}
 }
 
@@ -133,7 +140,11 @@ func (w *InflationWorker) pollAndProcess(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		w.processJob(ctx, &jobs[i])
+
+		jobCtx := context.WithoutCancel(ctx)
+		deadlineCtx, cancel := context.WithTimeout(jobCtx, w.jobTimeout)
+		w.processJob(deadlineCtx, &jobs[i])
+		cancel()
 	}
 }
 

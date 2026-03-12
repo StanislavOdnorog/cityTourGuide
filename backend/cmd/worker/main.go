@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
+	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/saas/city-stories-guide/backend/internal/config"
+	"github.com/saas/city-stories-guide/backend/internal/logger"
 	"github.com/saas/city-stories-guide/backend/internal/platform/claude"
 	"github.com/saas/city-stories-guide/backend/internal/platform/elevenlabs"
 	"github.com/saas/city-stories-guide/backend/internal/platform/s3"
@@ -16,29 +19,30 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		log.Fatal(err)
+		slog.Error("fatal error", "error", err)
+		os.Exit(1)
 	}
 }
 
 func run() error {
+	logger.Setup()
+
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
 
-	log.Printf("Worker config loaded: %s", cfg.LogSafe())
+	slog.Info("worker config loaded", "config", cfg.LogSafe())
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+	ctx := context.Background()
 
 	// Initialize database connection pool
 	pool, err := repository.NewPool(ctx, cfg.Database.URL)
 	if err != nil {
 		return err
 	}
-	defer pool.Close()
 
-	log.Println("Database connection established")
+	slog.Info("database connection established")
 
 	// Initialize repositories
 	inflationRepo := repository.NewInflationRepo(pool)
@@ -61,6 +65,7 @@ func run() error {
 		Bucket:    cfg.S3.Bucket,
 	})
 	if err != nil {
+		pool.Close()
 		return err
 	}
 
@@ -75,6 +80,49 @@ func run() error {
 		nil,
 	)
 
-	log.Println("Starting inflation worker...")
-	return w.Start(ctx)
+	sigCh := make(chan os.Signal, 2)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	workerCtx, cancelWorker := context.WithCancel(ctx)
+	defer cancelWorker()
+
+	errCh := make(chan error, 1)
+	go func() {
+		slog.Info("starting inflation worker")
+		errCh <- w.Start(workerCtx)
+	}()
+
+	select {
+	case err := <-errCh:
+		pool.Close()
+		return err
+	case sig := <-sigCh:
+		start := time.Now()
+		slog.Info("worker shutdown initiated", "signal", sig.String(), "timeout", (60 * time.Second).String())
+		cancelWorker()
+
+		go func() {
+			sig := <-sigCh
+			slog.Error("received second shutdown signal, forcing exit", "signal", sig.String())
+			os.Exit(1)
+		}()
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		select {
+		case err := <-errCh:
+			if err != nil {
+				pool.Close()
+				return err
+			}
+		case <-shutdownCtx.Done():
+			return shutdownCtx.Err()
+		}
+
+		pool.Close()
+		slog.Info("worker shutdown complete", "duration", time.Since(start).String())
+		return nil
+	}
 }
