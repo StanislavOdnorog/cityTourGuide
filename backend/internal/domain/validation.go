@@ -82,6 +82,34 @@ func ValidateEnum(value, fieldName string, allowed []string) error {
 	}
 }
 
+// ValidatePasswordBytes checks that the byte length of s does not exceed maxBytes.
+// This is important for bcrypt which silently truncates passwords longer than 72 bytes.
+func ValidatePasswordBytes(s string, maxBytes int) error {
+	if len(s) > maxBytes {
+		return &ValidationError{
+			Field:   "password",
+			Message: fmt.Sprintf("must not exceed %d bytes; bcrypt silently truncates longer passwords", maxBytes),
+		}
+	}
+	return nil
+}
+
+// ValidateISO639_1 checks that s is either empty or a 2-letter lowercase ISO 639-1 language code.
+func ValidateISO639_1(s, fieldName string) error {
+	if s == "" {
+		return nil
+	}
+	if len(s) != 2 {
+		return &ValidationError{Field: fieldName, Message: "must be a 2-letter ISO 639-1 language code"}
+	}
+	for _, r := range s {
+		if r < 'a' || r > 'z' {
+			return &ValidationError{Field: fieldName, Message: "must be a 2-letter ISO 639-1 language code"}
+		}
+	}
+	return nil
+}
+
 // RejectNullBytes returns an error if s contains any null bytes.
 func RejectNullBytes(s, fieldName string) error {
 	if strings.ContainsRune(s, '\x00') {

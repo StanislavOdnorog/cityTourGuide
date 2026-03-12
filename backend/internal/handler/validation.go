@@ -7,6 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+
+	"github.com/saas/city-stories-guide/backend/internal/domain"
 )
 
 // validationDetail represents a single field validation failure.
@@ -20,19 +22,32 @@ type validationDetail struct {
 // Otherwise it falls back to a generic bad request error.
 func validationErrorResponse(c *gin.Context, err error) {
 	var ve validator.ValidationErrors
-	if !errors.As(err, &ve) {
-		errorJSON(c, http.StatusBadRequest, err.Error())
+	if errors.As(err, &ve) {
+		details := make([]validationDetail, 0, len(ve))
+		for _, fe := range ve {
+			details = append(details, validationDetail{
+				Field:   fieldName(fe),
+				Message: fieldMessage(fe),
+			})
+		}
+
+		writeValidationDetails(c, details)
 		return
 	}
 
-	details := make([]validationDetail, 0, len(ve))
-	for _, fe := range ve {
-		details = append(details, validationDetail{
-			Field:   fieldName(fe),
-			Message: fieldMessage(fe),
-		})
+	var validationErr *domain.ValidationError
+	if errors.As(err, &validationErr) {
+		writeValidationDetails(c, []validationDetail{{
+			Field:   validationErr.Field,
+			Message: validationErr.Message,
+		}})
+		return
 	}
 
+	errorJSON(c, http.StatusBadRequest, err.Error())
+}
+
+func writeValidationDetails(c *gin.Context, details []validationDetail) {
 	body := gin.H{
 		"error":   "validation_error",
 		"details": details,

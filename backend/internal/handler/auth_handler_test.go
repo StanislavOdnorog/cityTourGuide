@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -79,6 +80,30 @@ func testTokenPair() *service.TokenPair {
 		RefreshToken: "test-refresh-token",
 		ExpiresIn:    900,
 	}
+}
+
+func decodeValidationResponse(t *testing.T, body []byte) map[string]string {
+	t.Helper()
+
+	var resp struct {
+		Error   string `json:"error"`
+		Details []struct {
+			Field   string `json:"field"`
+			Message string `json:"message"`
+		} `json:"details"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("parse validation response: %v", err)
+	}
+	if resp.Error != "validation_error" {
+		t.Fatalf("expected validation_error, got %q", resp.Error)
+	}
+
+	details := make(map[string]string, len(resp.Details))
+	for _, detail := range resp.Details {
+		details[detail.Field] = detail.Message
+	}
+	return details
 }
 
 func TestAuthHandler_Register_Success(t *testing.T) {
@@ -185,6 +210,82 @@ func TestAuthHandler_Register_ShortPassword(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestAuthHandler_Register_EmailTooLong(t *testing.T) {
+	mock := &mockAuthService{}
+	h := NewAuthHandler(mock)
+	r := setupAuthRouter(h)
+
+	localPart := strings.Repeat("a", 243)
+	body, _ := json.Marshal(map[string]string{
+		"email":    localPart + "@example.com",
+		"password": "password123",
+		"name":     "Test User",
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	details := decodeValidationResponse(t, w.Body.Bytes())
+	if details["email"] != "must not exceed 254 characters" {
+		t.Fatalf("unexpected email message: %q", details["email"])
+	}
+}
+
+func TestAuthHandler_Register_NameTooLong(t *testing.T) {
+	mock := &mockAuthService{}
+	h := NewAuthHandler(mock)
+	r := setupAuthRouter(h)
+
+	body, _ := json.Marshal(map[string]string{
+		"email":    "test@example.com",
+		"password": "password123",
+		"name":     strings.Repeat("n", 201),
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	details := decodeValidationResponse(t, w.Body.Bytes())
+	if details["name"] != "must not exceed 200 characters" {
+		t.Fatalf("unexpected name message: %q", details["name"])
+	}
+}
+
+func TestAuthHandler_Register_PasswordTooLongForBcrypt(t *testing.T) {
+	mock := &mockAuthService{}
+	h := NewAuthHandler(mock)
+	r := setupAuthRouter(h)
+
+	body, _ := json.Marshal(map[string]string{
+		"email":    "test@example.com",
+		"password": strings.Repeat("a", 73),
+		"name":     "Test User",
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	details := decodeValidationResponse(t, w.Body.Bytes())
+	if details["password"] != "must not exceed 72 bytes; bcrypt silently truncates longer passwords" {
+		t.Fatalf("unexpected password message: %q", details["password"])
 	}
 }
 
@@ -303,6 +404,55 @@ func TestAuthHandler_Login_MissingFields(t *testing.T) {
 	}
 }
 
+func TestAuthHandler_Login_EmailTooLong(t *testing.T) {
+	mock := &mockAuthService{}
+	h := NewAuthHandler(mock)
+	r := setupAuthRouter(h)
+
+	localPart := strings.Repeat("a", 243)
+	body, _ := json.Marshal(map[string]string{
+		"email":    localPart + "@example.com",
+		"password": "password123",
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	details := decodeValidationResponse(t, w.Body.Bytes())
+	if details["email"] != "must not exceed 254 characters" {
+		t.Fatalf("unexpected email message: %q", details["email"])
+	}
+}
+
+func TestAuthHandler_Login_PasswordTooLongForBcrypt(t *testing.T) {
+	mock := &mockAuthService{}
+	h := NewAuthHandler(mock)
+	r := setupAuthRouter(h)
+
+	body, _ := json.Marshal(map[string]string{
+		"email":    "test@example.com",
+		"password": strings.Repeat("a", 73),
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	details := decodeValidationResponse(t, w.Body.Bytes())
+	if details["password"] != "must not exceed 72 bytes; bcrypt silently truncates longer passwords" {
+		t.Fatalf("unexpected password message: %q", details["password"])
+	}
+}
+
 func TestAuthHandler_DeviceAuth_Success(t *testing.T) {
 	mock := &mockAuthService{
 		deviceAuthFn: func(_ context.Context, deviceID string, language string) (*domain.User, *service.TokenPair, error) {
@@ -345,6 +495,54 @@ func TestAuthHandler_DeviceAuth_MissingDeviceID(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestAuthHandler_DeviceAuth_DeviceIDTooLong(t *testing.T) {
+	mock := &mockAuthService{}
+	h := NewAuthHandler(mock)
+	r := setupAuthRouter(h)
+
+	body, _ := json.Marshal(map[string]string{
+		"device_id": strings.Repeat("d", 501),
+		"language":  "en",
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/device", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	details := decodeValidationResponse(t, w.Body.Bytes())
+	if details["device_id"] != "must not exceed 500 characters" {
+		t.Fatalf("unexpected device_id message: %q", details["device_id"])
+	}
+}
+
+func TestAuthHandler_DeviceAuth_InvalidLanguage(t *testing.T) {
+	mock := &mockAuthService{}
+	h := NewAuthHandler(mock)
+	r := setupAuthRouter(h)
+
+	body, _ := json.Marshal(map[string]string{
+		"device_id": "device-uuid-123",
+		"language":  "eng",
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/device", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	details := decodeValidationResponse(t, w.Body.Bytes())
+	if details["language"] != "must be a 2-letter ISO 639-1 language code" {
+		t.Fatalf("unexpected language message: %q", details["language"])
 	}
 }
 

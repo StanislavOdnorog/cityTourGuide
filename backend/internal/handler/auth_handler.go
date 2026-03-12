@@ -63,13 +63,13 @@ func (h *AuthHandler) SetAppleVerifier(v AppleVerifier) {
 }
 
 type registerRequest struct {
-	Email    string `json:"email" binding:"required,email"`
+	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required,min=8"`
 	Name     string `json:"name" binding:"required"`
 }
 
 type loginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
+	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 
@@ -82,6 +82,30 @@ type refreshRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
 
+func (r *registerRequest) validate() error {
+	if err := domain.ValidateEmail(r.Email, 254); err != nil {
+		return err
+	}
+	if err := domain.ValidatePasswordBytes(r.Password, 72); err != nil {
+		return err
+	}
+	return domain.ValidateStringLength(r.Name, "name", 1, 200)
+}
+
+func (r *loginRequest) validate() error {
+	if err := domain.ValidateEmail(r.Email, 254); err != nil {
+		return err
+	}
+	return domain.ValidatePasswordBytes(r.Password, 72)
+}
+
+func (r *deviceAuthRequest) validate() error {
+	if err := domain.ValidateStringLength(r.DeviceID, "device_id", 1, 500); err != nil {
+		return err
+	}
+	return domain.ValidateISO639_1(r.Language, "language")
+}
+
 // Register handles POST /api/v1/auth/register.
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req registerRequest
@@ -91,6 +115,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	if err := req.validate(); err != nil {
+		validationErrorResponse(c, err)
+		return
+	}
 
 	user, tokens, err := h.auth.Register(c.Request.Context(), req.Email, req.Password, req.Name)
 	if err != nil {
@@ -118,6 +146,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	if err := req.validate(); err != nil {
+		validationErrorResponse(c, err)
+		return
+	}
 
 	user, tokens, err := h.auth.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
@@ -143,6 +175,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 func (h *AuthHandler) DeviceAuth(c *gin.Context) {
 	var req deviceAuthRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		validationErrorResponse(c, err)
+		return
+	}
+	if err := req.validate(); err != nil {
 		validationErrorResponse(c, err)
 		return
 	}
