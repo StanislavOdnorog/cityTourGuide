@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"errors"
 	"net"
 	"net/http"
@@ -214,5 +216,54 @@ func TestServeWithGracefulShutdown_SecondSignalForcesExit(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for server shutdown")
+	}
+}
+
+func TestLimitRequestBodySize_RejectsBodiesOver1MB(t *testing.T) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	router.Use(limitRequestBodySize(maxRequestBodySize))
+	router.POST("/echo", func(c *gin.Context) {
+		_, err := io.Copy(io.Discard, c.Request.Body)
+		if err != nil {
+			c.Status(http.StatusRequestEntityTooLarge)
+			return
+		}
+		c.Status(http.StatusNoContent)
+	})
+
+	srv := &http.Server{Handler: router}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer listener.Close()
+
+	serveErrCh := make(chan error, 1)
+	go func() {
+		serveErrCh <- srv.Serve(listener)
+	}()
+	defer func() {
+		_ = srv.Close()
+		if err := <-serveErrCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Fatalf("Serve() error = %v", err)
+		}
+	}()
+
+	req, err := http.NewRequest(http.MethodPost, "http://"+listener.Addr().String()+"/echo", bytes.NewReader(bytes.Repeat([]byte("a"), maxRequestBodySize+1)))
+	if err != nil {
+		t.Fatalf("NewRequest() error = %v", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Do() error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusRequestEntityTooLarge)
 	}
 }

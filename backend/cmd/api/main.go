@@ -25,6 +25,8 @@ import (
 	"github.com/saas/city-stories-guide/backend/internal/service"
 )
 
+const maxRequestBodySize = 1 << 20
+
 func main() {
 	if err := run(); err != nil {
 		slog.Error("fatal error", "error", err)
@@ -135,6 +137,7 @@ func run() error {
 	// Global middleware — metrics must be first so all requests are counted.
 	r.Use(middleware.Metrics())
 	r.Use(gin.Recovery())
+	r.Use(limitRequestBodySize(maxRequestBodySize))
 	r.Use(middleware.TraceIDMiddleware())
 	r.Use(middleware.RequestLogger())
 	r.Use(middleware.CORS(middleware.CORSConfig{
@@ -304,5 +307,14 @@ func serveWithGracefulShutdown(
 		close(shutdownDone)
 		slog.Info("shutdown complete", "duration", time.Since(start).String())
 		return nil
+	}
+}
+
+func limitRequestBodySize(limit int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.Body != nil {
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
+		}
+		c.Next()
 	}
 }
