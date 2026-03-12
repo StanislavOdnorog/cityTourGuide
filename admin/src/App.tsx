@@ -6,7 +6,7 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Badge, ConfigProvider, App as AntApp, Layout, Menu, Button, theme } from 'antd';
+import { Badge, ConfigProvider, App as AntApp, Layout, Menu, Button, Spin, theme } from 'antd';
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useNewReportsCount } from './hooks/useReports';
@@ -104,9 +104,19 @@ function AppLayout() {
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isHydrated = useAuthStore((s) => s.isHydrated);
+  const location = useLocation();
+
+  if (!isHydrated) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
 
   return <>{children}</>;

@@ -1,7 +1,7 @@
 import { LockOutlined, UserOutlined } from '@ant-design/icons';
 import { App, Button, Card, Form, Input, Typography } from 'antd';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { login } from '../api/client';
 import { useAuthStore } from '../store/authStore';
 
@@ -16,7 +16,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const { message } = App.useApp();
   const navigate = useNavigate();
+  const location = useLocation();
   const setAuth = useAuthStore((s) => s.setAuth);
+  const redirectTo = (location.state as { from?: string } | null)?.from || '/';
 
   const onFinish = async (values: LoginForm) => {
     setLoading(true);
@@ -35,7 +37,7 @@ export default function LoginPage() {
 
       setAuth(tokens.access_token, tokens.refresh_token, result.data);
       message.success('Login successful');
-      navigate('/', { replace: true });
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       if (err && typeof err === 'object' && 'response' in err) {
         const response = (err as { response: { status: number } }).response;
