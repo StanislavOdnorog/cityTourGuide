@@ -194,7 +194,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List listening history for a user */
+        get: operations["listListenings"];
         put?: never;
         /** Track a story listening event */
         post: operations["trackListening"];
@@ -623,13 +624,34 @@ export interface components {
             /** @example invalid request */
             error: string;
         };
-        PaginationMeta: {
-            /** @example 42 */
-            total: number;
-            /** @example 1 */
-            page: number;
-            /** @example 20 */
-            per_page: number;
+        /** @description Common cursor-based pagination query parameters */
+        CursorPaginationParams: {
+            /**
+             * @description Opaque cursor for the next page (from previous response's next_cursor)
+             * @example aWQ6NDI=
+             */
+            cursor?: string;
+            /**
+             * @description Number of items per page
+             * @default 20
+             * @example 20
+             */
+            limit: number;
+        };
+        /** @description Common cursor-based pagination response fields */
+        CursorPaginatedResponse: {
+            /** @description Page items. Concrete endpoints specify the item schema. */
+            items?: unknown[];
+            /**
+             * @description Opaque cursor to pass as cursor param for the next page. Empty string if no more pages.
+             * @example aWQ6NDI=
+             */
+            next_cursor: string;
+            /**
+             * @description Whether there are more pages after this one
+             * @example true
+             */
+            has_more: boolean;
         };
         City: {
             /** @example 1 */
@@ -1120,8 +1142,10 @@ export interface operations {
     listCities: {
         parameters: {
             query?: {
-                page?: number;
-                per_page?: number;
+                /** @description Opaque cursor from previous response's next_cursor */
+                cursor?: string;
+                /** @description Number of items per page (default 20, max 100) */
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -1136,9 +1160,19 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        data: components["schemas"]["City"][];
-                        meta: components["schemas"]["PaginationMeta"];
+                        items: components["schemas"]["City"][];
+                        next_cursor: string;
+                        has_more: boolean;
                     };
+                };
+            };
+            /** @description Invalid cursor or limit */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Internal server error */
@@ -1231,8 +1265,10 @@ export interface operations {
                 city_id: number;
                 status?: "active" | "disabled" | "pending_review";
                 type?: "building" | "street" | "park" | "monument" | "church" | "bridge" | "square" | "museum" | "district" | "other";
-                page?: number;
-                per_page?: number;
+                /** @description Opaque cursor from previous response's next_cursor */
+                cursor?: string;
+                /** @description Number of items per page (default 20, max 100) */
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -1247,12 +1283,13 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        data: components["schemas"]["POI"][];
-                        meta: components["schemas"]["PaginationMeta"];
+                        items: components["schemas"]["POI"][];
+                        next_cursor: string;
+                        has_more: boolean;
                     };
                 };
             };
-            /** @description Missing city_id */
+            /** @description Missing or invalid city_id, cursor, or limit */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1302,8 +1339,10 @@ export interface operations {
                 poi_id: number;
                 language?: string;
                 status?: "active" | "disabled" | "reported" | "pending_review";
-                page?: number;
-                per_page?: number;
+                /** @description Opaque cursor from previous response's next_cursor */
+                cursor?: string;
+                /** @description Number of items per page (default 20, max 100) */
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -1318,12 +1357,13 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        data: components["schemas"]["Story"][];
-                        meta: components["schemas"]["PaginationMeta"];
+                        items: components["schemas"]["Story"][];
+                        next_cursor: string;
+                        has_more: boolean;
                     };
                 };
             };
-            /** @description Missing poi_id */
+            /** @description Missing or invalid poi_id, cursor, or limit */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1358,6 +1398,45 @@ export interface operations {
             };
             /** @description Story not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listListenings: {
+        parameters: {
+            query: {
+                user_id: string;
+                /** @description Opaque cursor from previous response's next_cursor */
+                cursor?: string;
+                /** @description Number of items per page (default 20, max 100) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated list of listening records */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["UserListening"][];
+                        next_cursor: string;
+                        has_more: boolean;
+                    };
+                };
+            };
+            /** @description Missing user_id or invalid cursor/limit */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2652,8 +2731,10 @@ export interface operations {
         parameters: {
             query?: {
                 status?: "new" | "reviewed" | "resolved" | "dismissed";
-                page?: number;
-                per_page?: number;
+                /** @description Opaque cursor from previous response's next_cursor */
+                cursor?: string;
+                /** @description Number of items per page (default 20, max 100) */
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -2668,9 +2749,19 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        data: components["schemas"]["Report"][];
-                        meta: components["schemas"]["PaginationMeta"];
+                        items: components["schemas"]["Report"][];
+                        next_cursor: string;
+                        has_more: boolean;
                     };
+                };
+            };
+            /** @description Invalid cursor or limit */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Unauthorized */

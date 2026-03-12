@@ -1,14 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { listCities } from '../api';
+import { listAllCities } from '../api';
 import type { City } from '../types';
 
 export function useCities() {
   return useQuery({
     queryKey: ['cities', 'all'],
-    queryFn: async () => {
-      const response = await listCities({ page: 1, per_page: 100 });
-      return response.data as City[];
-    },
+    queryFn: () => listAllCities({ limit: 100 }) as Promise<City[]>,
     staleTime: 60_000,
   });
 }

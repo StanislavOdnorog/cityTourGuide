@@ -1,25 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getStory, listReports, updateReportStatus, updateStory } from '../api';
+import { getStory, listAllReports, updateReportStatus, updateStory } from '../api';
 import type { Report, ReportStatus, Story } from '../types';
 
 interface UseReportsOptions {
   status?: ReportStatus | '';
-  page?: number;
-  perPage?: number;
 }
 
-export function useReports({ status = '', page = 1, perPage = 20 }: UseReportsOptions = {}) {
+export function useReports({ status = '' }: UseReportsOptions = {}) {
   const queryClient = useQueryClient();
 
   const reports = useQuery({
-    queryKey: ['reports', status, page, perPage],
-    queryFn: async () => {
-      return listReports({
-        page,
-        per_page: perPage,
+    queryKey: ['reports', status, 'all'],
+    queryFn: () =>
+      listAllReports({
+        limit: 100,
         ...(status ? { status } : {}),
-      });
-    },
+      }) as Promise<Report[]>,
     staleTime: 15_000,
   });
 
@@ -54,10 +50,7 @@ export function useReports({ status = '', page = 1, perPage = 20 }: UseReportsOp
 export function useNewReportsCount() {
   return useQuery({
     queryKey: ['reports-new-count'],
-    queryFn: async () => {
-      const response = await listReports({ status: 'new', page: 1, per_page: 1 });
-      return response.meta.total;
-    },
+    queryFn: async () => (await listAllReports({ status: 'new', limit: 100 })).length,
     staleTime: 30_000,
   });
 }

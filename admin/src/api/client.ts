@@ -3,7 +3,7 @@ import { API_BASE_URL } from '../constants';
 import type { operations } from './generated';
 import { createGeneratedApiClient } from './generated/runtime';
 import { useAuthStore } from '../store/authStore';
-import type { LoginResponse, TokenPair } from '../types';
+import type { LoginResponse } from '../types';
 
 type RefreshTokenRequest =
   operations['refreshToken']['requestBody']['content']['application/json'];
@@ -53,6 +53,9 @@ apiClient.interceptors.response.use(
           `${API_BASE_URL}/api/v1/auth/refresh`,
           { refresh_token: refreshToken },
         );
+        if (!data.tokens) {
+          throw new Error('Refresh response is missing tokens');
+        }
 
         const { token: currentToken } = useAuthStore.getState();
         if (currentToken) {
@@ -81,6 +84,9 @@ export async function login(email: string, password: string): Promise<LoginRespo
   });
   if (error) {
     throw new Error(error.error);
+  }
+  if (!data.tokens) {
+    throw new Error('Login response is missing tokens');
   }
   return data;
 }

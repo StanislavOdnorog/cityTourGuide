@@ -1,11 +1,15 @@
 export { default as apiClient, generatedApiClient, login } from './client';
 export {
   listCities,
+  listAllCities,
   listPOIs,
+  listAllPOIs,
   getPOI,
   listStories,
+  listAllStories,
   getStory,
   listReports,
+  listAllReports,
   listReportsByPOI,
   listInflationJobsByPOI,
   updateReportStatus,

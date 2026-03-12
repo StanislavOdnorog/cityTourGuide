@@ -37,14 +37,11 @@ export default function ReportsPage() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
 
-  const { reports, updateStatus, disableStory } = useReports({
-    status: filterStatus,
-    page,
-    perPage,
-  });
+  const { reports, updateStatus, disableStory } = useReports({ status: filterStatus });
 
-  const reportData = reports.data?.data ?? [];
-  const total = reports.data?.meta.total ?? 0;
+  const allReports = reports.data ?? [];
+  const total = allReports.length;
+  const reportData = allReports.slice((page - 1) * perPage, page * perPage);
 
   const handleUpdateStatus = (reportId: number, newStatus: ReportStatus) => {
     updateStatus.mutate(

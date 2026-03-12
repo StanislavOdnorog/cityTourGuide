@@ -1,10 +1,19 @@
 import type { operations, POI, Story } from './generated';
 import { generatedApiClient } from './client';
 
-type ListCitiesQuery = operations['listCities']['parameters']['query'];
-type ListPOIsQuery = operations['listPOIs']['parameters']['query'];
-type ListStoriesQuery = operations['listStories']['parameters']['query'];
-type ListReportsQuery = operations['adminListReports']['parameters']['query'];
+type ListCitiesQuery = NonNullable<operations['listCities']['parameters']['query']>;
+type ListPOIsQuery = NonNullable<operations['listPOIs']['parameters']['query']>;
+type ListStoriesQuery = NonNullable<operations['listStories']['parameters']['query']>;
+type ListReportsQuery = NonNullable<operations['adminListReports']['parameters']['query']>;
+type CursorQuery = {
+  cursor?: string;
+  limit?: number;
+};
+type CursorResponse<TItem> = {
+  items: TItem[];
+  next_cursor: string;
+  has_more: boolean;
+};
 type UpdateReportStatusRequest =
   operations['adminUpdateReportStatus']['requestBody']['content']['application/json'];
 type UpdatePOIRequest = operations['adminUpdatePOI']['requestBody']['content']['application/json'];
@@ -17,6 +26,34 @@ type UpdateCityRequest =
 
 function getApiErrorMessage(error: { error?: string } | undefined, fallback: string): string {
   return typeof error?.error === 'string' ? error.error : fallback;
+}
+
+async function collectCursorItems<TItem, TQuery extends CursorQuery>(
+  fetchPage: (query: TQuery) => Promise<CursorResponse<TItem>>,
+  baseQuery: Omit<TQuery, 'cursor'>,
+): Promise<TItem[]> {
+  const items: TItem[] = [];
+  let cursor: string | undefined;
+
+  while (true) {
+    const page = await fetchPage({
+      ...baseQuery,
+      ...(cursor ? { cursor } : {}),
+      limit: baseQuery.limit ?? 100,
+    } as TQuery);
+
+    items.push(...page.items);
+
+    if (!page.has_more) {
+      return items;
+    }
+
+    if (!page.next_cursor) {
+      throw new Error('Cursor pagination response is missing next_cursor');
+    }
+
+    cursor = page.next_cursor;
+  }
 }
 
 function toUpdatePOIRequest(current: POI, updates: Partial<POI>): UpdatePOIRequest {
@@ -52,7 +89,7 @@ function toUpdateStoryRequest(current: Story, updates: Partial<Story>): UpdateSt
   };
 }
 
-export async function listCities(query: ListCitiesQuery) {
+export async function listCities(query: ListCitiesQuery = {}) {
   const { data, error } = await generatedApiClient.GET('/cities', {
     params: { query },
   });
@@ -60,6 +97,10 @@ export async function listCities(query: ListCitiesQuery) {
     throw new Error(getApiErrorMessage(error, 'Failed to fetch cities'));
   }
   return data;
+}
+
+export async function listAllCities(query: ListCitiesQuery = {}) {
+  return collectCursorItems(listCities, query);
 }
 
 export async function listPOIs(query: ListPOIsQuery) {
@@ -70,6 +111,10 @@ export async function listPOIs(query: ListPOIsQuery) {
     throw new Error(getApiErrorMessage(error, 'Failed to fetch POIs'));
   }
   return data;
+}
+
+export async function listAllPOIs(query: ListPOIsQuery) {
+  return collectCursorItems(listPOIs, query);
 }
 
 export async function getPOI(id: number) {
@@ -92,6 +137,10 @@ export async function listStories(query: ListStoriesQuery) {
   return data;
 }
 
+export async function listAllStories(query: ListStoriesQuery) {
+  return collectCursorItems(listStories, query);
+}
+
 export async function getStory(id: number) {
   const { data, error } = await generatedApiClient.GET('/stories/{id}', {
     params: { path: { id } },
@@ -102,7 +151,7 @@ export async function getStory(id: number) {
   return data;
 }
 
-export async function listReports(query: ListReportsQuery) {
+export async function listReports(query: ListReportsQuery = {}) {
   const { data, error } = await generatedApiClient.GET('/admin/reports', {
     params: { query },
   });
@@ -110,6 +159,10 @@ export async function listReports(query: ListReportsQuery) {
     throw new Error(getApiErrorMessage(error, 'Failed to fetch reports'));
   }
   return data;
+}
+
+export async function listAllReports(query: ListReportsQuery = {}) {
+  return collectCursorItems(listReports, query);
 }
 
 export async function listReportsByPOI(id: number) {

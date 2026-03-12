@@ -2,12 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getPOI,
   getStory,
+  listAllStories,
   listInflationJobsByPOI,
   listReportsByPOI,
-  listStories,
-  triggerInflation,
-  updatePOI,
-  updateStory,
+  triggerInflation as triggerInflationRequest,
+  updatePOI as updatePOIRequest,
+  updateStory as updateStoryRequest,
 } from '../api';
 import type {
   InflationJob,
@@ -34,16 +34,16 @@ export function usePOIDetail(poiId: number | null) {
     queryKey: ['poi-stories', poiId],
     queryFn: async () => {
       // Fetch stories for all languages by not specifying language filter
-      const allStories: Story[] = [];
-      for (const lang of ['en', 'ru']) {
-        const response = await listStories({
-          poi_id: poiId as number,
-          language: lang,
-          per_page: 100,
-        });
-        allStories.push(...(response.data as Story[]));
-      }
-      return allStories;
+      const storyLists = await Promise.all(
+        ['en', 'ru'].map((language) =>
+          listAllStories({
+            poi_id: poiId as number,
+            language,
+            limit: 100,
+          }),
+        ),
+      );
+      return storyLists.flat() as Story[];
     },
     enabled: poiId !== null,
     staleTime: 30_000,
@@ -73,7 +73,7 @@ export function usePOIDetail(poiId: number | null) {
     mutationFn: async (updates: Partial<POI>) => {
       const current = poi.data;
       if (!current) throw new Error('POI not loaded');
-      const response = await updatePOI(poiId as number, current, updates);
+      const response = await updatePOIRequest(poiId as number, current, updates);
       return response.data as POI;
     },
     onSuccess: () => {
@@ -84,7 +84,7 @@ export function usePOIDetail(poiId: number | null) {
   const updateStory = useMutation({
     mutationFn: async ({ storyId, updates }: { storyId: number; updates: Partial<Story> }) => {
       const currentResponse = await getStory(storyId);
-      const response = await updateStory(storyId, currentResponse.data as Story, updates);
+      const response = await updateStoryRequest(storyId, currentResponse.data as Story, updates);
       return response.data as Story;
     },
     onSuccess: () => {
@@ -102,7 +102,7 @@ export function usePOIDetail(poiId: number | null) {
     }) => {
       const newStatus: StoryStatus = currentStatus === 'active' ? 'disabled' : 'active';
       const currentResponse = await getStory(storyId);
-      const response = await updateStory(storyId, currentResponse.data as Story, {
+      const response = await updateStoryRequest(storyId, currentResponse.data as Story, {
         status: newStatus,
       });
       return response.data as Story;
@@ -114,7 +114,7 @@ export function usePOIDetail(poiId: number | null) {
 
   const triggerInflation = useMutation({
     mutationFn: async () => {
-      const response = await triggerInflation(poiId as number);
+      const response = await triggerInflationRequest(poiId as number);
       return response.data as InflationJob;
     },
     onSuccess: () => {

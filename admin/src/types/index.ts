@@ -11,7 +11,6 @@ export type {
   Purchase,
   PurchaseStatus,
   DownloadManifestItem,
-  PaginationMeta,
   ApiError,
   POIType,
   POIStatus,

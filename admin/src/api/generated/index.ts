@@ -20,7 +20,6 @@ export type Purchase = components['schemas']['Purchase'];
 export type PurchaseStatus = components['schemas']['PurchaseStatus'];
 export type InflationJob = components['schemas']['InflationJob'];
 export type DownloadManifestItem = components['schemas']['DownloadManifestItem'];
-export type PaginationMeta = components['schemas']['PaginationMeta'];
 export type ApiError = components['schemas']['Error'];
 
 // Enum-like types extracted from schemas

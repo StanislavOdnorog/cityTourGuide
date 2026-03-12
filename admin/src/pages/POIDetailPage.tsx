@@ -135,7 +135,7 @@ export default function POIDetailPage() {
   const handleTriggerInflation = () => {
     triggerInflation.mutate(undefined, {
       onSuccess: () => message.success('Inflation job created'),
-      onError: (err) => {
+      onError: (err: unknown) => {
         const errorMsg =
           err && typeof err === 'object' && 'response' in err
             ? ((err as { response?: { data?: { error?: string } } }).response?.data?.error ??

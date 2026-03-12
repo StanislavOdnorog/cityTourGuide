@@ -28,7 +28,12 @@ export default function LoginPage() {
         return;
       }
 
-      setAuth(result.tokens.access_token, result.tokens.refresh_token, result.data);
+      const { tokens } = result;
+      if (!tokens) {
+        throw new Error('Login response is missing tokens');
+      }
+
+      setAuth(tokens.access_token, tokens.refresh_token, result.data);
       message.success('Login successful');
       navigate('/', { replace: true });
     } catch (err) {
