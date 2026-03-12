@@ -9,6 +9,74 @@ import (
 	"github.com/saas/city-stories-guide/backend/internal/domain"
 )
 
+// ListByUserID returns listening records for a user with cursor-based pagination, ordered by id ASC.
+func (r *ListeningRepo) ListByUserID(ctx context.Context, userID string, page domain.PageRequest) (*domain.PageResponse[domain.UserListening], error) {
+	if err := page.NormalizeLimit(); err != nil {
+		return nil, fmt.Errorf("listening_repo: list: %w", err)
+	}
+
+	query := `
+		SELECT id, user_id, story_id, listened_at, completed,
+			ST_Y(location::geometry) AS lat,
+			ST_X(location::geometry) AS lng
+		FROM user_listening
+		WHERE user_id = $1`
+
+	args := []interface{}{userID}
+	argIdx := 2
+
+	if page.Cursor != "" {
+		cursorID, err := domain.DecodeCursor(page.Cursor)
+		if err != nil {
+			return nil, fmt.Errorf("listening_repo: list: %w", err)
+		}
+		query += fmt.Sprintf(" AND id > $%d", argIdx)
+		args = append(args, cursorID)
+		argIdx++
+	}
+
+	query += fmt.Sprintf(" ORDER BY id ASC LIMIT $%d", argIdx)
+	args = append(args, page.Limit+1)
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listening_repo: list: %w", err)
+	}
+	defer rows.Close()
+
+	var listenings []domain.UserListening
+	for rows.Next() {
+		var l domain.UserListening
+		if err := rows.Scan(
+			&l.ID, &l.UserID, &l.StoryID, &l.ListenedAt, &l.Completed,
+			&l.Lat, &l.Lng,
+		); err != nil {
+			return nil, fmt.Errorf("listening_repo: list scan: %w", err)
+		}
+		listenings = append(listenings, l)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("listening_repo: list rows: %w", err)
+	}
+
+	hasMore := len(listenings) > page.Limit
+	if hasMore {
+		listenings = listenings[:page.Limit]
+	}
+
+	var nextCursor string
+	if hasMore && len(listenings) > 0 {
+		nextCursor = domain.EncodeCursor(listenings[len(listenings)-1].ID)
+	}
+
+	return &domain.PageResponse[domain.UserListening]{
+		Items:      listenings,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+	}, nil
+}
+
 // ListeningRepo handles database operations for user listening records.
 type ListeningRepo struct {
 	pool *pgxpool.Pool

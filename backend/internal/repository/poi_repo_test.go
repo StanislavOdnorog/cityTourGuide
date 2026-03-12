@@ -5,6 +5,7 @@ package repository_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/saas/city-stories-guide/backend/internal/domain"
@@ -327,6 +328,185 @@ func TestPOIRepo_Delete_NotFound(t *testing.T) {
 	}
 }
 
+func TestPOIRepo_ListByCityID_PaginationTraversal(t *testing.T) {
+	tp := setupTestPool(t)
+	defer tp.Close()
+
+	cityRepo := repository.NewCityRepo(tp.Pool)
+	poiRepo := repository.NewPOIRepo(tp.Pool)
+	ctx := context.Background()
+
+	city := createTestCity(t, cityRepo, ctx)
+	defer func() { _ = cityRepo.Delete(ctx, city.ID) }()
+
+	created := []*domain.POI{
+		createTestPOI(t, poiRepo, ctx, city.ID, "Page POI 1", 41.6900, 44.8000),
+		createTestPOI(t, poiRepo, ctx, city.ID, "Page POI 2", 41.6910, 44.8010),
+		createTestPOI(t, poiRepo, ctx, city.ID, "Page POI 3", 41.6920, 44.8020),
+	}
+
+	firstPage, err := poiRepo.ListByCityID(ctx, city.ID, nil, nil, domain.PageRequest{Limit: 2})
+	if err != nil {
+		t.Fatalf("list first page: %v", err)
+	}
+
+	if len(firstPage.Items) != 2 {
+		t.Fatalf("expected 2 items on first page, got %d", len(firstPage.Items))
+	}
+	if !firstPage.HasMore {
+		t.Fatal("expected first page to have more results")
+	}
+	if firstPage.NextCursor == "" {
+		t.Fatal("expected next cursor on first page")
+	}
+
+	secondPage, err := poiRepo.ListByCityID(ctx, city.ID, nil, nil, domain.PageRequest{
+		Cursor: firstPage.NextCursor,
+		Limit:  2,
+	})
+	if err != nil {
+		t.Fatalf("list second page: %v", err)
+	}
+
+	if len(secondPage.Items) != 1 {
+		t.Fatalf("expected 1 item on second page, got %d", len(secondPage.Items))
+	}
+	if secondPage.HasMore {
+		t.Fatal("expected second page to be terminal")
+	}
+	if secondPage.NextCursor != "" {
+		t.Fatal("expected empty next cursor on terminal page")
+	}
+
+	seen := make(map[int]int)
+	for _, poi := range firstPage.Items {
+		seen[poi.ID]++
+	}
+	for _, poi := range secondPage.Items {
+		seen[poi.ID]++
+	}
+
+	for _, poi := range created {
+		if seen[poi.ID] != 1 {
+			t.Fatalf("expected poi %d to appear exactly once, got %d", poi.ID, seen[poi.ID])
+		}
+	}
+}
+
+func TestPOIRepo_ListByCityID_InvalidCursor(t *testing.T) {
+	tp := setupTestPool(t)
+	defer tp.Close()
+
+	cityRepo := repository.NewCityRepo(tp.Pool)
+	poiRepo := repository.NewPOIRepo(tp.Pool)
+	ctx := context.Background()
+
+	city := createTestCity(t, cityRepo, ctx)
+	defer func() { _ = cityRepo.Delete(ctx, city.ID) }()
+
+	_, err := poiRepo.ListByCityID(ctx, city.ID, nil, nil, domain.PageRequest{
+		Cursor: "not-base64",
+		Limit:  20,
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid cursor")
+	}
+	if got := err.Error(); !strings.Contains(got, "invalid cursor") {
+		t.Fatalf("expected wrapped descriptive error, got %q", got)
+	}
+}
+
+func TestPOIRepo_FindNearby_PaginationByDistanceCursor(t *testing.T) {
+	tp := setupTestPool(t)
+	defer tp.Close()
+
+	cityRepo := repository.NewCityRepo(tp.Pool)
+	poiRepo := repository.NewPOIRepo(tp.Pool)
+	ctx := context.Background()
+
+	city := createTestCity(t, cityRepo, ctx)
+	defer func() { _ = cityRepo.Delete(ctx, city.ID) }()
+
+	poi1 := createTestPOI(t, poiRepo, ctx, city.ID, "Nearby Page 1", 41.6927, 44.8090)
+	poi2 := createTestPOI(t, poiRepo, ctx, city.ID, "Nearby Page 2", 41.6932, 44.8078)
+	poi3 := createTestPOI(t, poiRepo, ctx, city.ID, "Nearby Page 3", 41.6940, 44.8065)
+
+	for _, poiID := range []int{poi1.ID, poi2.ID, poi3.ID} {
+		if _, err := tp.Pool.Exec(ctx,
+			`INSERT INTO story (poi_id, language, text, layer_type, status) VALUES ($1, 'en', 'Nearby story', 'general', 'active')`,
+			poiID,
+		); err != nil {
+			t.Fatalf("insert story for poi %d: %v", poiID, err)
+		}
+	}
+
+	firstPage, err := poiRepo.FindNearby(ctx, 41.6927, 44.8090, 500, city.ID, "en", domain.PageRequest{Limit: 2})
+	if err != nil {
+		t.Fatalf("find nearby first page: %v", err)
+	}
+
+	if len(firstPage.Items) != 2 {
+		t.Fatalf("expected 2 items on first page, got %d", len(firstPage.Items))
+	}
+	if !firstPage.HasMore {
+		t.Fatal("expected first page to have more results")
+	}
+	if firstPage.NextCursor == "" {
+		t.Fatal("expected next cursor on first page")
+	}
+
+	if firstPage.Items[0].DistanceM > firstPage.Items[1].DistanceM {
+		t.Fatal("expected first page items sorted by distance ascending")
+	}
+
+	secondPage, err := poiRepo.FindNearby(ctx, 41.6927, 44.8090, 500, city.ID, "en", domain.PageRequest{
+		Cursor: firstPage.NextCursor,
+		Limit:  2,
+	})
+	if err != nil {
+		t.Fatalf("find nearby second page: %v", err)
+	}
+
+	if len(secondPage.Items) != 1 {
+		t.Fatalf("expected 1 item on second page, got %d", len(secondPage.Items))
+	}
+	if secondPage.HasMore {
+		t.Fatal("expected second page to be terminal")
+	}
+
+	lastFirst := firstPage.Items[len(firstPage.Items)-1]
+	firstSecond := secondPage.Items[0]
+	if firstSecond.DistanceM < lastFirst.DistanceM {
+		t.Fatal("expected second page to continue distance ordering")
+	}
+	if firstSecond.DistanceM == lastFirst.DistanceM && firstSecond.ID <= lastFirst.ID {
+		t.Fatal("expected second page to continue tie-break ordering by id")
+	}
+}
+
+func TestPOIRepo_FindNearby_InvalidCursor(t *testing.T) {
+	tp := setupTestPool(t)
+	defer tp.Close()
+
+	cityRepo := repository.NewCityRepo(tp.Pool)
+	poiRepo := repository.NewPOIRepo(tp.Pool)
+	ctx := context.Background()
+
+	city := createTestCity(t, cityRepo, ctx)
+	defer func() { _ = cityRepo.Delete(ctx, city.ID) }()
+
+	_, err := poiRepo.FindNearby(ctx, 41.6927, 44.8090, 500, city.ID, "en", domain.PageRequest{
+		Cursor: "not-base64",
+		Limit:  20,
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid cursor")
+	}
+	if got := err.Error(); !strings.Contains(got, "invalid cursor") {
+		t.Fatalf("expected wrapped descriptive error, got %q", got)
+	}
+}
+
 func TestPOIRepo_FindNearby(t *testing.T) {
 	tp := setupTestPool(t)
 	defer tp.Close()
@@ -371,17 +551,17 @@ func TestPOIRepo_FindNearby(t *testing.T) {
 	}
 
 	// Search from Rike Park area with 500m radius
-	results, err := poiRepo.FindNearby(ctx, 41.6927, 44.8090, 500, city.ID, "en")
+	results, err := poiRepo.FindNearby(ctx, 41.6927, 44.8090, 500, city.ID, "en", domain.PageRequest{Limit: domain.DefaultPageLimit})
 	if err != nil {
 		t.Fatalf("FindNearby failed: %v", err)
 	}
 
-	if len(results) < 2 {
-		t.Errorf("expected at least 2 nearby POIs with stories, got %d", len(results))
+	if len(results.Items) < 2 {
+		t.Errorf("expected at least 2 nearby POIs with stories, got %d", len(results.Items))
 	}
 
 	// Verify distance_m is populated and reasonable
-	for _, r := range results {
+	for _, r := range results.Items {
 		if r.DistanceM < 0 {
 			t.Errorf("expected non-negative distance_m, got %f for %s", r.DistanceM, r.Name)
 		}
@@ -413,17 +593,17 @@ func TestPOIRepo_FindNearby_SmallRadius(t *testing.T) {
 		farPOI.ID)
 
 	// Search with very small radius (50m) from closePOI location
-	results, err := poiRepo.FindNearby(ctx, 41.6927, 44.8090, 50, city.ID, "en")
+	results, err := poiRepo.FindNearby(ctx, 41.6927, 44.8090, 50, city.ID, "en", domain.PageRequest{Limit: domain.DefaultPageLimit})
 	if err != nil {
 		t.Fatalf("FindNearby small radius failed: %v", err)
 	}
 
 	// Should find only the close POI
-	if len(results) != 1 {
-		t.Errorf("expected 1 nearby POI with small radius, got %d", len(results))
+	if len(results.Items) != 1 {
+		t.Errorf("expected 1 nearby POI with small radius, got %d", len(results.Items))
 	}
-	if len(results) > 0 && results[0].Name != "Close POI" {
-		t.Errorf("expected 'Close POI', got %s", results[0].Name)
+	if len(results.Items) > 0 && results.Items[0].Name != "Close POI" {
+		t.Errorf("expected 'Close POI', got %s", results.Items[0].Name)
 	}
 }
 
@@ -446,21 +626,21 @@ func TestPOIRepo_FindNearby_LanguageFilter(t *testing.T) {
 		poi.ID)
 
 	// Search for English stories — should find none
-	results, err := poiRepo.FindNearby(ctx, 41.6927, 44.8090, 500, city.ID, "en")
+	results, err := poiRepo.FindNearby(ctx, 41.6927, 44.8090, 500, city.ID, "en", domain.PageRequest{Limit: domain.DefaultPageLimit})
 	if err != nil {
 		t.Fatalf("FindNearby EN failed: %v", err)
 	}
-	if len(results) != 0 {
-		t.Errorf("expected 0 results for EN, got %d", len(results))
+	if len(results.Items) != 0 {
+		t.Errorf("expected 0 results for EN, got %d", len(results.Items))
 	}
 
 	// Search for Russian stories — should find one
-	results, err = poiRepo.FindNearby(ctx, 41.6927, 44.8090, 500, city.ID, "ru")
+	results, err = poiRepo.FindNearby(ctx, 41.6927, 44.8090, 500, city.ID, "ru", domain.PageRequest{Limit: domain.DefaultPageLimit})
 	if err != nil {
 		t.Fatalf("FindNearby RU failed: %v", err)
 	}
-	if len(results) != 1 {
-		t.Errorf("expected 1 result for RU, got %d", len(results))
+	if len(results.Items) != 1 {
+		t.Errorf("expected 1 result for RU, got %d", len(results.Items))
 	}
 }
 

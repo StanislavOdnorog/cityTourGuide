@@ -16,6 +16,7 @@ type ReportRepository interface {
 	Create(ctx context.Context, storyID int, userID string, reportType domain.ReportType, comment *string, lat, lng *float64) (*domain.Report, error)
 	GetByID(ctx context.Context, id int) (*domain.Report, error)
 	GetAll(ctx context.Context, status string, page, perPage int) ([]domain.Report, int, error)
+	List(ctx context.Context, status string, page domain.PageRequest) (*domain.PageResponse[domain.Report], error)
 	UpdateStatus(ctx context.Context, id int, status domain.ReportStatus) (*domain.Report, error)
 	GetByPOIID(ctx context.Context, poiID int) ([]domain.Report, error)
 }
@@ -95,25 +96,30 @@ func (h *ReportHandler) CreateReport(c *gin.Context) {
 // ListReports handles GET /api/v1/admin/reports.
 func (h *ReportHandler) ListReports(c *gin.Context) {
 	status := c.Query("status")
-	page, perPage := parsePagination(c)
 
-	reports, total, err := h.repo.GetAll(c.Request.Context(), status, page, perPage)
+	pageReq, ok := parseCursorPagination(c)
+	if !ok {
+		return
+	}
+
+	result, err := h.repo.List(c.Request.Context(), status, pageReq)
 	if err != nil {
+		if isCursorError(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch reports"})
 		return
 	}
 
-	if reports == nil {
-		reports = []domain.Report{}
+	if result.Items == nil {
+		result.Items = []domain.Report{}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data": reports,
-		"meta": gin.H{
-			"total":    total,
-			"page":     page,
-			"per_page": perPage,
-		},
+		"items":       result.Items,
+		"next_cursor": result.NextCursor,
+		"has_more":    result.HasMore,
 	})
 }
 

@@ -119,6 +119,79 @@ func (r *StoryRepo) GetByPOIID(ctx context.Context, poiID int, language string, 
 	return stories, nil
 }
 
+// ListByPOIID returns stories with cursor-based pagination, ordered by id ASC.
+func (r *StoryRepo) ListByPOIID(ctx context.Context, poiID int, language string, status *domain.StoryStatus, page domain.PageRequest) (*domain.PageResponse[domain.Story], error) {
+	if err := page.NormalizeLimit(); err != nil {
+		return nil, fmt.Errorf("story_repo: list: %w", err)
+	}
+
+	query := `
+		SELECT id, poi_id, language, text, audio_url, duration_sec, layer_type, order_index, is_inflation, confidence, sources, status, created_at, updated_at
+		FROM story
+		WHERE poi_id = $1 AND language = $2`
+
+	args := []interface{}{poiID, language}
+	argIdx := 3
+
+	if status != nil {
+		query += fmt.Sprintf(" AND status = $%d", argIdx)
+		args = append(args, *status)
+		argIdx++
+	}
+
+	if page.Cursor != "" {
+		cursorID, err := domain.DecodeCursor(page.Cursor)
+		if err != nil {
+			return nil, fmt.Errorf("story_repo: list: %w", err)
+		}
+		query += fmt.Sprintf(" AND id > $%d", argIdx)
+		args = append(args, cursorID)
+		argIdx++
+	}
+
+	query += fmt.Sprintf(" ORDER BY id ASC LIMIT $%d", argIdx)
+	args = append(args, page.Limit+1)
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("story_repo: list: %w", err)
+	}
+	defer rows.Close()
+
+	var stories []domain.Story
+	for rows.Next() {
+		var s domain.Story
+		if err := rows.Scan(
+			&s.ID, &s.POIID, &s.Language, &s.Text, &s.AudioURL, &s.DurationSec,
+			&s.LayerType, &s.OrderIndex, &s.IsInflation, &s.Confidence, &s.Sources,
+			&s.Status, &s.CreatedAt, &s.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("story_repo: list scan: %w", err)
+		}
+		stories = append(stories, s)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("story_repo: list rows: %w", err)
+	}
+
+	hasMore := len(stories) > page.Limit
+	if hasMore {
+		stories = stories[:page.Limit]
+	}
+
+	var nextCursor string
+	if hasMore && len(stories) > 0 {
+		nextCursor = domain.EncodeCursor(stories[len(stories)-1].ID)
+	}
+
+	return &domain.PageResponse[domain.Story]{
+		Items:      stories,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+	}, nil
+}
+
 // Update modifies an existing story and returns the updated record.
 func (r *StoryRepo) Update(ctx context.Context, story *domain.Story) (*domain.Story, error) {
 	query := `

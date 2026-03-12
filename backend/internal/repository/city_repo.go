@@ -89,7 +89,7 @@ func (r *CityRepo) GetByID(ctx context.Context, id int) (*domain.City, error) {
 	return &c, nil
 }
 
-// GetAll returns all cities ordered by name.
+// GetAll returns all cities ordered by name (unpaginated, for internal use).
 func (r *CityRepo) GetAll(ctx context.Context) ([]domain.City, error) {
 	query := `
 		SELECT id, name, name_ru, country, center_lat, center_lng, radius_km, is_active, download_size_mb, created_at, updated_at
@@ -128,6 +128,80 @@ func (r *CityRepo) GetAll(ctx context.Context) ([]domain.City, error) {
 	}
 
 	return cities, nil
+}
+
+// List returns cities with cursor-based pagination, ordered by id ASC.
+func (r *CityRepo) List(ctx context.Context, page domain.PageRequest) (*domain.PageResponse[domain.City], error) {
+	if err := page.NormalizeLimit(); err != nil {
+		return nil, fmt.Errorf("city_repo: list: %w", err)
+	}
+
+	query := `
+		SELECT id, name, name_ru, country, center_lat, center_lng, radius_km, is_active, download_size_mb, created_at, updated_at
+		FROM cities`
+
+	args := []interface{}{}
+	argIdx := 1
+
+	if page.Cursor != "" {
+		cursorID, err := domain.DecodeCursor(page.Cursor)
+		if err != nil {
+			return nil, fmt.Errorf("city_repo: list: %w", err)
+		}
+		query += fmt.Sprintf(" WHERE id > $%d", argIdx)
+		args = append(args, cursorID)
+		argIdx++
+	}
+
+	query += fmt.Sprintf(" ORDER BY id ASC LIMIT $%d", argIdx)
+	args = append(args, page.Limit+1)
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("city_repo: list: %w", err)
+	}
+	defer rows.Close()
+
+	var cities []domain.City
+	for rows.Next() {
+		var c domain.City
+		if err := rows.Scan(
+			&c.ID,
+			&c.Name,
+			&c.NameRu,
+			&c.Country,
+			&c.CenterLat,
+			&c.CenterLng,
+			&c.RadiusKm,
+			&c.IsActive,
+			&c.DownloadSizeMB,
+			&c.CreatedAt,
+			&c.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("city_repo: list scan: %w", err)
+		}
+		cities = append(cities, c)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("city_repo: list rows: %w", err)
+	}
+
+	hasMore := len(cities) > page.Limit
+	if hasMore {
+		cities = cities[:page.Limit]
+	}
+
+	var nextCursor string
+	if hasMore && len(cities) > 0 {
+		nextCursor = domain.EncodeCursor(cities[len(cities)-1].ID)
+	}
+
+	return &domain.PageResponse[domain.City]{
+		Items:      cities,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+	}, nil
 }
 
 // Update modifies an existing city and returns the updated record.

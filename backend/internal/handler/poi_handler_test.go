@@ -63,6 +63,25 @@ func (m *mockPOIRepo) Update(_ context.Context, poi *domain.POI) (*domain.POI, e
 	return poi, nil
 }
 
+func (m *mockPOIRepo) ListByCityID(_ context.Context, cityID int, status *domain.POIStatus, poiType *domain.POIType, page domain.PageRequest) (*domain.PageResponse[domain.POI], error) {
+	m.calledCityID = cityID
+	m.calledStatus = status
+	m.calledType = poiType
+	if m.err != nil {
+		return nil, m.err
+	}
+	items := m.pois
+	hasMore := false
+	if len(items) > page.Limit {
+		items = items[:page.Limit]
+		hasMore = true
+	}
+	return &domain.PageResponse[domain.POI]{
+		Items:   items,
+		HasMore: hasMore,
+	}, nil
+}
+
 func (m *mockPOIRepo) Delete(_ context.Context, _ int) error {
 	if m.deleteErr != nil {
 		return m.deleteErr
@@ -100,21 +119,18 @@ func TestListPOIs_Success(t *testing.T) {
 	}
 
 	var resp struct {
-		Data []domain.POI `json:"data"`
-		Meta struct {
-			Total   int `json:"total"`
-			Page    int `json:"page"`
-			PerPage int `json:"per_page"`
-		} `json:"meta"`
+		Items      []domain.POI `json:"items"`
+		NextCursor string       `json:"next_cursor"`
+		HasMore    bool         `json:"has_more"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
-	if len(resp.Data) != 2 {
-		t.Errorf("expected 2 POIs, got %d", len(resp.Data))
+	if len(resp.Items) != 2 {
+		t.Errorf("expected 2 POIs, got %d", len(resp.Items))
 	}
-	if resp.Meta.Total != 2 {
-		t.Errorf("expected total=2, got %d", resp.Meta.Total)
+	if resp.HasMore {
+		t.Error("expected has_more=false")
 	}
 }
 
@@ -173,7 +189,7 @@ func TestListPOIs_Pagination(t *testing.T) {
 	h := NewPOIHandler(mock)
 	r := setupPOIRouter(h)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/pois?city_id=1&page=2&per_page=10", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/pois?city_id=1&limit=10", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -182,21 +198,18 @@ func TestListPOIs_Pagination(t *testing.T) {
 	}
 
 	var resp struct {
-		Data []domain.POI `json:"data"`
-		Meta struct {
-			Total   int `json:"total"`
-			Page    int `json:"page"`
-			PerPage int `json:"per_page"`
-		} `json:"meta"`
+		Items      []domain.POI `json:"items"`
+		NextCursor string       `json:"next_cursor"`
+		HasMore    bool         `json:"has_more"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
-	if len(resp.Data) != 10 {
-		t.Errorf("expected 10 POIs on page 2, got %d", len(resp.Data))
+	if len(resp.Items) != 10 {
+		t.Errorf("expected 10 POIs, got %d", len(resp.Items))
 	}
-	if resp.Meta.Total != 30 {
-		t.Errorf("expected total=30, got %d", resp.Meta.Total)
+	if !resp.HasMore {
+		t.Error("expected has_more=true")
 	}
 }
 

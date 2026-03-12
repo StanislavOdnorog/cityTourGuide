@@ -115,6 +115,86 @@ func (r *ReportRepo) GetAll(ctx context.Context, status string, page, perPage in
 	return reports, total, rows.Err()
 }
 
+// List returns reports with cursor-based pagination, ordered by id ASC.
+func (r *ReportRepo) List(ctx context.Context, status string, page domain.PageRequest) (*domain.PageResponse[domain.Report], error) {
+	if err := page.NormalizeLimit(); err != nil {
+		return nil, fmt.Errorf("report_repo: list: %w", err)
+	}
+
+	query := `
+		SELECT id, story_id, user_id, type, comment,
+		       user_lat, user_lng, status, resolved_at, created_at
+		FROM report`
+
+	args := []interface{}{}
+	argIdx := 1
+	conditions := []string{}
+
+	if status != "" {
+		conditions = append(conditions, fmt.Sprintf("status = $%d", argIdx))
+		args = append(args, status)
+		argIdx++
+	}
+
+	if page.Cursor != "" {
+		cursorID, err := domain.DecodeCursor(page.Cursor)
+		if err != nil {
+			return nil, fmt.Errorf("report_repo: list: %w", err)
+		}
+		conditions = append(conditions, fmt.Sprintf("id > $%d", argIdx))
+		args = append(args, cursorID)
+		argIdx++
+	}
+
+	if len(conditions) > 0 {
+		query += " WHERE " + conditions[0]
+		for _, cond := range conditions[1:] {
+			query += " AND " + cond
+		}
+	}
+
+	query += fmt.Sprintf(" ORDER BY id ASC LIMIT $%d", argIdx)
+	args = append(args, page.Limit+1)
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("report_repo: list: %w", err)
+	}
+	defer rows.Close()
+
+	var reports []domain.Report
+	for rows.Next() {
+		var rep domain.Report
+		if err := rows.Scan(
+			&rep.ID, &rep.StoryID, &rep.UserID, &rep.Type, &rep.Comment,
+			&rep.UserLat, &rep.UserLng, &rep.Status, &rep.ResolvedAt, &rep.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("report_repo: list scan: %w", err)
+		}
+		reports = append(reports, rep)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("report_repo: list rows: %w", err)
+	}
+
+	hasMore := len(reports) > page.Limit
+	if hasMore {
+		reports = reports[:page.Limit]
+	}
+
+	var nextCursor string
+	if hasMore && len(reports) > 0 {
+		nextCursor = domain.EncodeCursor(reports[len(reports)-1].ID)
+	}
+
+	return &domain.PageResponse[domain.Report]{
+		Items:      reports,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+	}, nil
+}
+
 // UpdateStatus updates a report's status and sets resolved_at when applicable.
 func (r *ReportRepo) UpdateStatus(ctx context.Context, id int, status domain.ReportStatus) (*domain.Report, error) {
 	var resolvedAt *time.Time

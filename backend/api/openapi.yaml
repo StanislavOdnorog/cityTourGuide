@@ -63,22 +63,40 @@ components:
         error:
           type: string
           example: invalid request
-    PaginationMeta:
+    CursorPaginationParams:
+      description: Common cursor-based pagination query parameters
+      type: object
+      properties:
+        cursor:
+          type: string
+          description: Opaque cursor for the next page (from previous response's next_cursor)
+          example: aWQ6NDI=
+        limit:
+          type: integer
+          description: Number of items per page
+          default: 20
+          minimum: 1
+          maximum: 100
+          example: 20
+    CursorPaginatedResponse:
+      description: Common cursor-based pagination response fields
       type: object
       required:
-      - total
-      - page
-      - per_page
+      - next_cursor
+      - has_more
       properties:
-        total:
-          type: integer
-          example: 42
-        page:
-          type: integer
-          example: 1
-        per_page:
-          type: integer
-          example: 20
+        items:
+          type: array
+          description: Page items. Concrete endpoints specify the item schema.
+          items: {}
+        next_cursor:
+          type: string
+          description: Opaque cursor to pass as cursor param for the next page. Empty string if no more pages.
+          example: aWQ6NDI=
+        has_more:
+          type: boolean
+          description: Whether there are more pages after this one
+          example: true
     City:
       type: object
       required:
@@ -840,14 +858,14 @@ paths:
       summary: List cities
       operationId: listCities
       parameters:
-      - name: page
+      - name: cursor
         in: query
+        description: Opaque cursor from previous response's next_cursor
         schema:
-          type: integer
-          default: 1
-          minimum: 1
-      - name: per_page
+          type: string
+      - name: limit
         in: query
+        description: Number of items per page (default 20, max 100)
         schema:
           type: integer
           default: 20
@@ -861,15 +879,24 @@ paths:
               schema:
                 type: object
                 properties:
-                  data:
+                  items:
                     type: array
                     items:
                       $ref: '#/components/schemas/City'
-                  meta:
-                    $ref: '#/components/schemas/PaginationMeta'
+                  next_cursor:
+                    type: string
+                  has_more:
+                    type: boolean
                 required:
-                - data
-                - meta
+                - items
+                - next_cursor
+                - has_more
+        '400':
+          description: Invalid cursor or limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal server error
           content:
@@ -990,14 +1017,14 @@ paths:
           - museum
           - district
           - other
-      - name: page
+      - name: cursor
         in: query
+        description: Opaque cursor from previous response's next_cursor
         schema:
-          type: integer
-          default: 1
-          minimum: 1
-      - name: per_page
+          type: string
+      - name: limit
         in: query
+        description: Number of items per page (default 20, max 100)
         schema:
           type: integer
           default: 20
@@ -1011,17 +1038,20 @@ paths:
               schema:
                 type: object
                 properties:
-                  data:
+                  items:
                     type: array
                     items:
                       $ref: '#/components/schemas/POI'
-                  meta:
-                    $ref: '#/components/schemas/PaginationMeta'
+                  next_cursor:
+                    type: string
+                  has_more:
+                    type: boolean
                 required:
-                - data
-                - meta
+                - items
+                - next_cursor
+                - has_more
         '400':
-          description: Missing city_id
+          description: Missing or invalid city_id, cursor, or limit
           content:
             application/json:
               schema:
@@ -1082,14 +1112,14 @@ paths:
           - disabled
           - reported
           - pending_review
-      - name: page
+      - name: cursor
         in: query
+        description: Opaque cursor from previous response's next_cursor
         schema:
-          type: integer
-          default: 1
-          minimum: 1
-      - name: per_page
+          type: string
+      - name: limit
         in: query
+        description: Number of items per page (default 20, max 100)
         schema:
           type: integer
           default: 20
@@ -1103,17 +1133,20 @@ paths:
               schema:
                 type: object
                 properties:
-                  data:
+                  items:
                     type: array
                     items:
                       $ref: '#/components/schemas/Story'
-                  meta:
-                    $ref: '#/components/schemas/PaginationMeta'
+                  next_cursor:
+                    type: string
+                  has_more:
+                    type: boolean
                 required:
-                - data
-                - meta
+                - items
+                - next_cursor
+                - has_more
         '400':
-          description: Missing poi_id
+          description: Missing or invalid poi_id, cursor, or limit
           content:
             application/json:
               schema:
@@ -1149,6 +1182,57 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
   /listenings:
+    get:
+      tags:
+      - Listenings
+      summary: List listening history for a user
+      operationId: listListenings
+      parameters:
+      - name: user_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: cursor
+        in: query
+        description: Opaque cursor from previous response's next_cursor
+        schema:
+          type: string
+      - name: limit
+        in: query
+        description: Number of items per page (default 20, max 100)
+        schema:
+          type: integer
+          default: 20
+          minimum: 1
+          maximum: 100
+      responses:
+        '200':
+          description: Paginated list of listening records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserListening'
+                  next_cursor:
+                    type: string
+                  has_more:
+                    type: boolean
+                required:
+                - items
+                - next_cursor
+                - has_more
+        '400':
+          description: Missing user_id or invalid cursor/limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     post:
       tags:
       - Listenings
@@ -2487,14 +2571,14 @@ paths:
           - reviewed
           - resolved
           - dismissed
-      - name: page
+      - name: cursor
         in: query
+        description: Opaque cursor from previous response's next_cursor
         schema:
-          type: integer
-          default: 1
-          minimum: 1
-      - name: per_page
+          type: string
+      - name: limit
         in: query
+        description: Number of items per page (default 20, max 100)
         schema:
           type: integer
           default: 20
@@ -2508,15 +2592,24 @@ paths:
               schema:
                 type: object
                 properties:
-                  data:
+                  items:
                     type: array
                     items:
                       $ref: '#/components/schemas/Report'
-                  meta:
-                    $ref: '#/components/schemas/PaginationMeta'
+                  next_cursor:
+                    type: string
+                  has_more:
+                    type: boolean
                 required:
-                - data
-                - meta
+                - items
+                - next_cursor
+                - has_more
+        '400':
+          description: Invalid cursor or limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Unauthorized
           content:

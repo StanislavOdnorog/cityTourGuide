@@ -18,6 +18,7 @@ type POIRepository interface {
 	Create(ctx context.Context, poi *domain.POI) (*domain.POI, error)
 	GetByID(ctx context.Context, id int) (*domain.POI, error)
 	GetByCityID(ctx context.Context, cityID int, status *domain.POIStatus, poiType *domain.POIType) ([]domain.POI, error)
+	ListByCityID(ctx context.Context, cityID int, status *domain.POIStatus, poiType *domain.POIType, page domain.PageRequest) (*domain.PageResponse[domain.POI], error)
 	Update(ctx context.Context, poi *domain.POI) (*domain.POI, error)
 	Delete(ctx context.Context, id int) error
 }
@@ -85,35 +86,29 @@ func (h *POIHandler) ListPOIs(c *gin.Context) {
 		typeFilter = &pt
 	}
 
-	pois, err := h.repo.GetByCityID(c.Request.Context(), cityID, statusFilter, typeFilter)
+	pageReq, ok := parseCursorPagination(c)
+	if !ok {
+		return
+	}
+
+	result, err := h.repo.ListByCityID(c.Request.Context(), cityID, statusFilter, typeFilter, pageReq)
 	if err != nil {
+		if isCursorError(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch POIs"})
 		return
 	}
 
-	if pois == nil {
-		pois = []domain.POI{}
-	}
-
-	page, perPage := parsePagination(c)
-	total := len(pois)
-
-	start := (page - 1) * perPage
-	if start > total {
-		start = total
-	}
-	end := start + perPage
-	if end > total {
-		end = total
+	if result.Items == nil {
+		result.Items = []domain.POI{}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data": pois[start:end],
-		"meta": gin.H{
-			"total":    total,
-			"page":     page,
-			"per_page": perPage,
-		},
+		"items":       result.Items,
+		"next_cursor": result.NextCursor,
+		"has_more":    result.HasMore,
 	})
 }
 

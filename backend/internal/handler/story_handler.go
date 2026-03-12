@@ -17,6 +17,7 @@ type StoryRepository interface {
 	Create(ctx context.Context, story *domain.Story) (*domain.Story, error)
 	GetByID(ctx context.Context, id int) (*domain.Story, error)
 	GetByPOIID(ctx context.Context, poiID int, language string, status *domain.StoryStatus) ([]domain.Story, error)
+	ListByPOIID(ctx context.Context, poiID int, language string, status *domain.StoryStatus, page domain.PageRequest) (*domain.PageResponse[domain.Story], error)
 	Update(ctx context.Context, story *domain.Story) (*domain.Story, error)
 	Delete(ctx context.Context, id int) error
 }
@@ -82,35 +83,29 @@ func (h *StoryHandler) ListStories(c *gin.Context) {
 		statusFilter = &st
 	}
 
-	stories, err := h.repo.GetByPOIID(c.Request.Context(), poiID, language, statusFilter)
+	pageReq, ok := parseCursorPagination(c)
+	if !ok {
+		return
+	}
+
+	result, err := h.repo.ListByPOIID(c.Request.Context(), poiID, language, statusFilter, pageReq)
 	if err != nil {
+		if isCursorError(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch stories"})
 		return
 	}
 
-	if stories == nil {
-		stories = []domain.Story{}
-	}
-
-	page, perPage := parsePagination(c)
-	total := len(stories)
-
-	start := (page - 1) * perPage
-	if start > total {
-		start = total
-	}
-	end := start + perPage
-	if end > total {
-		end = total
+	if result.Items == nil {
+		result.Items = []domain.Story{}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data": stories[start:end],
-		"meta": gin.H{
-			"total":    total,
-			"page":     page,
-			"per_page": perPage,
-		},
+		"items":       result.Items,
+		"next_cursor": result.NextCursor,
+		"has_more":    result.HasMore,
 	})
 }
 

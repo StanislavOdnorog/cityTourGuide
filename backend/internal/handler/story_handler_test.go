@@ -63,6 +63,25 @@ func (m *mockStoryRepo) Update(_ context.Context, story *domain.Story) (*domain.
 	return story, nil
 }
 
+func (m *mockStoryRepo) ListByPOIID(_ context.Context, poiID int, language string, status *domain.StoryStatus, page domain.PageRequest) (*domain.PageResponse[domain.Story], error) {
+	m.calledPOIID = poiID
+	m.calledLanguage = language
+	m.calledStatus = status
+	if m.err != nil {
+		return nil, m.err
+	}
+	items := m.stories
+	hasMore := false
+	if len(items) > page.Limit {
+		items = items[:page.Limit]
+		hasMore = true
+	}
+	return &domain.PageResponse[domain.Story]{
+		Items:   items,
+		HasMore: hasMore,
+	}, nil
+}
+
 func (m *mockStoryRepo) Delete(_ context.Context, _ int) error {
 	if m.deleteErr != nil {
 		return m.deleteErr
@@ -102,21 +121,18 @@ func TestListStories_Success(t *testing.T) {
 	}
 
 	var resp struct {
-		Data []domain.Story `json:"data"`
-		Meta struct {
-			Total   int `json:"total"`
-			Page    int `json:"page"`
-			PerPage int `json:"per_page"`
-		} `json:"meta"`
+		Items      []domain.Story `json:"items"`
+		NextCursor string         `json:"next_cursor"`
+		HasMore    bool           `json:"has_more"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
-	if len(resp.Data) != 2 {
-		t.Errorf("expected 2 stories, got %d", len(resp.Data))
+	if len(resp.Items) != 2 {
+		t.Errorf("expected 2 stories, got %d", len(resp.Items))
 	}
-	if resp.Meta.Total != 2 {
-		t.Errorf("expected total=2, got %d", resp.Meta.Total)
+	if resp.HasMore {
+		t.Error("expected has_more=false")
 	}
 }
 
@@ -191,7 +207,7 @@ func TestListStories_Pagination(t *testing.T) {
 	h := NewStoryHandler(mock)
 	r := setupStoryRouter(h)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/stories?poi_id=1&page=2&per_page=10", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stories?poi_id=1&limit=10", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -200,21 +216,18 @@ func TestListStories_Pagination(t *testing.T) {
 	}
 
 	var resp struct {
-		Data []domain.Story `json:"data"`
-		Meta struct {
-			Total   int `json:"total"`
-			Page    int `json:"page"`
-			PerPage int `json:"per_page"`
-		} `json:"meta"`
+		Items      []domain.Story `json:"items"`
+		NextCursor string         `json:"next_cursor"`
+		HasMore    bool           `json:"has_more"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
-	if len(resp.Data) != 10 {
-		t.Errorf("expected 10 stories on page 2, got %d", len(resp.Data))
+	if len(resp.Items) != 10 {
+		t.Errorf("expected 10 stories, got %d", len(resp.Items))
 	}
-	if resp.Meta.Total != 25 {
-		t.Errorf("expected total=25, got %d", resp.Meta.Total)
+	if !resp.HasMore {
+		t.Error("expected has_more=true")
 	}
 }
 

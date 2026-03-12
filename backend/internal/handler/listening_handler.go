@@ -13,6 +13,7 @@ import (
 // ListeningRepository defines the interface for listening database operations.
 type ListeningRepository interface {
 	CreateOrUpdate(ctx context.Context, userID string, storyID int, completed bool, lat, lng *float64) (*domain.UserListening, error)
+	ListByUserID(ctx context.Context, userID string, page domain.PageRequest) (*domain.PageResponse[domain.UserListening], error)
 }
 
 // ListeningHandler handles listening tracking endpoints.
@@ -76,4 +77,38 @@ func (h *ListeningHandler) TrackListening(c *gin.Context) {
 
 	metrics.StoriesPlayedTotal.Inc()
 	c.JSON(http.StatusCreated, gin.H{"data": listening})
+}
+
+// ListListenings handles GET /api/v1/listenings?user_id=.
+func (h *ListeningHandler) ListListenings(c *gin.Context) {
+	userID := c.Query("user_id")
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required"})
+		return
+	}
+
+	pageReq, ok := parseCursorPagination(c)
+	if !ok {
+		return
+	}
+
+	result, err := h.repo.ListByUserID(c.Request.Context(), userID, pageReq)
+	if err != nil {
+		if isCursorError(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch listenings"})
+		return
+	}
+
+	if result.Items == nil {
+		result.Items = []domain.UserListening{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"items":       result.Items,
+		"next_cursor": result.NextCursor,
+		"has_more":    result.HasMore,
+	})
 }

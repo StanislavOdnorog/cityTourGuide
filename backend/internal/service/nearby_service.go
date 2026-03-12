@@ -35,7 +35,7 @@ type StoryCandidate struct {
 
 // POIFinder retrieves nearby POIs with active stories.
 type POIFinder interface {
-	FindNearbyAll(ctx context.Context, lat, lng, radiusM float64, language string) ([]repository.NearbyPOI, error)
+	FindNearbyAll(ctx context.Context, lat, lng, radiusM float64, language string, page domain.PageRequest) (*domain.PageResponse[repository.NearbyPOI], error)
 }
 
 // StoryGetter fetches stories for a given POI.
@@ -74,13 +74,16 @@ func (s *NearbyService) GetNearbyStories(
 	userID, language string,
 ) ([]StoryCandidate, error) {
 	// 1. Find nearby POIs that have active stories in the given language.
-	nearbyPOIs, err := s.poiFinder.FindNearbyAll(ctx, lat, lng, radiusM, language)
+	// Use a large limit to fetch all nearby POIs for scoring.
+	poiPage := domain.PageRequest{Limit: domain.MaxPageLimit}
+	nearbyResult, err := s.poiFinder.FindNearbyAll(ctx, lat, lng, radiusM, language, poiPage)
 	if err != nil {
 		return nil, fmt.Errorf("nearby_service: find nearby: %w", err)
 	}
-	if len(nearbyPOIs) == 0 {
+	if len(nearbyResult.Items) == 0 {
 		return nil, nil
 	}
+	nearbyPOIs := nearbyResult.Items
 
 	// 2. Get listened story IDs for deduplication.
 	listenedSet := make(map[int]struct{})

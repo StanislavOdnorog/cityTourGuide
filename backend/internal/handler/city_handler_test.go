@@ -69,6 +69,22 @@ func (m *mockCityRepo) Update(_ context.Context, city *domain.City) (*domain.Cit
 	return city, nil
 }
 
+func (m *mockCityRepo) List(_ context.Context, page domain.PageRequest) (*domain.PageResponse[domain.City], error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	items := m.cities
+	hasMore := false
+	if len(items) > page.Limit {
+		items = items[:page.Limit]
+		hasMore = true
+	}
+	return &domain.PageResponse[domain.City]{
+		Items:   items,
+		HasMore: hasMore,
+	}, nil
+}
+
 func (m *mockCityRepo) Delete(_ context.Context, _ int) error {
 	if m.deleteErr != nil {
 		return m.deleteErr
@@ -108,27 +124,18 @@ func TestListCities_Success(t *testing.T) {
 	}
 
 	var resp struct {
-		Data []domain.City `json:"data"`
-		Meta struct {
-			Total   int `json:"total"`
-			Page    int `json:"page"`
-			PerPage int `json:"per_page"`
-		} `json:"meta"`
+		Items      []domain.City `json:"items"`
+		NextCursor string        `json:"next_cursor"`
+		HasMore    bool          `json:"has_more"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
-	if len(resp.Data) != 2 {
-		t.Errorf("expected 2 cities, got %d", len(resp.Data))
+	if len(resp.Items) != 2 {
+		t.Errorf("expected 2 cities, got %d", len(resp.Items))
 	}
-	if resp.Meta.Total != 2 {
-		t.Errorf("expected total=2, got %d", resp.Meta.Total)
-	}
-	if resp.Meta.Page != 1 {
-		t.Errorf("expected page=1, got %d", resp.Meta.Page)
-	}
-	if resp.Meta.PerPage != 20 {
-		t.Errorf("expected per_page=20, got %d", resp.Meta.PerPage)
+	if resp.HasMore {
+		t.Error("expected has_more=false")
 	}
 }
 
@@ -146,13 +153,13 @@ func TestListCities_EmptyResult(t *testing.T) {
 	}
 
 	var resp struct {
-		Data []domain.City `json:"data"`
+		Items []domain.City `json:"items"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
-	if len(resp.Data) != 0 {
-		t.Errorf("expected empty array, got %d items", len(resp.Data))
+	if len(resp.Items) != 0 {
+		t.Errorf("expected empty array, got %d items", len(resp.Items))
 	}
 }
 
@@ -165,7 +172,7 @@ func TestListCities_Pagination(t *testing.T) {
 	h := NewCityHandler(mock, &mockManifestRepo{})
 	r := setupCityRouter(h)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/cities?page=2&per_page=10", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/cities?limit=10", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -174,24 +181,18 @@ func TestListCities_Pagination(t *testing.T) {
 	}
 
 	var resp struct {
-		Data []domain.City `json:"data"`
-		Meta struct {
-			Total   int `json:"total"`
-			Page    int `json:"page"`
-			PerPage int `json:"per_page"`
-		} `json:"meta"`
+		Items      []domain.City `json:"items"`
+		NextCursor string        `json:"next_cursor"`
+		HasMore    bool          `json:"has_more"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
-	if len(resp.Data) != 10 {
-		t.Errorf("expected 10 cities on page 2, got %d", len(resp.Data))
+	if len(resp.Items) != 10 {
+		t.Errorf("expected 10 cities, got %d", len(resp.Items))
 	}
-	if resp.Meta.Total != 25 {
-		t.Errorf("expected total=25, got %d", resp.Meta.Total)
-	}
-	if resp.Meta.Page != 2 {
-		t.Errorf("expected page=2, got %d", resp.Meta.Page)
+	if !resp.HasMore {
+		t.Error("expected has_more=true")
 	}
 }
 

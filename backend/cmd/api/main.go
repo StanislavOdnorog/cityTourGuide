@@ -163,6 +163,7 @@ func run() error {
 	v1.GET("/pois/:id", poiHandler.GetPOI)
 	v1.GET("/stories", storyHandler.ListStories)
 	v1.GET("/stories/:id", storyHandler.GetStory)
+	v1.GET("/listenings", listeningHandler.ListListenings)
 	v1.POST("/listenings", listeningHandler.TrackListening)
 	v1.POST("/reports", reportHandler.CreateReport)
 	v1.POST("/device-tokens", deviceHandler.RegisterDeviceToken)

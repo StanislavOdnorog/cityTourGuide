@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -18,6 +19,7 @@ type CityRepository interface {
 	Create(ctx context.Context, city *domain.City) (*domain.City, error)
 	GetByID(ctx context.Context, id int) (*domain.City, error)
 	GetAll(ctx context.Context) ([]domain.City, error)
+	List(ctx context.Context, page domain.PageRequest) (*domain.PageResponse[domain.City], error)
 	Update(ctx context.Context, city *domain.City) (*domain.City, error)
 	Delete(ctx context.Context, id int) error
 }
@@ -64,35 +66,29 @@ type updateCityRequest struct {
 
 // ListCities handles GET /api/v1/cities.
 func (h *CityHandler) ListCities(c *gin.Context) {
-	cities, err := h.repo.GetAll(c.Request.Context())
+	pageReq, ok := parseCursorPagination(c)
+	if !ok {
+		return
+	}
+
+	result, err := h.repo.List(c.Request.Context(), pageReq)
 	if err != nil {
+		if isCursorError(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch cities"})
 		return
 	}
 
-	if cities == nil {
-		cities = []domain.City{}
-	}
-
-	page, perPage := parsePagination(c)
-	total := len(cities)
-
-	start := (page - 1) * perPage
-	if start > total {
-		start = total
-	}
-	end := start + perPage
-	if end > total {
-		end = total
+	if result.Items == nil {
+		result.Items = []domain.City{}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data": cities[start:end],
-		"meta": gin.H{
-			"total":    total,
-			"page":     page,
-			"per_page": perPage,
-		},
+		"items":       result.Items,
+		"next_cursor": result.NextCursor,
+		"has_more":    result.HasMore,
 	})
 }
 
@@ -267,7 +263,36 @@ func parseIDParam(c *gin.Context) (int, bool) {
 	return id, true
 }
 
-// parsePagination extracts page and per_page query parameters with defaults.
+// parseCursorPagination extracts cursor and limit query parameters for cursor-based pagination.
+// Returns false if validation failed (error already written to response).
+func parseCursorPagination(c *gin.Context) (domain.PageRequest, bool) {
+	pr := domain.PageRequest{
+		Cursor: c.Query("cursor"),
+		Limit:  domain.DefaultPageLimit,
+	}
+
+	if l := c.Query("limit"); l != "" {
+		v, err := strconv.Atoi(l)
+		if err != nil || v <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a positive integer"})
+			return pr, false
+		}
+		if v > domain.MaxPageLimit {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must not exceed 100"})
+			return pr, false
+		}
+		pr.Limit = v
+	}
+
+	return pr, true
+}
+
+// isCursorError checks if an error is related to an invalid cursor.
+func isCursorError(err error) bool {
+	return strings.Contains(err.Error(), "invalid cursor")
+}
+
+// parsePagination extracts page and per_page query parameters with defaults (legacy).
 func parsePagination(c *gin.Context) (page, perPage int) {
 	page = 1
 	perPage = 20

@@ -16,8 +16,17 @@ type mockPOIFinder struct {
 	err  error
 }
 
-func (m *mockPOIFinder) FindNearbyAll(_ context.Context, _, _, _ float64, _ string) ([]repository.NearbyPOI, error) {
-	return m.pois, m.err
+func (m *mockPOIFinder) FindNearbyAll(_ context.Context, _, _, _ float64, _ string, _ domain.PageRequest) (*domain.PageResponse[repository.NearbyPOI], error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	items := m.pois
+	if items == nil {
+		items = []repository.NearbyPOI{}
+	}
+	return &domain.PageResponse[repository.NearbyPOI]{
+		Items: items,
+	}, nil
 }
 
 type mockStoryGetter struct {

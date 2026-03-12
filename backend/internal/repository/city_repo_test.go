@@ -5,6 +5,7 @@ package repository_test
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/saas/city-stories-guide/backend/internal/domain"
@@ -150,6 +151,104 @@ func TestCityRepo_GetAll(t *testing.T) {
 
 	if len(cities) < 2 {
 		t.Errorf("expected at least 2 cities, got %d", len(cities))
+	}
+}
+
+func TestCityRepo_List_PaginationTraversal(t *testing.T) {
+	tp := setupTestPool(t)
+	defer tp.Close()
+
+	repo := repository.NewCityRepo(tp.Pool)
+	ctx := context.Background()
+
+	var baselineID int
+	if err := tp.Pool.QueryRow(ctx, `SELECT COALESCE(MAX(id), 0) FROM cities`).Scan(&baselineID); err != nil {
+		t.Fatalf("query baseline id: %v", err)
+	}
+
+	created := make([]*domain.City, 0, 3)
+	for i := 0; i < 3; i++ {
+		city, err := repo.Create(ctx, &domain.City{
+			Name:      "Pagination City " + string(rune('A'+i)),
+			Country:   "TestLand",
+			CenterLat: 40.0 + float64(i),
+			CenterLng: 44.0 + float64(i),
+			RadiusKm:  5.0,
+			IsActive:  true,
+		})
+		if err != nil {
+			t.Fatalf("create city %d: %v", i, err)
+		}
+		created = append(created, city)
+		defer func(id int) { _ = repo.Delete(ctx, id) }(city.ID)
+	}
+
+	page := domain.PageRequest{
+		Cursor: domain.EncodeCursor(baselineID),
+		Limit:  2,
+	}
+
+	firstPage, err := repo.List(ctx, page)
+	if err != nil {
+		t.Fatalf("list first page: %v", err)
+	}
+
+	if len(firstPage.Items) != 2 {
+		t.Fatalf("expected 2 items on first page, got %d", len(firstPage.Items))
+	}
+	if !firstPage.HasMore {
+		t.Fatal("expected first page to have more results")
+	}
+	if firstPage.NextCursor == "" {
+		t.Fatal("expected next cursor on first page")
+	}
+
+	secondPage, err := repo.List(ctx, domain.PageRequest{
+		Cursor: firstPage.NextCursor,
+		Limit:  2,
+	})
+	if err != nil {
+		t.Fatalf("list second page: %v", err)
+	}
+
+	if len(secondPage.Items) != 1 {
+		t.Fatalf("expected 1 item on second page, got %d", len(secondPage.Items))
+	}
+	if secondPage.HasMore {
+		t.Fatal("expected second page to be terminal")
+	}
+	if secondPage.NextCursor != "" {
+		t.Fatal("expected empty next cursor on terminal page")
+	}
+
+	seen := make(map[int]int)
+	for _, city := range firstPage.Items {
+		seen[city.ID]++
+	}
+	for _, city := range secondPage.Items {
+		seen[city.ID]++
+	}
+
+	for _, city := range created {
+		if seen[city.ID] != 1 {
+			t.Fatalf("expected city %d to appear exactly once, got %d", city.ID, seen[city.ID])
+		}
+	}
+}
+
+func TestCityRepo_List_InvalidCursor(t *testing.T) {
+	tp := setupTestPool(t)
+	defer tp.Close()
+
+	repo := repository.NewCityRepo(tp.Pool)
+	ctx := context.Background()
+
+	_, err := repo.List(ctx, domain.PageRequest{Cursor: "not-base64", Limit: 20})
+	if err == nil {
+		t.Fatal("expected error for invalid cursor")
+	}
+	if got := err.Error(); !strings.Contains(got, "invalid cursor") {
+		t.Fatalf("expected wrapped descriptive error, got %q", got)
 	}
 }
 

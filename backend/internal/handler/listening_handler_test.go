@@ -17,8 +17,10 @@ import (
 
 // mockListeningRepo implements ListeningRepository for testing.
 type mockListeningRepo struct {
-	listening *domain.UserListening
-	err       error
+	listening  *domain.UserListening
+	listenings []domain.UserListening
+	err        error
+	listErr    error
 	// Captured args for verification
 	lastUserID    string
 	lastStoryID   int
@@ -52,9 +54,26 @@ func (m *mockListeningRepo) CreateOrUpdate(_ context.Context, userID string, sto
 	}, nil
 }
 
+func (m *mockListeningRepo) ListByUserID(_ context.Context, _ string, page domain.PageRequest) (*domain.PageResponse[domain.UserListening], error) {
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+	items := m.listenings
+	hasMore := false
+	if len(items) > page.Limit {
+		items = items[:page.Limit]
+		hasMore = true
+	}
+	return &domain.PageResponse[domain.UserListening]{
+		Items:   items,
+		HasMore: hasMore,
+	}, nil
+}
+
 func setupListeningRouter(h *ListeningHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
+	r.GET("/api/v1/listenings", h.ListListenings)
 	r.POST("/api/v1/listenings", h.TrackListening)
 	return r
 }
@@ -107,6 +126,74 @@ func TestTrackListening_Success(t *testing.T) {
 	}
 	if data["completed"] != true {
 		t.Errorf("expected completed=true, got %v", data["completed"])
+	}
+}
+
+func TestListListenings_Success(t *testing.T) {
+	mock := &mockListeningRepo{
+		listenings: []domain.UserListening{
+			{ID: 1, UserID: "user-1", StoryID: 10, Completed: true, ListenedAt: time.Now()},
+			{ID: 2, UserID: "user-1", StoryID: 11, Completed: false, ListenedAt: time.Now()},
+		},
+	}
+	h := NewListeningHandler(mock)
+	router := setupListeningRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/listenings?user_id=user-1&limit=1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Items      []domain.UserListening `json:"items"`
+		NextCursor string                 `json:"next_cursor"`
+		HasMore    bool                   `json:"has_more"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if len(resp.Items) != 1 {
+		t.Fatalf("expected 1 listening, got %d", len(resp.Items))
+	}
+	if !resp.HasMore {
+		t.Fatal("expected has_more=true")
+	}
+}
+
+func TestListListenings_InvalidLimit(t *testing.T) {
+	h := NewListeningHandler(&mockListeningRepo{})
+	router := setupListeningRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/listenings?user_id=user-1&limit=101", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", w.Code)
+	}
+
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if resp["error"] != "limit must not exceed 100" {
+		t.Fatalf("unexpected error: %q", resp["error"])
+	}
+}
+
+func TestListListenings_InvalidCursor(t *testing.T) {
+	h := NewListeningHandler(&mockListeningRepo{listErr: errors.New("invalid cursor: malformed encoding")})
+	router := setupListeningRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/listenings?user_id=user-1&cursor=bad", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", w.Code)
 	}
 }
 
